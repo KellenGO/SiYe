@@ -60,6 +60,14 @@ def test_add_and_read_item(store: LibraryStore) -> None:
     assert stats["unclassified"] == 0
 
 
+def test_duplicate_does_not_regress_metrics(store: LibraryStore) -> None:
+    """搜索结果先出现、详情指标后补：补全前收藏一次不能把以后补上的值清掉。"""
+    store.add_item(_result())
+    again = store.add_item(_result(metrics={"comments": 9}))
+
+    assert again["result"]["metrics"] == {"likes": 12, "comments": 9}
+
+
 def test_duplicate_keeps_first_saved_at_and_existing_note(store: LibraryStore) -> None:
     first = store.add_item(_result(), note="我的备注", saved_at="2026-09-01T00:00:00")
     again = store.add_item(_result(title="标题被更新了"), saved_at="2026-09-10T00:00:00")

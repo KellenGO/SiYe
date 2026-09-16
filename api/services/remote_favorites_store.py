@@ -8,6 +8,7 @@
 - 只有用户点击同步才更新；
 - **逐平台落库**：某个平台失败或限流，不影响其他平台已保存的数据；
 - 按 (账号, 平台, 内容ID) 去重合并，更新已有条目的信息；
+- **指标只合并、不倒退**：本次没取到的指标字段沿用本机已有的值，完整度只升不降；
 - 本次没取到的旧内容**不删除**（只刷新取到条目的 last_seen_at）——
   "这次没出现"不等于"用户取消了收藏"；
 - 不同账号分开保存（account_key），避免把两个人的收藏混在一起。
@@ -20,7 +21,7 @@ import sqlite3
 import threading
 from typing import Any, Dict, Iterator, List, Optional, Sequence
 
-from .favorite_snapshot import decode_metrics, encode_metrics
+from .favorite_snapshot import decode_metrics, encode_metrics, merge_into_result
 from .sqlite_base import (
     RESULT_FIELDS as _RESULT_FIELDS,
     SqliteStoreBase,
@@ -95,10 +96,23 @@ class RemoteFavoritesStore(SqliteStoreBase):
         now = utc_now()
         written = 0
         with self._conn() as conn:
+            # 本次没拿到的指标要沿用本机已有的值（见 favorite_snapshot.merge_counts）：
+            # 一次超时或只拿到列表字段的同步，不能把以前完整的指标覆盖成残缺版本。
+            previous_metrics = {
+                row["content_id"]: row["metrics"]
+                for row in conn.execute(
+                    "SELECT content_id, metrics FROM remote_favorites "
+                    "WHERE account_key = ? AND platform = ?",
+                    (account_key, platform),
+                ).fetchall()
+            }
             for raw in results:
                 row = self._split(raw)
                 if not row["content_id"]:
                     continue
+                previous_raw = previous_metrics.get(row["content_id"])
+                if previous_raw:
+                    row["metrics"] = encode_metrics(merge_into_result(raw, previous_raw))
                 conn.execute(
                     """
                     INSERT INTO remote_favorites (

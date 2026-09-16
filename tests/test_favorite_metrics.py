@@ -92,6 +92,47 @@ async def test_expired_and_corrupt_cache_refresh(tmp_path, monkeypatch):
     assert client.get_video_info.await_count == 3
 
 
+@pytest.mark.asyncio
+async def test_a_full_bilibili_folder_fits_inside_the_budget(tmp_path, monkeypatch):
+    """B站单个收藏夹最多 100 条：预算必须覆盖得住。
+
+    旧实现是串行 + 2 秒间隔 + 120 秒总预算，100 条光等间隔就要约 198 秒，
+    所以数据库里必然剩下一半 failed。
+    """
+    monkeypatch.setattr(metrics, "REQUEST_INTERVAL", 0)
+    client = SimpleNamespace(get_video_info=AsyncMock(return_value={"View": {"stat": {
+        "view": 1, "like": 2, "reply": 3, "favorite": 4, "coin": 5}}}))
+    rows = [{"bvid": f"BV{index}"} for index in range(100)]
+    updates = []
+    await metrics.enrich_favorites("bilibili", client, rows, updates.extend, cache_dir=tmp_path)
+    assert client.get_video_info.await_count == 100
+    assert len(updates) == 100
+    assert all(row["_metrics_status"] == "complete" for row in updates)
+
+
+@pytest.mark.asyncio
+async def test_budget_exhaustion_is_not_a_platform_failure(tmp_path, monkeypatch):
+    """预算用尽时把剩下的留给下次同步，不再把整个平台判成「同步超时」。"""
+    monkeypatch.setattr(metrics, "REQUEST_INTERVAL", 0)
+    monkeypatch.setattr(metrics, "ENRICHMENT_TIMEOUT", 0)
+    client = SimpleNamespace(get_video_info=AsyncMock(return_value={"View": {"stat": {"like": 1}}}))
+    updates = []
+    await metrics.enrich_favorites("bilibili", client, [{"bvid": "BV1"}, {"bvid": "BV2"}],
+                                   updates.extend, cache_dir=tmp_path)
+    assert updates == []
+    assert client.get_video_info.await_count == 0
+
+
+@pytest.mark.asyncio
+async def test_default_cache_sits_next_to_the_library_not_the_program_dir(tmp_path, monkeypatch):
+    """缓存跟着收藏库走：换版本 / 源码与发行包之间不必重新打一遍详情请求。"""
+    monkeypatch.setattr(metrics, "REQUEST_INTERVAL", 0)
+    monkeypatch.setattr(metrics, "library_data_root", lambda: tmp_path)
+    client = SimpleNamespace(get_video_info=AsyncMock(return_value={"View": {"stat": {"like": 1}}}))
+    await metrics.enrich_favorites("bilibili", client, [{"bvid": "BV1"}], lambda _: None)
+    assert (tmp_path / ".cache" / "favorite_metrics").is_dir()
+
+
 def test_job_updates_same_content_and_keeps_partial_results():
     job = _Job(FavoritesJobRequest(platforms=["bilibili"]))
     row = BilibiliAdapter().adapt([{"bvid": "BV1", "title": "one"}])[0].model_dump()

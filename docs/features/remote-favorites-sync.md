@@ -22,6 +22,7 @@
 
 - **逐平台落库**：某平台失败 / 限流，不影响其他平台已保存的数据。
 - 按 `(account_key, platform, content_id)` 去重合并（`ON CONFLICT DO UPDATE`）。
+- **指标只合并、不倒退**：本次没取到的指标字段沿用本机已有的值，完整度只升不降（`api/services/favorite_snapshot.py`）。一次超时、被限流、或只走到列表阶段的同步，不能再把以前完整的指标覆盖成残缺版本；接口明确返回的 0 仍然是真值。
 - **本次没取到的旧条目一律不删** ——「这次没出现」≠「用户取消了收藏」。
 - 启动时会把已知旧目录中的跨平台归档一起合并到稳定数据库；保留最早发现时间、最新内容快照、收藏夹名称和最新同步状态，旧库不删除。
 - 打开页面**只显示上次保存的数据和同步时间，不自动访问平台**；只有用户主动点同步才更新。
@@ -43,7 +44,8 @@
 - `limit_per_platform` 只放宽了**收藏同步**；搜索结果那个 40 条上限没动。
 - bilibili / 知乎的「读到 100」目前只有人工审查，**缺自动化测试**。
 - 当前每个平台仍只更新最近 100 条，不代表完整平台收藏；本机历史记录不会因窗口之外的内容本次未返回而删除。
+- B站 100 条的详情补全依赖「小并发 + 6 小时缓存」：冷启动（或缓存被清）仍可能补不完，剩下的条目标记 failed，下次同步优先命中缓存补齐。
 
 ## 测试怎么跑
 
-`tests/test_remote_favorites_store.py`、`tests/test_remote_favorites.py`、`tests/test_favorites_reliability.py`、`tests/test_library_migration.py`。其中覆盖四平台落库后两个平台未登录、重启后四个平台历史仍在。
+`tests/test_remote_favorites_store.py`、`tests/test_remote_favorites.py`、`tests/test_favorites_reliability.py`、`tests/test_library_migration.py`、`tests/test_favorite_snapshot.py`。其中覆盖四平台落库后两个平台未登录、重启后四个平台历史仍在。

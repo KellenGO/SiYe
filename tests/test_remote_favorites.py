@@ -44,6 +44,24 @@ def test_folder_metadata_survives_bilibili_and_zhihu_adaptation():
     assert zhihu.collection_names == ["产品思考"]
 
 
+def test_job_snapshot_does_not_regress_metrics_saved_locally():
+    """本次同步只拿到列表字段时，内存结果不能覆盖库里那份完整快照。"""
+    from api.services.favorites_job_manager import _merge_result
+
+    previous = BilibiliAdapter().adapt([{"bvid": "BV1", "title": "一"}])[0]
+    previous.metrics = {"view_count": 100, "coin_count": 2}
+    previous.metrics_status = "complete"
+    previous.metrics_updated_at = 123.0
+    current = previous.model_copy(update={"metrics": {"view_count": 110},
+                                          "metrics_status": "failed",
+                                          "metrics_updated_at": None})
+
+    merged = _merge_result(previous, current)
+    assert merged.metrics == {"view_count": 110, "coin_count": 2}
+    assert merged.metrics_status == "complete"
+    assert merged.metrics_updated_at == 123.0
+
+
 def test_favorites_job_interleaves_platforms_and_preserves_partial_results():
     job = _Job(FavoritesJobRequest(platforms=["xhs", "bilibili"], limit_per_platform=2))
     job.items["xhs"] = [BilibiliAdapter().adapt([{"bvid": "x", "title": "占位"}])[0].model_copy(update={"platform": "xhs"})]

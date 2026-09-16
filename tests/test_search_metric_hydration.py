@@ -30,7 +30,7 @@ def test_metrics_include_later_results_with_good_snippets_and_keep_fresh_partial
 @pytest.mark.asyncio
 async def test_search_hydrates_all_and_reuses_detail_description(monkeypatch, tmp_path):
     from aggregate_search import favorite_metrics
-    monkeypatch.setattr(favorite_metrics, "writable_path", lambda *_: tmp_path)
+    monkeypatch.setattr(favorite_metrics, "library_data_root", lambda: tmp_path)
     monkeypatch.setattr(favorite_metrics, "REQUEST_INTERVAL", 0)
     client = type("Client", (), {})()
     client.get_video_info = AsyncMock(return_value={"View": {
@@ -52,7 +52,7 @@ async def test_search_hydrates_all_and_reuses_detail_description(monkeypatch, tm
 async def test_search_rate_limit_stops_platform_and_preserves_list(monkeypatch, tmp_path):
     from aggregate_search import favorite_metrics
     from base.exceptions import RateLimitError
-    monkeypatch.setattr(favorite_metrics, "writable_path", lambda *_: tmp_path)
+    monkeypatch.setattr(favorite_metrics, "library_data_root", lambda: tmp_path)
     client = type("Client", (), {})()
     client.get_video_info = AsyncMock(side_effect=RateLimitError("bilibili"))
     hydrator = ResultHydrator()
@@ -68,7 +68,7 @@ async def test_search_rate_limit_stops_platform_and_preserves_list(monkeypatch, 
 @pytest.mark.asyncio
 async def test_bili_course_does_not_block_later_videos(monkeypatch, tmp_path):
     from aggregate_search import favorite_metrics
-    monkeypatch.setattr(favorite_metrics, "writable_path", lambda *_: tmp_path)
+    monkeypatch.setattr(favorite_metrics, "library_data_root", lambda: tmp_path)
     client = type("Client", (), {})()
     client.get_video_info = AsyncMock(return_value={"View": {"stat": {"coin": 12}}})
     hydrator = ResultHydrator()
@@ -86,7 +86,7 @@ async def test_bili_course_does_not_block_later_videos(monkeypatch, tmp_path):
 @pytest.mark.asyncio
 async def test_search_zhihu_raw_counters_and_cancellation(monkeypatch, tmp_path):
     from aggregate_search import favorite_metrics
-    monkeypatch.setattr(favorite_metrics, "writable_path", lambda *_: tmp_path)
+    monkeypatch.setattr(favorite_metrics, "library_data_root", lambda: tmp_path)
     monkeypatch.setattr("api.services.result_hydration.get_session_snapshot", lambda _: {"d_c0": "test"})
     client = type("Client", (), {})()
     client.get = AsyncMock(return_value={"voteup_count": 12, "comment_count": 0, "favlists_count": 3, "read_count": 200})

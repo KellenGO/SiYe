@@ -10,12 +10,30 @@ from aggregate_search.protocol import WorkerRequest, parse_event_line
 from base.runtime_paths import application_root
 from ..schemas.favorites import FavoritePlatformInfo, FavoritesJobRequest, FavoritesJobResponse
 from .accounts import mark_login_required_from_search, evidence_token, record_usage
+from .favorite_snapshot import merge_snapshot
 from .remote_favorites_store import get_remote_favorites_store
 from .worker_process import drain_stderr_to_eof, spawn_worker, terminate_worker
 
 _ROOT = application_root()
 # 每个平台最多取 100 条时，分页请求会明显变多，超时相应放宽。
 _TIMEOUT = 300
+
+
+def _merge_result(previous: UnifiedSearchResult, current: UnifiedSearchResult) -> UnifiedSearchResult:
+    """本机已保存的完整指标不能被本次残缺结果覆盖（逐字段合并）。
+
+    本次同步超时、被限流、或只走到列表阶段时，内存里的结果字段会比库里少，
+    直接替换会让以前完整的指标倒退成残缺版本 —— 库里的数据仍在，只是这次
+    没取到，所以缺的字段沿用旧值。
+    """
+    return current.model_copy(update=merge_snapshot(
+        {"metrics": previous.metrics, "metrics_status": previous.metrics_status,
+         "metrics_updated_at": previous.metrics_updated_at,
+         "metrics_approximate": previous.metrics_approximate},
+        {"metrics": current.metrics, "metrics_status": current.metrics_status,
+         "metrics_updated_at": current.metrics_updated_at,
+         "metrics_approximate": current.metrics_approximate},
+    ))
 
 
 class _Job:
@@ -99,7 +117,9 @@ class FavoritesJobManager:
         if saved:
             previous = FavoritesJobResponse(**saved)
             rows = {(r.platform, r.content_id): r for r in previous.results}
-            rows.update({(r.platform, r.content_id): r for r in response.results})
+            for result in response.results:
+                key = (result.platform, result.content_id)
+                rows[key] = _merge_result(rows[key], result) if key in rows else result
             response.results = list(rows.values())
             response.platforms = {**previous.platforms, **response.platforms}
         return response

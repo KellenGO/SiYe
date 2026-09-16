@@ -21,7 +21,7 @@ import threading
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 from urllib.parse import urlsplit
 
-from .favorite_snapshot import decode_metrics, encode_metrics
+from .favorite_snapshot import decode_metrics, encode_metrics, merge_into_result
 from .sqlite_base import RESULT_FIELDS, SqliteStoreBase, default_db_path, utc_now
 
 SCHEMA_VERSION = 2
@@ -171,7 +171,7 @@ class LibraryStore(SqliteStoreBase):
     @staticmethod
     def _find_item(conn: sqlite3.Connection, platform: str, content_id: str) -> Optional[sqlite3.Row]:
         return conn.execute(
-            "SELECT id, note, saved_at, fetched_at FROM items WHERE platform = ? AND content_id = ?",
+            "SELECT id, note, saved_at, fetched_at, metrics FROM items WHERE platform = ? AND content_id = ?",
             (platform, content_id),
         ).fetchone()
 
@@ -234,7 +234,9 @@ class LibraryStore(SqliteStoreBase):
             if existing is not None:
                 # 已存在：刷新内容快照，但**保留首次收藏时间与已有备注**——
                 # 改备注是独立操作（PATCH），重复收藏不应悄悄覆盖用户写过的字。
+                # 指标同样只合并：详情页还没补全就收藏时，不能把以后补上的值清掉。
                 item_id = int(existing["id"])
+                row["metrics"] = encode_metrics(merge_into_result(result, existing["metrics"]))
                 conn.execute(
                     """
                     UPDATE items SET content_type = :content_type, title = :title, snippet = :snippet,

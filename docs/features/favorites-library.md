@@ -32,6 +32,7 @@
 - 批量管理支持加入或移出两个内置收藏夹、加入或移出自建收藏夹；只有「从本机彻底删除」会让条目从「全部」消失，并要求确认。
 - 自建收藏夹不能新建或改名为系统名称。历史同名收藏夹原样保留，界面追加「（自建）」帮助区分。
 - 重复收藏只刷新内容快照，**保留首次收藏时间与已有备注**；改备注只能走 `PATCH`。
+- **互动指标只合并、不倒退**：重复保存时本次没带的字段沿用库里已有的值（搜索结果先出现、详情指标后补，补全前收藏一次不会把以后补上的值清掉）。
 - 沿用既有前端限制：备注 1000 字、总量 500 条。
 - 旧 `localStorage` 收藏**只提示、不自动删**；迁移有跳过项时**不写**完成标记（否则用户失去迁移入口）。
 - 新版本首次启动会检查源码根、当前程序目录及旧 `dist/MediaCrawler`、`dist/SiYe` 的数据库。合并按平台与内容 ID 去重，保留非空备注和全部归属；迁移前备份目标库，旧库不删除。源库内容改变后可再次幂等合并。
@@ -53,7 +54,7 @@
 
 ## 测试怎么跑
 
-- 后端：`tests/test_library_store.py`、`tests/test_library_api.py`、`tests/test_library_migration.py`
+- 后端：`tests/test_library_store.py`、`tests/test_library_api.py`、`tests/test_library_migration.py`、`tests/test_favorite_snapshot.py`
 - 前端：`webui/tests/libraryApi.test.ts`、`webui/tests/resultLibrary.test.ts`
 - 浏览器：`scripts/favorites_ui_smoke.py`（内置收藏夹、按钮顺序、稍后再看独立性、长名称截断与桌面/移动分组布局）
 - 跑法（`--basetemp`、node 绝对路径）见根目录 `AGENTS.md`。

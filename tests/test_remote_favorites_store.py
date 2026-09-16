@@ -159,6 +159,29 @@ def test_latest_snapshot_time_reflects_most_recent_run(store: RemoteFavoritesSto
     assert set(second["platforms"]) == {"xhs", "zhihu"}
 
 
+def test_partial_resync_keeps_metrics_the_platform_did_not_return(store: RemoteFavoritesStore) -> None:
+    """一次超时的同步不能把以前完整的指标覆盖成残缺版本。"""
+    store.save_platform("bilibili", [_result(platform="bilibili", content_id="BV1",
+                                             metrics={"view_count": 100, "like_count": 5},
+                                             metrics_status="complete", metrics_updated_at=1000.0)],
+                        status="succeeded")
+    store.save_platform("bilibili", [_result(platform="bilibili", content_id="BV1",
+                                             metrics={"like_count": 7}, metrics_status="failed")],
+                        status="timed_out")
+
+    result = store.load()["results"][0]
+    assert result["metrics"] == {"view_count": 100, "like_count": 7}
+    assert result["metrics_status"] == "complete"
+    assert result["metrics_updated_at"] == 1000.0
+
+
+def test_resync_can_still_lower_a_counter_to_zero(store: RemoteFavoritesStore) -> None:
+    """合并不是「永远不变」：接口明确返回的 0 仍然要写进去。"""
+    store.save_platform("xhs", [_result(metrics={"like_count": 5})], status="succeeded")
+    store.save_platform("xhs", [_result(metrics={"like_count": 0})], status="succeeded")
+    assert store.load()["results"][0]["metrics"] == {"like_count": 0}
+
+
 def test_approximate_metrics_remain_approximate_after_restart(store: RemoteFavoritesStore) -> None:
     store.save_platform("xhs", [_result(metrics_status="partial", metrics_approximate=["like_count"], metrics_updated_at=123.0)], status="succeeded")
     result = RemoteFavoritesStore(store.db_path).load()["results"][0]
