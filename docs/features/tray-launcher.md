@@ -12,7 +12,8 @@
 | 统一入口 + 角色分发 + 单实例锁 + 托盘菜单 + 退出 | `tray_main.py` |
 | 后端进程入口（uvicorn、路由注册） | `desktop_main.py`、`api/main.py` |
 | 打包配置（两个 EXE 共用 `tray_main.py`） | `MediaCrawler.spec` |
-| 发布包校验 + 打 zip | `scripts/package_exe.py` |
+| 发布包校验 + 便携 ZIP | `scripts/package_exe.py` |
+| 安装器 | `installer/SiYe.iss`、`scripts/build_installer.ps1` |
 | 一键构建 | `scripts/build_exe.ps1` |
 | 干净环境冒烟（产物 / 运行 / worker 协议 / 正常退出） | `scripts/exe_clean_room_smoke.py` |
 
@@ -30,6 +31,7 @@
 - 本机测试统一使用 `dist/SiYe/四野.exe`，根目录 `MediaCrawler.bat` 优先打开这一份。没有打包产物时才回退到 `启动-源码.bat`；该源码入口默认 8090，产品默认 8080。直接使用 `scripts/start.ps1` 时默认仍为 8080，并行开发须显式区分端口。
 - 清理旧测试包时，将其收藏、登录资料和缓存备份到根目录 `data/version-backups/`，不覆盖常用 dist 的用户数据；此备份同样不能进入发布包。
 - 发布包校验会**拒绝**含 `data` / `.cache` / `browser_data` 的产物（防止把本机登录态和个人收藏发出去）。
+- 普通用户默认使用按当前用户安装的 Windows 安装器；便携 ZIP 作为备用。安装器与 ZIP 封装同一个 `dist/SiYe`，不会产生两套运行行为。
 
 ## 已知坑 / 边界
 
@@ -45,4 +47,4 @@
 ## 测试怎么跑
 
 `tests/test_tray_launcher.py`（角色判定、命令构造、日志命名、健康识别、菜单文案、图标、单实例锁）。
-打包后的验证见 `scripts/exe_clean_room_smoke.py`。
+打包后的验证见 `scripts/exe_clean_room_smoke.py`；安装器另由 `scripts/installer_clean_room_smoke.py` 验证静默安装、运行和卸载。

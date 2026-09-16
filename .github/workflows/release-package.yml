@@ -35,6 +35,10 @@ jobs:
           cache: npm
           cache-dependency-path: webui/package-lock.json
 
+      - name: Install Inno Setup compiler
+        shell: pwsh
+        run: choco install innosetup --yes --no-progress
+
       - name: Install backend development environment
         run: |
           uv lock --check
@@ -72,11 +76,17 @@ jobs:
           $package = Join-Path $cleanRoot "SiYe"
           uv run python scripts/exe_clean_room_smoke.py --package $package
 
+      - name: Silently install, smoke-test, and uninstall the installer
+        shell: pwsh
+        run: uv run python scripts/installer_clean_room_smoke.py --installer dist/SiYe-Setup-Windows-x64.exe
+
       - name: Upload validated executable artifact
         uses: actions/upload-artifact@v4
         with:
           name: SiYe-Windows-x64
           path: |
+            dist/SiYe-Setup-Windows-x64.exe
+            dist/SiYe-Setup-Windows-x64.exe.sha256
             dist/SiYe-Windows-x64.zip
             dist/SiYe-Windows-x64.zip.sha256
           if-no-files-found: error
@@ -89,6 +99,8 @@ jobs:
         run: |
           $arguments = @(
             "release", "create", $env:GITHUB_REF_NAME,
+            "dist/SiYe-Setup-Windows-x64.exe",
+            "dist/SiYe-Setup-Windows-x64.exe.sha256",
             "dist/SiYe-Windows-x64.zip",
             "dist/SiYe-Windows-x64.zip.sha256",
             "--verify-tag",

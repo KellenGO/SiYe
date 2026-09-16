@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
     [switch]$SkipTests,
+    [switch]$SkipInstaller,
     [string]$PythonPath
 )
 
@@ -70,4 +71,13 @@ $versionFile = Join-Path $distribution "RELEASE_VERSION"
 Set-Content -LiteralPath $versionFile -Value $releaseVersion -Encoding ascii
 
 Invoke-Checked $pythonCommand ($pythonPrefix + @("scripts/package_exe.py", "--distribution", "dist/SiYe", "--output", "dist"))
+if (-not $SkipInstaller) {
+    Invoke-Checked powershell.exe @(
+        "-NoProfile", "-ExecutionPolicy", "Bypass",
+        "-File", "scripts/build_installer.ps1",
+        "-Distribution", "dist/SiYe",
+        "-Output", "dist",
+        "-PythonPath", $pythonCommand
+    )
+}
 Write-Host "EXE distribution ready: dist/SiYe/SiYe.exe" -ForegroundColor Green

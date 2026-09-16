@@ -69,8 +69,13 @@ def main() -> int:
     parser.add_argument("--distribution", type=Path,
                         default=Path("dist") / "SiYe")
     parser.add_argument("--output", type=Path, default=Path("dist"))
+    parser.add_argument("--validate-only", action="store_true")
     args = parser.parse_args()
     distribution = args.distribution.resolve()
+    if args.validate_only:
+        validate(distribution)
+        print(f"validated executable distribution: {distribution}")
+        return 0
     output_dir = args.output.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     archive_path, checksum_path = archive(distribution, output_dir)

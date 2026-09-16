@@ -508,7 +508,7 @@ figure.todo .d{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.7}
       <button class="icon-btn" id="themeToggle" type="button" aria-label="切换深色 / 浅色主题" title="切换深色 / 浅色主题">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v2m0 14v2M3 12h2m14 0h2M5.6 5.6l1.4 1.4m10 10 1.4 1.4m0-12.8-1.4 1.4m-10 10L5.6 18.4"/><circle cx="12" cy="12" r="4"/></svg>
       </button>
-      <a class="btn primary" href="https://github.com/KellenGO/SiYe/releases/latest/download/SiYe-Windows-x64.zip" target="_blank" rel="noopener">下载</a>
+      <a class="btn primary" href="https://github.com/KellenGO/SiYe/releases/latest/download/SiYe-Setup-Windows-x64.exe" target="_blank" rel="noopener">下载安装器</a>
     </div>
   </div>
 </header>
@@ -576,7 +576,7 @@ figure.todo .d{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.7}
     <ol>
       <li>浏览器地址栏输入 <code>chrome://extensions</code>（Edge 是 <code>edge://extensions</code>）回车；</li>
       <li>打开右上角的<strong>「开发者模式」</strong>；</li>
-      <li>点<strong>「加载已解压的扩展程序」</strong>，选择解压目录里的 <code>SiYe/browser_extension/</code>；</li>
+      <li>点<strong>「加载已解压的扩展程序」</strong>，安装版选择 <code>%LOCALAPPDATA%\Programs\SiYe\browser_extension</code>；便携版选择解压目录里的 <code>SiYe/browser_extension/</code>；</li>
       <li>回到四野页面，打开<strong>「账号与登录」</strong>，点平台卡片的<strong>「从浏览器同步」</strong>。</li>
     </ol>
     <div class="callout">
@@ -587,20 +587,20 @@ figure.todo .d{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.7}
     <!-- ========== 安装 ========== -->
     <h2>下载与启动</h2>
     <ol>
-      <li>下载 <code>SiYe-Windows-x64.zip</code>，<strong>整个解压</strong>到一个文件夹（不要把 EXE 单独拷出来，旁边的文件都要用）。
-          建议解压到<strong>英文路径</strong>，比如 <code>D:\Siye</code> —— 中文或带空格的路径偶尔会导致启动异常。</li>
-      <li>打开解压出的 <code>SiYe</code> 文件夹，双击 <code>四野.exe</code>（托盘启动器，不会弹黑色窗口）；</li>
-      <li>浏览器会<strong>自动打开</strong> <code>127.0.0.1:8080</code>，就可以搜了。之后在右下角托盘图标上右键，可以「打开四野 / 打开日志目录 / 退出四野」。</li>
+      <li>从官方 Release 下载并运行 <code>SiYe-Setup-Windows-x64.exe</code>。</li>
+      <li>按安装向导继续。四野默认安装到当前用户目录，不需要管理员权限；桌面快捷方式可按需勾选。</li>
+      <li>安装完成后启动「四野」，以后可从开始菜单打开。浏览器会<strong>自动打开</strong> <code>127.0.0.1:8080</code>。之后在右下角托盘图标上右键，可以「打开四野 / 打开日志目录 / 退出四野」。</li>
     </ol>
     <div class="callout">
       不需要安装 Python、Node.js，也不用敲命令。关掉浏览器页面程序仍在后台运行，想彻底退出就右键托盘图标选「退出四野」。
       开始时先扫码连接常用的平台，也可以跟随应用内的新手引导。
     </div>
     <div class="callout warn">
-      <b>第一次运行被 Windows 拦下来？</b>程序没有代码签名，SmartScreen 可能弹「Windows 已保护你的电脑」——
-      点<strong>「更多信息」→「仍要运行」</strong>即可。杀毒软件误报时，把解压目录加进白名单。
+      <b>第一次运行被 Windows 拦下来？</b>安装器尚未购买商业代码签名证书，SmartScreen 可能弹「Windows 已保护你的电脑」。
+      只从项目官方 Release 下载，建议先核对同页的 SHA256，再点<strong>「更多信息」→「仍要运行」</strong>。杀毒软件误报时，把安装目录加进白名单。
       程序只在本机 <code>127.0.0.1:8080</code> 监听，不会对外提供服务，也不上传任何数据。
     </div>
+    <p>需要免安装运行时，可下载 Release 中的 <code>SiYe-Windows-x64.zip</code>，完整解压后双击其中的 <code>四野.exe</code>。</p>
 
     <!-- ========== 搜索 ========== -->
     <h2>开始搜索</h2>
@@ -669,9 +669,9 @@ figure.todo .d{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.7}
     </p>
 
     <div class="cta-row" style="margin-top:34px">
-      <a class="btn primary large" href="https://github.com/KellenGO/SiYe/releases/latest/download/SiYe-Windows-x64.zip" target="_blank" rel="noopener">
+      <a class="btn primary large" href="https://github.com/KellenGO/SiYe/releases/latest/download/SiYe-Setup-Windows-x64.exe" target="_blank" rel="noopener">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5"/></svg>
-        下载 Windows 版
+        下载 Windows 安装器
       </a>
       <a class="btn large" href="index.html">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>

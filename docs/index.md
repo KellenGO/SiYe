@@ -12,6 +12,7 @@
 | 搜索体验（排序 / 去重 / 渐进展示 / 冷却） | [features/search-experience.md](features/search-experience.md) | `webui/src/lib/searchExperience.ts`、`webui/src/lib/platformMeta.ts`、`api/services/result_cache.py` |
 | 环境自检（`/api/health` 与 Platform Doctor） | [features/environment-health.md](features/environment-health.md) | `api/services/environment_health.py`、`webui/src/components/search/PlatformStatus.tsx` |
 | 无窗口启动（托盘启动器） | [features/tray-launcher.md](features/tray-launcher.md) | `tray_main.py`、`MediaCrawler.spec` |
+| Windows 安装器（默认发布方式） | [features/windows-installer.md](features/windows-installer.md) | `installer/SiYe.iss`、`scripts/build_installer.ps1`、`.github/workflows/release-package.yml` |
 | 登录与账号（扩展 / 扫码 / profile） | [features/extension-login.md](features/extension-login.md) | `api/services/accounts.py`、`aggregate_search/worker.py` |
 | 许可与免责声明（首次启动接受门） | [features/license-disclaimer.md](features/license-disclaimer.md) | `webui/src/components/license/LicenseDisclaimer.tsx`、`webui/src/App.tsx` |
 
@@ -28,5 +29,6 @@
 
 ## 发布链路（与功能无关但常要用）
 
-`scripts/build_exe.ps1` → `scripts/package_exe.py`（校验 + 打 zip）→ `scripts/exe_clean_room_smoke.py`
+`scripts/build_exe.ps1` → `scripts/package_exe.py`（校验 + 便携 ZIP）→ `scripts/build_installer.ps1`
+→ `scripts/exe_clean_room_smoke.py` / `scripts/installer_clean_room_smoke.py`
 → `.github/workflows/release-package.yml`。落地页与使用说明网页在 `site/`（GitHub Pages 自动部署）。

@@ -29,10 +29,10 @@ def _request(url: str) -> tuple[int, str]:
         return 0, ""
 
 
-def _clean_env(package: Path) -> dict[str, str]:
+def _clean_env(package: Path, port: int) -> dict[str, str]:
     env = os.environ.copy()
     env.pop("PYTHONPATH", None)
-    env.pop("SIYE_PORT", None)
+    env["SIYE_PORT"] = str(port)
     system_root = os.environ.get("SystemRoot", r"C:\Windows")
     env["PATH"] = os.pathsep.join([
         str(package),
@@ -108,12 +108,13 @@ def run_worker_protocol_smoke(exe: Path, package: Path, env: dict[str, str]) -> 
         raise AssertionError(f"frozen aggregate worker wrote unexpected output: {stdout}")
 
 
-def run_web_smoke(exe: Path, package: Path, env: dict[str, str]) -> None:
+def run_web_smoke(
+    exe: Path, package: Path, env: dict[str, str], base_url: str,
+) -> None:
     process = subprocess.Popen(
         [str(exe), "--no-browser"], cwd=package, env=env,
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
-    base_url = "http://127.0.0.1:8080"
     try:
         deadline = time.monotonic() + 45
         health = None
@@ -160,7 +161,9 @@ def run_web_smoke(exe: Path, package: Path, env: dict[str, str]) -> None:
                 process.wait(timeout=10)
 
 
-def run_managed_shutdown_smoke(exe: Path, package: Path, env: dict[str, str]) -> None:
+def run_managed_shutdown_smoke(
+    exe: Path, package: Path, env: dict[str, str], base_url: str,
+) -> None:
     """The hidden backend must exit normally when its launcher control pipe closes."""
     output = tempfile.TemporaryFile()
     process = subprocess.Popen(
@@ -173,7 +176,7 @@ def run_managed_shutdown_smoke(exe: Path, package: Path, env: dict[str, str]) ->
         while time.monotonic() < deadline:
             if process.poll() is not None:
                 raise AssertionError("managed backend exited during startup")
-            status, _ = _request("http://127.0.0.1:8080/api/health")
+            status, _ = _request(f"{base_url}/api/health")
             if status == 200:
                 break
             time.sleep(.25)
@@ -182,7 +185,7 @@ def run_managed_shutdown_smoke(exe: Path, package: Path, env: dict[str, str]) ->
             raise AssertionError(f"managed backend startup timed out: {output.read().decode('utf-8', errors='replace')[-4000:]}")
         process.stdin.close()
         assert process.wait(timeout=30) == 0, "managed backend did not shut down normally"
-        status, _ = _request("http://127.0.0.1:8080/api/health")
+        status, _ = _request(f"{base_url}/api/health")
         assert status == 0, "backend remained listening after launcher exit"
     finally:
         if process.poll() is None:
@@ -196,17 +199,23 @@ def main() -> int:
         raise SystemExit("EXE clean-room smoke must run on Windows")
     parser = argparse.ArgumentParser()
     parser.add_argument("--package", type=Path, required=True)
+    parser.add_argument("--port", type=int, default=8080)
     args = parser.parse_args()
+    if not 1 <= args.port <= 65535:
+        parser.error("--port must be between 1 and 65535")
     package = args.package.resolve()
     exe = package / "SiYe.exe"
     validate_distribution(package)
-    if _request("http://127.0.0.1:8080/api/health")[0] != 0:
-        raise AssertionError("port 8080 is already in use; leave the existing application untouched")
-    env = _clean_env(package)
+    base_url = f"http://127.0.0.1:{args.port}"
+    if _request(f"{base_url}/api/health")[0] != 0:
+        raise AssertionError(
+            f"port {args.port} is already in use; leave the existing application untouched"
+        )
+    env = _clean_env(package, args.port)
     run_runtime_smoke(exe, package, env)
     run_worker_protocol_smoke(exe, package, env)
-    run_web_smoke(exe, package, env)
-    run_managed_shutdown_smoke(exe, package, env)
+    run_web_smoke(exe, package, env, base_url)
+    run_managed_shutdown_smoke(exe, package, env, base_url)
     print("executable clean-room validation: PASS")
     print("node/python-free runtime: PASS")
     print("worker protocol: PASS")
