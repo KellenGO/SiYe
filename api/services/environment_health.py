@@ -18,7 +18,7 @@ from base.runtime_paths import resource_path
 
 from . import accounts as accounts_service
 
-API_VERSION = "0.2.1"
+API_VERSION = "0.2.2"
 _PLATFORMS = ("xhs", "douyin", "bilibili", "zhihu")
 _VALID_SEARCH_MODES = {
     "fast_path", "browser_fallback", "api", "page", "unavailable",

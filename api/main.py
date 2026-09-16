@@ -39,7 +39,7 @@ from .services.favorites_job_manager import favorites_job_manager
 app = FastAPI(
     title="SiYe WebUI API",
     description="API for controlling SiYe from WebUI",
-    version="0.2.1"
+    version="0.2.2"
 )
 
 
@@ -126,7 +126,7 @@ def _serve_frontend(path: str = ""):
         raise HTTPException(status_code=404, detail="WebUI build not found")
     return {
         "message": "SiYe WebUI API",
-        "version": "0.2.1",
+        "version": "0.2.2",
         "docs": "/docs",
         "note": "WebUI not found, please build it first: cd webui && npm run build",
     }

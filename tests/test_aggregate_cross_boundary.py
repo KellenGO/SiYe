@@ -961,9 +961,14 @@ def test_router_delete_409_verification_in_progress(monkeypatch):
     asyncio.run(scenario())
 
 
-def test_router_409_does_not_block_other_platforms(monkeypatch):
+def test_router_409_does_not_block_other_platforms(monkeypatch, tmp_path):
     """xhs 后台验证进行中：bilibili 的 delete 不受影响（409 是平台粒度）。"""
     from api.services import accounts as acc
+    # delete 会真的 rmtree 平台 profile 目录；指向临时目录，避免删掉本机登录态。
+    monkeypatch.setattr(acc, "BROWSER_DATA_DIR", tmp_path)
+    monkeypatch.setattr(acc, "profile_dir_for",
+                        lambda p: tmp_path / acc.PLATFORM_PROFILE_DIRS[p])
+    acc.profile_dir_for("bilibili").mkdir(parents=True, exist_ok=True)
     gate, _ = _start_background_verify(monkeypatch)
 
     async def scenario():

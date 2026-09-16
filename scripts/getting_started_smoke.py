@@ -60,7 +60,7 @@ def main():
                    display_name="PRIVATE_ACCOUNT", last_verified_at=date, safe_error_code=None,
                    safe_message=None, browser_backend="msedge")
     health = dict(status="ok", environment_status="ok", backend_available=True,
-                  version="0.2.1", api_version="0.2.1", web_version="0.2.1", version_match=True,
+                  version="0.2.2", api_version="0.2.2", web_version="0.2.2", version_match=True,
                   browser_available=True, browser_backend="msedge", redis_required=False, redis_available=None)
 
     try:
@@ -190,7 +190,7 @@ def main():
                 offline = True
                 page.get_by_role("button", name="复制诊断信息", exact=True).click()
                 expect(report).to_have_value(re.compile('"health": \\{\\s+"state": "unavailable"'))
-                assert json.loads(report.input_value())["ui_version"] == "0.2.1"
+                assert json.loads(report.input_value())["ui_version"] == "0.2.2"
                 assert len([item for item in mutations if item[1] == "/api/search/jobs"]) == 1
                 assert not errors, errors
                 context.close()
