@@ -5,6 +5,9 @@ import { AuthorFooter } from '@/components/layout/AuthorFooter'
 import { LicenseDisclaimer, isLicenseAccepted } from '@/components/license/LicenseDisclaimer'
 import { SearchPage } from '@/components/search/SearchPage'
 import { AccountAutoSync } from '@/components/accounts/AccountAutoSync'
+import { GettingStarted } from '@/components/help/GettingStarted'
+import { useOnboarding } from '@/hooks/useOnboarding'
+import { useTranslation } from 'react-i18next'
 
 // 非搜索页按需加载，搜索主页面保持同步加载。
 const AccountsPage = lazy(() =>
@@ -41,6 +44,8 @@ function routeFromHash(): { view: ViewMode; settings: SettingsSection; favorites
 }
 
 function App() {
+  const { t } = useTranslation()
+  const onboarding = useOnboarding()
   const initialRoute = routeFromHash()
   // Initialize by checking localStorage if license has been accepted
   const [licenseAccepted, setLicenseAccepted] = useState(() => isLicenseAccepted())
@@ -107,7 +112,7 @@ function App() {
   }
 
   return (
-    <div className={`min-h-screen flex flex-col relative ${viewMode === 'search' && homeRoute ? 'home-route' : ''}`}>
+    <div className={`min-h-screen flex flex-col relative ${viewMode === 'search' && homeRoute ? 'home-route' : ''} ${onboarding.step !== null ? 'has-onboarding' : ''}`}>
       {/* License Disclaimer Modal - Shows first or when triggered */}
       {(!licenseAccepted || showDisclaimer) && (
         <LicenseDisclaimer onAccept={handleLicenseAccept} />
@@ -125,13 +130,15 @@ function App() {
       <main className="flex-1 w-full">
         {licenseAccepted && !showDisclaimer && (
           <div className="app-main-inner">
+            <GettingStarted step={onboarding.step} onGoTo={onboarding.goTo} onDismiss={onboarding.dismiss} />
+            {!onboarding.preferenceSaved && <p role="status" className="guide-storage-warning">{t("onboarding.storageUnavailable")}</p>}
             <Suspense fallback={<PageLoading />}>
               {viewMode === 'search' ? (
                 <SearchPage homeRequested={homeRoute} onSearchStarted={showSearchResultsRoute} onNavigateAccounts={() => navigate('accounts', 'accounts')} />
               ) : viewMode === 'favorites' ? (
                 <FavoritesPage activeTab={favoritesSection} onTabChange={changeFavoritesSection} onNavigateAccounts={() => navigate('accounts', 'accounts')} />
               ) : viewMode === 'help' ? (
-                <HelpPage onShowDisclaimer={handleShowDisclaimer} />
+                <HelpPage onShowDisclaimer={handleShowDisclaimer} onStartGuide={() => onboarding.goTo(0)} />
               ) : null}
             </Suspense>
             {/* Keep active login polling alive when navigating back to search. */}

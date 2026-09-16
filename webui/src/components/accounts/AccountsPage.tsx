@@ -667,7 +667,7 @@ export function AccountsPage({ activeSection, onSectionChange, onNavigateSearch,
           <p>
             {verifiedCount > 0
               ? `已连接 ${verifiedCount}/${totalPlatforms} 个平台`
-              : "推荐：用手机扫码登录四个平台"}
+              : "推荐：先扫码连接 1–2 个常用平台"}
           </p>
           {/* 「从浏览器同步」是可选加速：需要扩展，扫码登录不依赖它。 */}
           <button
@@ -949,7 +949,7 @@ export function AccountsPage({ activeSection, onSectionChange, onNavigateSearch,
       {/* 首次使用说明：主路径是扫码登录，扩展是可选加速 */}
       <div className="info-box">
         <h3>第一次使用？先扫码登录</h3>
-        <p>点任意平台卡片的「扫码登录」，四野会在你电脑上打开一个浏览器窗口，用手机 App 扫一下即可。四个平台各扫一次，之后打开程序就能直接搜。</p>
+        <p>点常用平台卡片的「扫码登录」，四野会在你电脑上打开一个浏览器窗口，用手机 App 扫一下即可。先连接 1–2 个平台就能开始搜索，其余平台以后按需添加。</p>
         <p className="mt-2">想复用浏览器里已经登录好的状态？装一次浏览器扩展，就能用「从浏览器同步」——这是可选加速方式，不装也能用。</p>
         {onNavigateHelp && <button type="button" className="text-link" onClick={onNavigateHelp}>查看登录与安装说明 <ExternalLink /></button>}
       </div>

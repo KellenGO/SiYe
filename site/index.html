@@ -641,7 +641,7 @@ html.js .reveal.in{opacity:1;transform:none}
       <article class="card reveal">
         <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8v6l-4 2v-8Z"/></svg></span>
         <h3>结果内筛选与高亮</h3>
-        <p>近 7 天 / 近 30 天、内容类型、关键词组合筛选；多个关键词分别匹配标题、作者和摘要，标题与摘要里的关键词会高亮。</p>
+        <p>在「导出 / 复制」中按关键词筛选，也可切换平台查看；多个关键词用空格分隔，匹配标题、作者和摘要，命中词会高亮。</p>
         <p class="note">筛选只处理已经返回的内容，不会额外搜索平台。</p>
       </article>
 
@@ -758,7 +758,7 @@ html.js .reveal.in{opacity:1;transform:none}
       <p class="eyebrow">Download</p>
       <h2 class="title">三步就能搜起来</h2>
       <p class="description">Windows 可执行包已经包含 Python runtime、FastAPI 后端和生产版 Web UI。普通使用不需要安装 Python、uv、Node.js、npm。
-        <strong>唯一需要你额外做的</strong>：登录四个平台 —— 在「账号与登录」点「扫码登录」，用手机扫一下即可，不需要安装任何插件。</p>
+        先连接常用的 1–2 个平台：在「账号与登录」点「扫码登录」，用手机扫一下即可，不需要安装任何插件。应用内提供可跳过的新手引导。</p>
     </div>
 
     <div class="steps-grid">
@@ -770,12 +770,12 @@ html.js .reveal.in{opacity:1;transform:none}
       <article class="card step reveal">
         <span class="num">2</span>
         <h3>双击启动</h3>
-        <p>打开解压出的 <code>SiYe</code> 文件夹，双击 <code>SiYe.exe</code>，等控制台出现 backend ready。</p>
+        <p>打开解压出的 <code>SiYe</code> 文件夹，双击 <code>四野.exe</code>，浏览器会自动打开；程序在托盘运行，不弹控制台。</p>
       </article>
       <article class="card step reveal">
         <span class="num">3</span>
         <h3>扫码登录，然后开搜</h3>
-        <p>到「设置 · 账号与登录」点任意平台的「扫码登录」，用手机 App 扫一下即可（四个平台各扫一次）。这一步只做一次。</p>
+        <p>在欢迎卡点「带我试一次」，或直接到「设置 · 账号与登录」扫码连接常用平台。搜索时只勾选已连接的平台，其他平台以后再添加。</p>
       </article>
     </div>
 
@@ -828,11 +828,11 @@ html.js .reveal.in{opacity:1;transform:none}
 
     <div class="panel dl-panel reveal" id="account">
       <div>
-        <h3>用之前，先登录四个平台</h3>
-        <p>四野是用<strong>你本人的登录状态</strong>去替你搜索的。开始搜索之前必须登录，否则搜不出东西或一直提示「需要登录」。</p>
+        <h3>先连接你常用的平台</h3>
+        <p>四野用<strong>你本人的登录状态</strong>搜索。先连接常用的 1–2 个平台并勾选它们，其他平台可以以后再添加。</p>
         <ol class="steps" style="list-style:none">
           <li><b>① 扫码登录（推荐）</b>：打开四野的「设置 · 账号与登录」，在平台卡片上点「扫码登录」。
-              程序会在你电脑上打开一个浏览器窗口，用小红书、抖音、B 站、知乎的手机 App 扫一下即可 —— 四个平台各扫一次，之后打开程序就能直接搜。</li>
+              程序会在你电脑上打开一个浏览器窗口，用对应平台的手机 App 扫码，看到「登录已确认」后即可搜索该平台。重启后会自动复核已有登录状态。</li>
           <li><b>② 可选：用浏览器扩展同步</b>：如果你平时就在 Chrome / Edge 里登录着这些平台，
               装上随包的插件（<code>chrome://extensions</code> → 开发者模式 → 加载已解压的扩展程序 → <code>SiYe/browser_extension/</code>），
               回到「账号与登录」点「从浏览器同步」即可省掉扫码。不装也能用扫码登录。</li>
@@ -901,7 +901,7 @@ html.js .reveal.in{opacity:1;transform:none}
       <details class="q reveal">
         <summary>用之前必须先登录四个平台吗？</summary>
         <div class="a">
-          <p>不一定。公开搜索不要求四个平台都登录。只有需要登录态、详情接口或更稳定的平台访问时，才需要先在「账号与登录」扫码登录（或用扩展同步已有的浏览器登录状态）。</p>
+          <p>不用全部登录。建议先在「账号与登录」扫码连接常用的 1–2 个平台，搜索时只勾选它们。部分公开搜索路径可能无需登录，但可用性受平台状态影响；需要个人收藏同步时必须确认对应平台的登录状态。</p>
           <p>没登录时，搜索前的本地预检会在毫秒级告诉你是哪个平台搜不了、为什么，并把你引到账号设置，而不是让你白等浏览器启动。</p>
         </div>
       </details>

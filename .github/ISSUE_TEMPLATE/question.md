@@ -12,7 +12,7 @@ assignees: ''
 
 - [ ] 我已经仔细阅读了 README 中的 [常见启动问题](https://github.com/KellenGO/SiYe/blob/master/README.md#%E5%B8%B8%E8%A7%81%E5%90%AF%E5%8A%A8%E9%97%AE%E9%A2%98)
 - [ ] 我已经搜索并查看了[已关闭的 issues](https://github.com/KellenGO/SiYe/issues?q=is%3Aissue+is%3Aclosed)
-- [ ] 我确认这不是由于滑块验证码、Cookie 过期、Cookie 提取错误、平台风控等常见原因导致的问题
+- [ ] 我已经尝试在应用「帮助」页生成一次诊断报告
 
 ## ❓ 问题描述
 
@@ -28,16 +28,18 @@ assignees: ''
 ## 💻 环境信息
 
 - 操作系统：
-- Python 版本：
 - 是否使用 IP 代理：
-- 是否使用 VPN：
 - 目标平台：
 
-## 📋 错误日志
+## 📋 诊断报告
 
-```shell
-在此粘贴完整的错误日志
+<!-- 在应用「帮助」页点击「生成诊断报告」后复制到这里；报告不会包含 Cookie、搜索词或收藏内容。 -->
+
+```json
+在此粘贴诊断报告（可选）
 ```
+
+如仍需附加日志，请先删除 Cookie、二维码内容、账号标识和搜索词等隐私信息。
 
 ## 📷 错误截图
 

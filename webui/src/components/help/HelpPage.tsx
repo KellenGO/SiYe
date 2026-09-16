@@ -1,26 +1,32 @@
 import { ExternalLink } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import { SupportDiagnostics } from './SupportDiagnostics'
 
 const ORIGINAL_PROJECT_URL = 'https://github.com/NanmiCoder/MediaCrawler'
 const CURRENT_PROJECT_URL = 'https://github.com/KellenGO/SiYe'
 
 interface HelpPageProps {
   onShowDisclaimer: () => void
+  onStartGuide: () => void
 }
 
-export function HelpPage({ onShowDisclaimer }: HelpPageProps) {
+export function HelpPage({ onShowDisclaimer, onStartGuide }: HelpPageProps) {
+  const { t } = useTranslation()
   return (
     <div className="preview-container help-page">
       <div className="page-heading">
         <div>
           <p className="eyebrow">HELP &amp; ABOUT</p>
           <h1>从第一次搜索开始</h1>
-          <p className="description">连接本机服务，登录四个平台账号，把它们放进同一个搜索流程。</p>
+          <p className="description">先连接常用的平台，完成一次搜索，再慢慢熟悉四野。</p>
         </div>
       </div>
 
       <div className="help-grid">
         <section className="help-section">
           <h2>使用流程</h2>
+          <p>{t("onboarding.helpIntro")}</p>
+          <div className="button-row"><button type="button" className="btn" onClick={onStartGuide}>{t("onboarding.restart")}</button></div>
           <ol className="steps">
             <li><strong>启动本机服务</strong>保持四野后端运行，网页会自动检查连接状态。</li>
             <li><strong>登录平台账号</strong>到「设置 · 账号与登录」，点任意平台的「扫码登录」，用手机 App 扫一下即可。</li>
@@ -35,7 +41,7 @@ export function HelpPage({ onShowDisclaimer }: HelpPageProps) {
             <li>打开「设置 · 账号与登录」，找到要登录的平台卡片。</li>
             <li>点卡片上的<strong>「扫码登录」</strong>；四野会在你电脑上打开一个浏览器窗口。</li>
             <li>用对应平台的手机 App 扫码，登录成功后窗口会自动关闭。</li>
-            <li>四野会立刻验证这次会话，卡片状态变成「登录已确认」即完成。四个平台各扫一次。</li>
+            <li>四野会立刻验证这次会话，卡片状态变成「登录已确认」即完成。先连接你常用的 1–2 个平台，搜索时勾选它们即可。</li>
           </ol>
         </section>
 
@@ -56,6 +62,8 @@ export function HelpPage({ onShowDisclaimer }: HelpPageProps) {
           <p><strong>本地收藏</strong>保存你从搜索结果中选中的内容，可写备注、筛选和备份。</p>
           <p className="mt-3"><strong>跨平台收藏</strong>从已登录平台读取收藏列表，并允许再保存到本地。同步不会添加、删除或移动平台中的收藏。</p>
         </section>
+
+        <SupportDiagnostics />
 
         <section className="help-section">
           <h2>项目与作者</h2>

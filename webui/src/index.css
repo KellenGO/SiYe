@@ -1305,3 +1305,36 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
 @media (max-width: 900px) { .library-side-row { width: 100%; } }
 
 .library-batch > label { min-width: 0; max-width: 100%; }
+
+/* A tutorial stays in the page flow so the controls remain usable. */
+.getting-started { width: min(1120px, calc(100% - 48px)); margin: 20px auto 28px; padding: 22px 26px 17px; border: 1px solid var(--siye-line-strong); border-left: 3px solid var(--siye-brand); border-radius: 12px; background: var(--siye-soft); }
+.guide-heading { display: flex; align-items: center; gap: 12px; }
+.guide-symbol { display: grid; place-items: center; width: 38px; height: 38px; flex: none; border-radius: 10px; color: var(--siye-brand-ink); background: var(--siye-brand-soft); }
+.guide-symbol svg { width: 21px; height: 21px; }
+.guide-eyebrow { color: var(--siye-muted); font-size: 11px; letter-spacing: .06em; }
+.guide-heading h2 { margin: 0; color: var(--siye-ink); font-size: 17px; font-weight: 600; }
+.guide-description { max-width: 850px; margin: 13px 0 17px; color: var(--siye-secondary); font-size: 13px; line-height: 1.85; }
+.guide-steps { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+.guide-steps button { display: flex; gap: 7px; align-items: center; padding: 5px 10px; border-radius: 7px; color: var(--siye-muted); font-size: 12px; }
+.guide-steps button[aria-current="step"] { color: var(--siye-brand-ink); background: var(--siye-brand-soft); font-weight: 600; }
+.guide-steps button span { display: inline-grid; place-items: center; width: 19px; height: 19px; border: 1px solid currentColor; border-radius: 50%; font-size: 10px; }
+.guide-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px; }
+.guide-dismiss { display: flex; align-items: center; flex-wrap: wrap; gap: 15px; font-size: 12px; color: var(--siye-secondary); }
+.guide-dismiss label { display: flex; align-items: center; gap: 7px; cursor: pointer; }
+.guide-dismiss input { accent-color: var(--siye-brand); }
+.guide-footnote { margin-top: 13px; color: var(--siye-muted); font-size: 11px; }
+.getting-started button:focus-visible, .getting-started input:focus-visible, .support-preview textarea:focus-visible { outline: 2px solid var(--siye-brand); outline-offset: 3px; }
+.has-onboarding .home-shell { padding-top: 32px; }
+.guide-storage-warning { width: min(1120px, calc(100% - 48px)); margin: 12px auto; color: var(--siye-amber); font-size: 12px; }
+.support-message { min-height: 1.5em; margin-top: 12px; }
+.support-preview { margin-top: 14px; }
+.support-preview label { display: block; margin-bottom: 8px; color: var(--siye-secondary); font-size: 12px; }
+.support-preview textarea { display: block; width: 100%; min-width: 0; resize: vertical; padding: 12px; border: 1px solid var(--siye-line-strong); border-radius: 8px; background: var(--siye-soft); color: var(--siye-secondary); font: 11px/1.7 Consolas, monospace; overflow-wrap: anywhere; }
+.support-preview p { margin-top: 8px; }
+@media (max-width: 700px) {
+  .getting-started { width: calc(100% - 40px); padding: 18px 17px; }
+  .guide-footer { align-items: flex-start; flex-direction: column; }
+  .guide-steps { gap: 4px; }
+  .guide-steps button { padding: 5px 7px; }
+  .getting-started .btn { white-space: normal; }
+}
