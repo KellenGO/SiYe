@@ -6,27 +6,29 @@
 
 核心规则（与产品方案一致）：
 - 内容本体只存一份，唯一键 (platform, content_id)；同一条内容可以同时属于多个收藏夹。
-- 「全部收藏」= 所有条目；「未分类」= 不属于任何收藏夹的条目（虚拟视图，不建实体行）。
+- 「全部」= 所有条目；「默认收藏夹」与「稍后再看」是彼此独立的内置归属。
 - 删除收藏夹默认**保留**其中的内容，只解除归属；取消收藏是独立操作，避免误删。
 - 重复收藏只更新内容快照，保留首次收藏时间与已有备注。
 
-数据文件默认 ``writable_path("data", "library.db")``：源码模式落在项目根，打包后落在 EXE 同级。
+数据文件默认位于用户的稳定系统数据目录，源码与不同发行目录共用同一份数据库。
 """
 
 from __future__ import annotations
 
+import json
 import sqlite3
 import threading
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 from urllib.parse import urlsplit
 
-from base.runtime_paths import writable_path
 from .favorite_snapshot import decode_metrics, encode_metrics
 from .sqlite_base import RESULT_FIELDS, SqliteStoreBase, default_db_path, utc_now
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 MAX_NOTE_LENGTH = 1000
 MAX_ITEMS = 500
+SYSTEM_COLLECTIONS = {"default": "默认收藏夹", "watch_later": "稍后再看"}
+RESERVED_COLLECTION_NAMES = {"全部", "全部收藏", *SYSTEM_COLLECTIONS.values()}
 
 _LIBRARY_SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -56,6 +58,8 @@ CREATE TABLE IF NOT EXISTS items (
     note          TEXT NOT NULL DEFAULT '',
     saved_at      TEXT NOT NULL,
     fetched_at    TEXT,
+    in_default    INTEGER NOT NULL DEFAULT 0,
+    watch_later   INTEGER NOT NULL DEFAULT 0,
     UNIQUE (platform, content_id)
 );
 
@@ -83,10 +87,27 @@ class LibraryStore(SqliteStoreBase):
     _FOREIGN_KEYS = True
 
     def _bootstrap(self, conn: sqlite3.Connection) -> None:
+        old_columns = {
+            row["name"] for row in conn.execute("PRAGMA table_info(items)").fetchall()
+        }
         super()._bootstrap(conn)
+        if old_columns and "in_default" not in old_columns:
+            conn.execute("ALTER TABLE items ADD COLUMN in_default INTEGER NOT NULL DEFAULT 0")
+            conn.execute(
+                """
+                UPDATE items SET in_default = 1
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM item_collections ic WHERE ic.item_id = items.id
+                )
+                """
+            )
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(items)").fetchall()}
+        if "watch_later" not in columns:
+            conn.execute("ALTER TABLE items ADD COLUMN watch_later INTEGER NOT NULL DEFAULT 0")
         self._enable_wal(conn)
         conn.execute(
-            "INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', ?)",
+            "INSERT INTO meta (key, value) VALUES ('schema_version', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             (str(SCHEMA_VERSION),),
         )
 
@@ -140,6 +161,8 @@ class LibraryStore(SqliteStoreBase):
             "note": row["note"] or "",
             "saved_at": row["saved_at"],
             "fetched_at": row["fetched_at"],
+            "in_default": bool(row["in_default"]),
+            "watch_later": bool(row["watch_later"]),
             "collections": collections or [],
         }
 
@@ -159,6 +182,8 @@ class LibraryStore(SqliteStoreBase):
         saved_at: Optional[str] = None,
         fetched_at: Optional[str] = None,
         collection_ids: Optional[Sequence[int]] = None,
+        in_default: Optional[bool] = None,
+        watch_later: bool = False,
     ) -> Dict[str, Any]:
         """Insert or refresh one item; keeps first saved_at and existing note."""
         platform = str(result.get("platform") or "")
@@ -191,11 +216,17 @@ class LibraryStore(SqliteStoreBase):
                 cursor = conn.execute(
                     """
                     INSERT OR IGNORE INTO items (platform, content_id, content_type, title, snippet, author,
-                                                 url, published_at, cover_url, metrics, note, saved_at, fetched_at)
+                                                 url, published_at, cover_url, metrics, note, saved_at, fetched_at,
+                                                 in_default, watch_later)
                     VALUES (:platform, :content_id, :content_type, :title, :snippet, :author,
-                            :url, :published_at, :cover_url, :metrics, :note, :saved_at, :fetched_at)
+                            :url, :published_at, :cover_url, :metrics, :note, :saved_at, :fetched_at,
+                            :in_default, :watch_later)
                     """,
-                    {**row, "note": note, "saved_at": saved_at or now, "fetched_at": fetched_at},
+                    {
+                        **row, "note": note, "saved_at": saved_at or now, "fetched_at": fetched_at,
+                        "in_default": int(in_default if in_default is not None else not collection_ids),
+                        "watch_later": int(bool(watch_later)),
+                    },
                 )
                 if cursor.rowcount == 0:
                     existing = self._find_item(conn, platform, content_id)
@@ -214,6 +245,10 @@ class LibraryStore(SqliteStoreBase):
                     """,
                     {**row, "fetched_at": fetched_at, "id": item_id},
                 )
+                if in_default:
+                    conn.execute("UPDATE items SET in_default = 1 WHERE id = ?", (item_id,))
+                if watch_later:
+                    conn.execute("UPDATE items SET watch_later = 1 WHERE id = ?", (item_id,))
             else:
                 item_id = int(cursor.lastrowid)
 
@@ -249,6 +284,8 @@ class LibraryStore(SqliteStoreBase):
                     saved_at=entry.get("saved_at"),
                     fetched_at=entry.get("fetched_at"),
                     collection_ids=entry.get("collection_ids"),
+                    in_default=entry.get("in_default"),
+                    watch_later=bool(entry.get("watch_later")),
                 )
             except ValueError:
                 skipped += 1
@@ -295,6 +332,7 @@ class LibraryStore(SqliteStoreBase):
         self,
         collection_id: Optional[int] = None,
         only_unclassified: bool = False,
+        system_collection: Optional[str] = None,
         platform: Optional[str] = None,
         query: Optional[str] = None,
         limit: Optional[int] = None,
@@ -303,8 +341,13 @@ class LibraryStore(SqliteStoreBase):
         where: List[str] = []
         params: List[Any] = []
 
-        if only_unclassified:
+        if system_collection == "default":
+            where.append("items.in_default = 1")
+        elif system_collection == "watch_later":
+            where.append("items.watch_later = 1")
+        elif only_unclassified:
             where.append(
+                "items.in_default = 0 AND items.watch_later = 0 AND "
                 "NOT EXISTS (SELECT 1 FROM item_collections ic WHERE ic.item_id = items.id)"
             )
         elif collection_id is not None:
@@ -363,6 +406,8 @@ class LibraryStore(SqliteStoreBase):
             raise ValueError("收藏夹名称不能为空")
         if len(name) > 60:
             raise ValueError("收藏夹名称最长 60 个字")
+        if name.casefold() in {item.casefold() for item in RESERVED_COLLECTION_NAMES}:
+            raise ValueError(f'「{name}」是系统收藏夹名称')
         with self._conn() as conn:
             if conn.execute("SELECT 1 FROM collections WHERE name = ?", (name,)).fetchone():
                 raise ValueError(f'收藏夹「{name}」已存在')
@@ -374,12 +419,42 @@ class LibraryStore(SqliteStoreBase):
             collection_id = int(cursor.lastrowid)
         return {"id": collection_id, "name": name, "position": int(position), "item_count": 0}
 
+    def ensure_imported_collection(self, name: str) -> Dict[str, Any]:
+        """Restore a historical custom folder, including names now reserved by the UI."""
+        name = (name or "").strip()
+        if not name:
+            raise ValueError("收藏夹名称不能为空")
+        if len(name) > 60:
+            raise ValueError("收藏夹名称最长 60 个字")
+        with self._conn(write=True) as conn:
+            existing = conn.execute(
+                "SELECT id, name, position FROM collections WHERE name = ?", (name,)
+            ).fetchone()
+            if existing:
+                count = conn.execute(
+                    "SELECT COUNT(*) AS n FROM item_collections WHERE collection_id = ?", (existing["id"],)
+                ).fetchone()["n"]
+                return {
+                    "id": int(existing["id"]), "name": existing["name"],
+                    "position": int(existing["position"]), "item_count": int(count),
+                }
+            position = conn.execute(
+                "SELECT COALESCE(MAX(position), 0) + 1 AS p FROM collections"
+            ).fetchone()["p"]
+            cursor = conn.execute(
+                "INSERT INTO collections (name, position, created_at) VALUES (?, ?, ?)",
+                (name, position, utc_now()),
+            )
+        return {"id": int(cursor.lastrowid), "name": name, "position": int(position), "item_count": 0}
+
     def rename_collection(self, collection_id: int, name: str) -> Dict[str, Any]:
         name = (name or "").strip()
         if not name:
             raise ValueError("收藏夹名称不能为空")
         if len(name) > 60:
             raise ValueError("收藏夹名称最长 60 个字")
+        if name.casefold() in {item.casefold() for item in RESERVED_COLLECTION_NAMES}:
+            raise ValueError(f'「{name}」是系统收藏夹名称')
         with self._conn() as conn:
             conflict = conn.execute(
                 "SELECT id FROM collections WHERE name = ? AND id <> ?", (name, collection_id)
@@ -448,6 +523,48 @@ class LibraryStore(SqliteStoreBase):
                 removed += cursor.rowcount
         return {"removed": removed}
 
+    # ---------------------------------------------------------- 内置收藏夹
+
+    def add_items_to_system_collection(
+        self,
+        entries: Iterable[Dict[str, Any]],
+        collection: str,
+    ) -> Dict[str, Any]:
+        if collection not in SYSTEM_COLLECTIONS:
+            raise ValueError("系统收藏夹不存在")
+        field = "in_default" if collection == "default" else "watch_later"
+        normalized = []
+        for entry in entries:
+            normalized.append({
+                **entry,
+                # A newly saved watch-later item must not silently enter the
+                # default folder; the two controls are deliberately independent.
+                "in_default": collection == "default",
+                field: True,
+            })
+        return self.add_items(normalized)
+
+    def remove_items_from_system_collection(
+        self,
+        keys: Sequence[Tuple[str, str]],
+        collection: str,
+    ) -> Dict[str, Any]:
+        if collection not in SYSTEM_COLLECTIONS:
+            raise ValueError("系统收藏夹不存在")
+        if not keys:
+            return {"removed": 0}
+        field = "in_default" if collection == "default" else "watch_later"
+        removed = 0
+        with self._conn(write=True) as conn:
+            for platform, content_id in keys:
+                cursor = conn.execute(
+                    f"UPDATE items SET {field} = 0 "
+                    "WHERE platform = ? AND content_id = ? AND " + field + " = 1",
+                    (platform, content_id),
+                )
+                removed += cursor.rowcount
+        return {"removed": removed}
+
     # ------------------------------------------------------------ 导入 / 导出
 
     def export_payload(self) -> Dict[str, Any]:
@@ -459,7 +576,7 @@ class LibraryStore(SqliteStoreBase):
                 for row in rows
             ]
         return {
-            "version": 2,
+            "version": 3,
             "exported_at": utc_now(),
             "collections": self.list_collections(),
             "items": items,
@@ -475,12 +592,14 @@ class LibraryStore(SqliteStoreBase):
 
         兼容两种输入：
         - v1（旧浏览器收藏）：``{"version":1,"items":[{"result":..., "note":..., "savedAt":..., "fetchedAt":...}]}``
-        - v2（本库导出）：额外带 ``collections`` 与条目内嵌的 ``collections`` 名称。
+        - v2（旧本机库导出）：额外带 ``collections`` 与条目内嵌的 ``collections`` 名称；
+        - v3：再保存两个内置收藏夹的独立归属。
         """
         raw_items = payload.get("items")
         if not isinstance(raw_items, list):
             raise ValueError("备份文件格式不正确：缺少 items 数组")
-        if payload.get("version", 1) not in (1, 2):
+        version = payload.get("version", 1)
+        if version not in (1, 2, 3):
             raise ValueError("暂不支持这个备份版本")
         folders = payload.get("collections") or []
         if not isinstance(folders, list):
@@ -497,7 +616,7 @@ class LibraryStore(SqliteStoreBase):
             if not name:
                 continue
             existing = next((c for c in self.list_collections() if c["name"].lower() == name.lower()), None)
-            name_to_id[name.lower()] = existing["id"] if existing else self.create_collection(name)["id"]
+            name_to_id[name.lower()] = existing["id"] if existing else self.ensure_imported_collection(name)["id"]
 
         entries: List[Dict[str, Any]] = []
         for raw in raw_items:
@@ -520,7 +639,7 @@ class LibraryStore(SqliteStoreBase):
                     continue
                 if label not in name_to_id:
                     existing = next((c for c in self.list_collections() if c["name"].lower() == label), None)
-                    name_to_id[label] = existing["id"] if existing else self.create_collection(label)["id"]
+                    name_to_id[label] = existing["id"] if existing else self.ensure_imported_collection(label)["id"]
                 collection_ids.append(name_to_id[label])
             if name_to_id and not collection_ids and raw.get("collection_ids"):
                 collection_ids = [int(c) for c in raw["collection_ids"]]
@@ -532,6 +651,8 @@ class LibraryStore(SqliteStoreBase):
                     "saved_at": raw.get("saved_at") or raw.get("savedAt"),
                     "fetched_at": raw.get("fetched_at") or raw.get("fetchedAt"),
                     "collection_ids": collection_ids,
+                    "in_default": bool(raw.get("in_default")) if version == 3 else not collection_ids,
+                    "watch_later": bool(raw.get("watch_later")) if version == 3 else False,
                 }
             )
 
@@ -543,15 +664,33 @@ class LibraryStore(SqliteStoreBase):
         with self._conn() as conn:
             total = conn.execute("SELECT COUNT(*) AS n FROM items").fetchone()["n"]
             unclassified = conn.execute(
-                "SELECT COUNT(*) AS n FROM items WHERE NOT EXISTS "
-                "(SELECT 1 FROM item_collections ic WHERE ic.item_id = items.id)"
+                "SELECT COUNT(*) AS n FROM items WHERE in_default = 0 AND watch_later = 0 "
+                "AND NOT EXISTS (SELECT 1 FROM item_collections ic WHERE ic.item_id = items.id)"
+            ).fetchone()["n"]
+            default_count = conn.execute(
+                "SELECT COUNT(*) AS n FROM items WHERE in_default = 1"
+            ).fetchone()["n"]
+            watch_later_count = conn.execute(
+                "SELECT COUNT(*) AS n FROM items WHERE watch_later = 1"
             ).fetchone()["n"]
             collections = conn.execute("SELECT COUNT(*) AS n FROM collections").fetchone()["n"]
+            migration_row = conn.execute(
+                "SELECT value FROM meta WHERE key = 'last_legacy_migration'"
+            ).fetchone()
+        migration = None
+        if migration_row:
+            try:
+                migration = json.loads(migration_row["value"])
+            except (TypeError, json.JSONDecodeError):
+                migration = None
         return {
             "total": int(total),
             "unclassified": int(unclassified),
+            "default_count": int(default_count),
+            "watch_later_count": int(watch_later_count),
             "collections": int(collections),
             "db_path": str(self.db_path),
+            "migration": migration,
         }
 
     # ------------------------------------------------------------------ 内部

@@ -6,7 +6,7 @@ import {
   sortResults,
 } from "@/lib/searchExperience";
 import { ResultCard } from "./ResultCard";
-import { BookmarkControl, BookmarkNote, ExportActions } from "./ResultTools";
+import { BookmarkControl, BookmarkNote, ExportActions, WatchLaterControl } from "./ResultTools";
 import type { BookmarkLibrary } from "@/hooks/useBookmarks";
 import { DEFAULT_FILTERS, exportRows, filterResultGroups, groupKey, resultKey, type ResultFilters } from "@/lib/resultTools";
 
@@ -198,8 +198,11 @@ export function ResultTabs({
                 </label>
               </div>}
               <ResultCard result={result} index={index} highlightQuery={filters.query || keyword}
-                renderBookmark={library ? (source) => <BookmarkControl result={source} library={library} fetchedAt={fetchedAt} /> : undefined} />
-              {savedView && bookmark && library && <BookmarkNote bookmark={bookmark} onSave={library.saveNote} />}
+                renderBookmark={library ? (source) => <>
+                  <BookmarkControl result={source} library={library} fetchedAt={fetchedAt} />
+                  <WatchLaterControl result={source} library={library} fetchedAt={fetchedAt} />
+                </> : undefined} />
+              {savedView && bookmark && library && <BookmarkNote bookmark={bookmark} onSave={library.saveNote} library={library} />}
             </div>
           );
         })}

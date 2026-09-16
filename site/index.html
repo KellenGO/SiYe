@@ -656,7 +656,7 @@ html.js .reveal.in{opacity:1;transform:none}
         <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4h12v17l-6-4-6 4V4Z"/></svg></span>
         <h3>本地收藏与备注</h3>
         <p>收藏保留当时的内容快照和原文链接，可写备注，刷新页面或重启程序后仍在。最多 500 个来源，每条备注 1000 字。</p>
-        <p class="note">存在本机数据库（<code>data/library.db</code>），清浏览器缓存、换浏览器都不会丢；支持导出 / 导入 JSON 备份（≤ 10 MB），全程本地完成。</p>
+        <p class="note">存在稳定的本机数据库（<code>%LOCALAPPDATA%\SiYe\data\library.db</code>），清浏览器缓存、升级或更换解压目录都不会丢；支持默认收藏夹、稍后再看和 JSON 备份（≤ 10 MB）。</p>
       </article>
 
       <article class="card reveal">
@@ -910,7 +910,7 @@ html.js .reveal.in{opacity:1;transform:none}
         <summary>我的账号和数据会被上传到服务器吗？</summary>
         <div class="a">
           <p>不会。后端只监听 <code>127.0.0.1:8080</code>，搜索请求由本机发出；账号 profile、缓存和运行数据都在本机目录里。</p>
-          <p>本地收藏和备注存在本机数据库（<code>data/library.db</code>）里，导出 / 导入 JSON 备份也完全在本机完成，不上传任何内容。</p>
+          <p>本地收藏和备注存在本机数据库（<code>%LOCALAPPDATA%\SiYe\data\library.db</code>）里，旧版本目录会在启动时无损合并；导出 / 导入 JSON 备份也完全在本机完成，不上传任何内容。</p>
         </div>
       </details>
 

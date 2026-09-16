@@ -56,6 +56,7 @@ function apiItem(overrides: Record<string, unknown> = {}): Record<string, unknow
   return {
     id: 7, key: "xhs|n1", result: result("n1"), saved_at: "2026-09-01T00:00:00Z",
     fetched_at: "2026-09-02T00:00:00Z", note: "我的备注",
+    in_default: true, watch_later: false,
     collections: [{ id: 2, name: "AI 学习" }, { id: 3, name: "待看" }],
     ...overrides,
   };
@@ -70,6 +71,8 @@ test("toLibraryItem：把后端 snake_case 转成前端 camelCase，并保留收
   assert.equal(item.savedAt, "2026-09-01T00:00:00Z");
   assert.equal(item.fetchedAt, "2026-09-02T00:00:00Z");
   assert.equal(item.note, "我的备注");
+  assert.equal(item.inDefault, true);
+  assert.equal(item.watchLater, false);
   jsonEqual(item.collections.map((tag) => tag.name), ["AI 学习", "待看"]);
   assert.equal(item.result.title, "标题 n1");
 });
@@ -90,6 +93,8 @@ test("toLibraryItem：缺 saved_at / fetched_at / collections 时给出安全默
   assert.equal(item.key, "xhs|n1");
   assert.equal(item.fetchedAt, null);
   assert.equal(item.note, "");
+  assert.equal(item.inDefault, true);
+  assert.equal(item.watchLater, false);
   jsonEqual(item.collections, []);
   assert.ok(Number.isFinite(Date.parse(item.savedAt)));
 });
@@ -135,9 +140,10 @@ test("decideMigration：有旧数据且未迁移才提示；迁移过就不再�
 
 // ── 备份解析 ────────────────────────────────────────────────────────────
 
-test("parseBackupFile：接受 v1（旧浏览器）与 v2（本库导出）结构", () => {
+test("parseBackupFile：接受 v1、v2 与当前 v3 备份结构", () => {
   jsonEqual(parseBackupFile(JSON.stringify({ version: 1, items: [] })), { version: 1, items: [] });
   jsonEqual(parseBackupFile(JSON.stringify({ version: 2, items: [], collections: [] })), { version: 2, items: [], collections: [] });
+  jsonEqual(parseBackupFile(JSON.stringify({ version: 3, items: [], collections: [] })), { version: 3, items: [], collections: [] });
 });
 
 test("parseBackupFile：拒绝非 JSON、缺 items 与超大文件", () => {

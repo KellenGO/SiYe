@@ -36,6 +36,8 @@ export interface LibraryItem {
   fetchedAt: string | null;
   note: string;
   collections: LibraryTag[];
+  inDefault: boolean;
+  watchLater: boolean;
 }
 
 export interface LibraryCollection extends LibraryTag {
@@ -45,8 +47,11 @@ export interface LibraryCollection extends LibraryTag {
 export interface LibraryStats {
   total: number;
   unclassified: number;
+  default_count: number;
+  watch_later_count: number;
   collections: number;
   db_path: string;
+  migration?: { id?: string; source_count?: number; local_items?: number; remote_items?: number; warnings?: string[] } | null;
 }
 
 export interface ImportStats {
@@ -85,6 +90,8 @@ export function toLibraryItem(raw: unknown): LibraryItem | null {
     fetchedAt: typeof raw.fetched_at === "string" ? raw.fetched_at : null,
     note: typeof raw.note === "string" ? raw.note.slice(0, MAX_NOTE_LENGTH) : "",
     collections: tags,
+    inDefault: typeof raw.in_default === "boolean" ? raw.in_default : tags.length === 0,
+    watchLater: raw.watch_later === true,
   };
 }
 
@@ -202,7 +209,7 @@ export async function fetchCollections(): Promise<LibraryCollection[]> {
 }
 
 export async function addItems(
-  entries: { result: UnifiedSearchResult; fetched_at: string | null }[],
+  entries: { result: UnifiedSearchResult; fetched_at: string | null; in_default?: boolean; watch_later?: boolean }[],
   collectionIds: number[] = [],
 ): Promise<ImportStats> {
   if (!entries.length) return { added: 0, updated: 0, skipped: 0 };
@@ -211,6 +218,28 @@ export async function addItems(
     collection_ids: collectionIds,
   });
   return data;
+}
+
+export type SystemCollectionKey = "default" | "watch_later";
+
+export async function addItemsToSystemCollection(
+  collection: SystemCollectionKey,
+  entries: { result: UnifiedSearchResult; fetched_at: string | null }[],
+): Promise<ImportStats> {
+  if (!entries.length) return { added: 0, updated: 0, skipped: 0 };
+  const { data } = await axios.put<ImportStats>(
+    `${LIBRARY_API_BASE}/system-collections/${collection}/items`, { entries },
+  );
+  return data;
+}
+
+export async function removeItemsFromSystemCollection(
+  collection: SystemCollectionKey,
+  keys: string[],
+): Promise<void> {
+  const parsed = keys.map(splitKey).filter((key): key is { platform: string; content_id: string } => key !== null);
+  if (!parsed.length) return;
+  await axios.delete(`${LIBRARY_API_BASE}/system-collections/${collection}/items`, { data: { keys: parsed } });
 }
 
 export async function removeItems(keys: string[]): Promise<void> {

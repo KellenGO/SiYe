@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import os
 from pathlib import Path
 
 
@@ -28,3 +29,18 @@ def resource_path(*parts: str) -> Path:
 def writable_path(*parts: str) -> Path:
     """Resolve data that must survive restarts outside PyInstaller resources."""
     return application_root().joinpath(*parts)
+
+
+def library_data_root() -> Path:
+    """Stable per-user location for the SQLite collection library.
+
+    ``SIYE_DATA_DIR`` keeps tests and development tools isolated. Windows
+    installations otherwise share one library across source and EXE folders.
+    """
+    override = os.environ.get("SIYE_DATA_DIR")
+    if override:
+        return Path(override).expanduser().resolve()
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        return Path(local_app_data).resolve() / "SiYe" / "data"
+    return application_root() / "data"

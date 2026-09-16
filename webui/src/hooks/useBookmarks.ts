@@ -16,7 +16,7 @@ import { toast } from "sonner";
 
 import type { PlatformSlug, UnifiedSearchResult } from "@/types/search";
 import {
-  addItems,
+  addItemsToSystemCollection as apiAddToSystemCollection,
   addItemsToCollection as apiAddToCollection,
   createCollection as apiCreateCollection,
   decideMigration,
@@ -25,18 +25,22 @@ import {
   exportPayload,
   fetchCollections,
   fetchItems,
+  fetchStats,
   importPayload,
   LEGACY_BOOKMARKS_KEY,
   MIGRATION_DISMISS_KEY,
   MIGRATION_MARKER_KEY,
   parseBackupFile,
   removeItems,
+  removeItemsFromSystemCollection as apiRemoveFromSystemCollection,
   removeItemsFromCollection as apiRemoveFromCollection,
   renameCollection as apiRenameCollection,
   toAddPayload,
   updateNote,
   type LibraryCollection,
   type LibraryItem,
+  type LibraryStats,
+  type SystemCollectionKey,
 } from "@/lib/libraryApi";
 import { resultKey } from "@/lib/resultTools";
 
@@ -48,6 +52,7 @@ export interface MigrationPrompt {
 interface LibraryState {
   items: LibraryItem[];
   collections: LibraryCollection[];
+  stats: LibraryStats | null;
   loading: boolean;
   error: string | null;
 }
@@ -60,11 +65,11 @@ function errorText(error: unknown, fallback: string): string {
 }
 
 const LIBRARY_QUERY_KEY = ["local-library"];
-const EMPTY: LibraryState = { items: [], collections: [], loading: true, error: null };
+const EMPTY: LibraryState = { items: [], collections: [], stats: null, loading: true, error: null };
 
 async function loadLibrary(): Promise<LibraryState> {
-  const [items, collections] = await Promise.all([fetchItems(), fetchCollections()]);
-  return { items, collections, loading: false, error: null };
+  const [items, collections, stats] = await Promise.all([fetchItems(), fetchCollections(), fetchStats()]);
+  return { items, collections, stats, loading: false, error: null };
 }
 
 export function useBookmarks() {
@@ -96,8 +101,8 @@ export function useBookmarks() {
     if (decision.shouldOffer) setMigration({ count: decision.count });
   }, []);
 
-  const toggle = useCallback(
-    async (result: UnifiedSearchResult, fetchedAt: Partial<Record<PlatformSlug, string | null>> = {}) => {
+  const toggleSystem = useCallback(
+    async (collection: SystemCollectionKey, result: UnifiedSearchResult, fetchedAt: Partial<Record<PlatformSlug, string | null>> = {}) => {
       const entries = toAddPayload([result], fetchedAt);
       if (!entries.length) {
         toast.error("这条内容的格式无法收藏");
@@ -106,26 +111,62 @@ export function useBookmarks() {
       const keys = entries.map((entry) => resultKey(entry.result));
       if (query.isPending || query.isError || keys.some((key) => pending.current.has(key))) return;
       keys.forEach((key) => pending.current.add(key));
-      const existing = new Set(state.items.map((item) => item.key));
-      const allSaved = keys.every((key) => existing.has(key));
+      const existing = new Map(state.items.map((item) => [item.key, item]));
+      const allSaved = keys.every((key) => {
+        const item = existing.get(key);
+        return item && (collection === "default" ? item.inDefault : item.watchLater);
+      });
 
       // 服务端是唯一真源：不 optimistic 更新。这样快速连点只会产生幂等的
       // 重复请求（后端按 platform|content_id 去重），不会出现"想取消却变成收藏"。
       try {
-        if (allSaved) await removeItems(keys);
+        if (allSaved) await apiRemoveFromSystemCollection(collection, keys);
         else {
-          const stats = await addItems(entries);
+          const stats = await apiAddToSystemCollection(collection, entries);
           if (stats.skipped) toast.warning(describeImport(stats));
         }
         await refresh();
       } catch (error) {
-        toast.error(errorText(error, allSaved ? "取消收藏失败" : "收藏失败，请稍后重试"));
+        const label = collection === "default" ? "收藏" : "稍后再看";
+        toast.error(errorText(error, allSaved ? `移出${label}失败` : `加入${label}失败，请稍后重试`));
       } finally {
         keys.forEach((key) => pending.current.delete(key));
       }
     },
     [refresh, state.items, query.isPending, query.isError],
   );
+
+  const setSystemMembership = useCallback(async (
+    keys: string[], collection: SystemCollectionKey, enabled: boolean,
+  ) => {
+    try {
+      if (enabled) {
+        const wanted = new Set(keys);
+        const entries = state.items
+          .filter((item) => wanted.has(item.key))
+          .map((item) => ({ result: item.result, fetched_at: item.fetchedAt }));
+        await apiAddToSystemCollection(collection, entries);
+      } else {
+        await apiRemoveFromSystemCollection(collection, keys);
+      }
+      await refresh();
+      return true;
+    } catch (error) {
+      toast.error(errorText(error, "收藏夹归属未保存，请重试"));
+      return false;
+    }
+  }, [refresh, state.items]);
+
+  const deleteItems = useCallback(async (keys: string[]) => {
+    try {
+      await removeItems(keys);
+      await refresh();
+      return true;
+    } catch (error) {
+      toast.error(errorText(error, "删除本地收藏失败"));
+      return false;
+    }
+  }, [refresh]);
 
   const saveNote = useCallback(
     async (key: string, note: string) => {
@@ -298,11 +339,15 @@ export function useBookmarks() {
   return {
     items: state.items,
     collections: state.collections,
+    stats: state.stats,
     loading: query.isPending,
     error: query.error ? errorText(query.error, "收藏库暂时不可用，请重试") : null,
     migration,
     refresh,
-    toggle,
+    toggle: (result: UnifiedSearchResult, fetchedAt: Partial<Record<PlatformSlug, string | null>> = {}) => toggleSystem("default", result, fetchedAt),
+    toggleSystem,
+    setSystemMembership,
+    deleteItems,
     saveNote,
     importBackup,
     exportBackup,

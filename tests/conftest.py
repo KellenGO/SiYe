@@ -24,6 +24,20 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
+def _isolate_library_data(monkeypatch, tmp_path):
+    """No test may read or write the user's stable collection database."""
+    monkeypatch.setenv("SIYE_DATA_DIR", str(tmp_path / "siye-data"))
+    from api.services.library_store import reset_library_store
+    from api.services.remote_favorites_store import reset_remote_favorites_store
+
+    reset_library_store()
+    reset_remote_favorites_store()
+    yield
+    reset_library_store()
+    reset_remote_favorites_store()
+
+
+@pytest.fixture(autouse=True)
 def _default_oneshot_worker_mode():
     """默认以 one-shot 模式运行搜索 worker，避免既有测试泄漏常驻进程。
 

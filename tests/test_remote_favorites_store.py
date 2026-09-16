@@ -102,6 +102,24 @@ def test_platform_failure_keeps_other_platforms_data(store: RemoteFavoritesStore
     assert saved["overall"] == "partial"
 
 
+def test_two_login_failures_keep_all_four_platforms_after_restart(store: RemoteFavoritesStore) -> None:
+    for platform in ("xhs", "douyin", "bilibili", "zhihu"):
+        store.save_platform(platform, [_result(platform=platform, content_id=f"old-{platform}")], status="succeeded")
+
+    store.save_platform("xhs", [], status="login_required", error_summary="未登录")
+    store.save_platform("bilibili", [], status="login_required", error_summary="未登录")
+    saved = RemoteFavoritesStore(store.db_path).load()
+
+    assert saved is not None
+    assert {(item["platform"], item["content_id"]) for item in saved["results"]} == {
+        ("xhs", "old-xhs"), ("douyin", "old-douyin"),
+        ("bilibili", "old-bilibili"), ("zhihu", "old-zhihu"),
+    }
+    assert saved["platforms"]["xhs"]["status"] == "login_required"
+    assert saved["platforms"]["bilibili"]["status"] == "login_required"
+    assert saved["platforms"]["xhs"]["result_count"] == 0
+
+
 def test_accounts_are_isolated(store: RemoteFavoritesStore) -> None:
     store.save_platform("xhs", [_result(content_id="mine")], status="succeeded", account_key="account-a")
     store.save_platform("xhs", [_result(content_id="other")], status="succeeded", account_key="account-b")

@@ -118,6 +118,17 @@ def main():
                 page.get_by_role("button", name="迁移到本机收藏库", exact=True).click()
                 expect(page.get_by_text("图文收藏测试", exact=True)).to_be_visible()
                 assert store.stats()["total"] == 2
+                expect(page.get_by_role("button", name="全部 2", exact=True)).to_be_visible()
+                expect(page.get_by_role("button", name="默认收藏夹 2", exact=True)).to_be_visible()
+                expect(page.get_by_role("button", name="稍后再看 0", exact=True)).to_be_visible()
+                first_actions = page.locator(".result-row").first.locator(".row-actions button")
+                assert first_actions.count() >= 2
+                assert "收藏" in (first_actions.nth(0).get_attribute("aria-label") or "")
+                assert "稍后再看" in (first_actions.nth(1).get_attribute("aria-label") or "")
+                page.get_by_role("button", name="稍后再看 图文收藏测试", exact=True).click()
+                expect(page.get_by_role("button", name="稍后再看 1", exact=True)).to_be_visible()
+                assert store.get_item("xhs", "a")["in_default"] is True
+                assert store.get_item("xhs", "a")["watch_later"] is True
                 page.get_by_role("button", name="新建收藏夹", exact=True).click()
                 page.get_by_role("textbox", name="新收藏夹名称").fill("跨平台学习")
                 page.get_by_role("button", name="创建收藏夹", exact=True).click()
@@ -212,7 +223,7 @@ def main():
         finally:
             server.shutdown()
             client.close()
-        print("favorites UI: migration, folders, note writes, reload, failed sync, cancel retry, mobile layout PASS")
+        print("favorites UI: built-in folders, independent watch-later, folders, notes, cache, cancel, responsive layout PASS")
 
 
 if __name__ == "__main__":

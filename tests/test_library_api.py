@@ -131,7 +131,8 @@ def test_items_filters(client: TestClient) -> None:
 
     assert client.get("/api/library/items", params={"platform": "xhs"}).json()["total"] == 1
     assert client.get("/api/library/items", params={"q": "露营"}).json()["total"] == 1
-    assert client.get("/api/library/items", params={"unclassified": True}).json()["total"] == 2
+    assert client.get("/api/library/items", params={"system_collection": "default"}).json()["total"] == 2
+    assert client.get("/api/library/items", params={"unclassified": True}).json()["total"] == 0
     assert client.get("/api/library/items", params={"limit": 1}).json()["total"] == 2
 
 
@@ -147,11 +148,39 @@ def test_import_legacy_backup_and_export(client: TestClient) -> None:
     assert imported.json()["added"] == 1
 
     exported = client.get("/api/library/export").json()
-    assert exported["version"] == 2
+    assert exported["version"] == 3
     assert len(exported["items"]) == 1
     assert exported["items"][0]["note"] == "旧备注"
 
 
 def test_import_rejects_garbage(client: TestClient) -> None:
     response = client.post("/api/library/import", json={"payload": {"version": 1}})
+    assert response.status_code == 400
+
+
+def test_system_collection_endpoints_are_independent(client: TestClient) -> None:
+    entries = [{"result": _result(content_id="later")}]
+    added = client.put("/api/library/system-collections/watch_later/items", json={"entries": entries})
+    assert added.status_code == 200
+    item = client.get("/api/library/items").json()["items"][0]
+    assert item["watch_later"] is True
+    assert item["in_default"] is False
+
+    client.put("/api/library/system-collections/default/items", json={"entries": entries})
+    item = client.get("/api/library/items").json()["items"][0]
+    assert item["watch_later"] is True and item["in_default"] is True
+
+    removed = client.request(
+        "DELETE", "/api/library/system-collections/default/items",
+        json={"keys": [{"platform": "xhs", "content_id": "later"}]},
+    )
+    assert removed.status_code == 200 and removed.json()["removed"] == 1
+    item = client.get("/api/library/items").json()["items"][0]
+    assert item["watch_later"] is True and item["in_default"] is False
+    assert client.get("/api/library/stats").json()["total"] == 1
+
+
+@pytest.mark.parametrize("name", ["全部", "默认收藏夹", "稍后再看"])
+def test_reserved_collection_names_are_rejected(client: TestClient, name: str) -> None:
+    response = client.post("/api/library/collections", json={"name": name})
     assert response.status_code == 400

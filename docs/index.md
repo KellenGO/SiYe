@@ -7,7 +7,7 @@
 |---|---|---|
 | 可跳过的新手引导 | [features/getting-started.md](features/getting-started.md) | `webui/src/components/help/GettingStarted.tsx`、`webui/src/hooks/useOnboarding.ts` |
 | 本机诊断报告与问题反馈 | [features/support-diagnostics.md](features/support-diagnostics.md) | `webui/src/lib/supportDiagnostics.ts`、`webui/src/components/help/SupportDiagnostics.tsx` |
-| 本地收藏夹（收藏库 + 收藏夹分类） | [features/favorites-library.md](features/favorites-library.md) | `api/services/library_store.py`、`api/routers/library.py`、`webui/src/hooks/useBookmarks.ts` |
+| 本地收藏夹（内置分类 + 自建收藏夹） | [features/favorites-library.md](features/favorites-library.md) | `api/services/library_store.py`、`api/services/library_migration.py`、`webui/src/hooks/useBookmarks.ts` |
 | 跨平台收藏同步 + 持久化 | [features/remote-favorites-sync.md](features/remote-favorites-sync.md) | `api/services/remote_favorites_store.py`、`api/services/favorites_job_manager.py` |
 | 搜索体验（排序 / 去重 / 渐进展示 / 冷却） | [features/search-experience.md](features/search-experience.md) | `webui/src/lib/searchExperience.ts`、`webui/src/lib/platformMeta.ts`、`api/services/result_cache.py` |
 | 环境自检（`/api/health` 与 Platform Doctor） | [features/environment-health.md](features/environment-health.md) | `api/services/environment_health.py`、`webui/src/components/search/PlatformStatus.tsx` |

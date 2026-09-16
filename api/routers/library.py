@@ -7,9 +7,9 @@
 """FastAPI router for the local bookmark library (收藏库 / 收藏夹).
 
 设计要点：
-- 收藏内容存在本机 SQLite（base/runtime_paths.py 的 writable_path("data", "library.db")），
+- 收藏内容存在本机稳定数据目录的 SQLite，
   不再依赖浏览器 localStorage，清缓存/换浏览器都不会丢。
-- 一条内容只存一份，可以同时属于多个收藏夹；「未分类」= 不属于任何收藏夹。
+- 一条内容只存一份，可以同时属于默认收藏夹、稍后再看和多个自建收藏夹。
 - 删除收藏夹默认保留其中的内容（只解除归属）；取消收藏是独立接口，避免误删。
 - 这些接口只做本地读写，不访问任何平台；路由定义为同步函数，由 FastAPI 放进线程池，
   避免 SQLite 的同步 I/O 阻塞事件循环。
@@ -45,7 +45,7 @@ def _bad_request(error: ValueError) -> HTTPException:
 
 @library_router.get("/stats")
 def library_stats(store: LibraryStore = Depends(get_library_store)) -> Dict[str, Any]:
-    """收藏总量、未分类数量、收藏夹数量，以及数据库文件位置。"""
+    """收藏总量、内置收藏夹数量、自建收藏夹数量及数据库位置。"""
     return store.stats()
 
 
@@ -56,6 +56,7 @@ def library_stats(store: LibraryStore = Depends(get_library_store)) -> Dict[str,
 def list_items(
     collection_id: Optional[int] = Query(default=None),
     unclassified: bool = Query(default=False, description="只看未分类（不属于任何收藏夹）"),
+    system_collection: Optional[str] = Query(default=None, pattern="^(default|watch_later)$"),
     platform: Optional[str] = Query(default=None),
     q: Optional[str] = Query(default=None, description="在标题/作者/摘要中搜索"),
     limit: Optional[int] = Query(default=None, ge=1, le=500),
@@ -66,6 +67,7 @@ def list_items(
     return store.list_items(
         collection_id=collection_id,
         only_unclassified=unclassified,
+        system_collection=system_collection,
         platform=platform,
         query=q,
         limit=limit,
@@ -85,6 +87,8 @@ def add_item(
             note=payload.note,
             fetched_at=payload.fetched_at,
             collection_ids=payload.collection_ids,
+            in_default=payload.in_default,
+            watch_later=payload.watch_later,
         )
     except ValueError as error:
         raise _bad_request(error)
@@ -102,6 +106,8 @@ def add_items(
             "note": entry.note,
             "fetched_at": entry.fetched_at,
             "collection_ids": entry.collection_ids or payload.collection_ids,
+            "in_default": entry.in_default,
+            "watch_later": entry.watch_later,
         }
         for entry in payload.entries
     ]
@@ -132,6 +138,43 @@ def remove_items(
     """取消收藏（独立操作，与「移出收藏夹」区分）。"""
     removed = store.remove_items([(key.platform, key.content_id) for key in payload.keys])
     return {"removed": removed}
+
+
+@library_router.put("/system-collections/{collection}/items")
+def add_items_to_system_collection(
+    collection: str,
+    payload: LibraryItemsBatchInput,
+    store: LibraryStore = Depends(get_library_store),
+) -> Dict[str, Any]:
+    """幂等加入默认收藏夹或稍后再看；不存在的内容同时落库。"""
+    entries = [
+        {
+            "result": entry.result,
+            "note": entry.note,
+            "fetched_at": entry.fetched_at,
+            "collection_ids": entry.collection_ids,
+        }
+        for entry in payload.entries
+    ]
+    try:
+        return store.add_items_to_system_collection(entries, collection)
+    except ValueError as error:
+        raise _bad_request(error)
+
+
+@library_router.delete("/system-collections/{collection}/items")
+def remove_items_from_system_collection(
+    collection: str,
+    payload: LibraryKeysInput,
+    store: LibraryStore = Depends(get_library_store),
+) -> Dict[str, Any]:
+    """只解除内置收藏夹归属；内容本体和其他归属保持不变。"""
+    try:
+        return store.remove_items_from_system_collection(
+            [(key.platform, key.content_id) for key in payload.keys], collection
+        )
+    except ValueError as error:
+        raise _bad_request(error)
 
 
 # ── 收藏夹 ──────────────────────────────────────────────────────────────

@@ -23,6 +23,8 @@ class LibraryItemInput(BaseModel):
     note: str = ""
     fetched_at: Optional[str] = None
     collection_ids: List[int] = Field(default_factory=list)
+    in_default: Optional[bool] = None
+    watch_later: bool = False
 
 
 class LibraryItemsBatchInput(BaseModel):
@@ -68,7 +70,7 @@ class CollectionBatchInput(BaseModel):
 class LibraryImportInput(BaseModel):
     """导入备份 / 迁移旧 localStorage 数据。
 
-    兼容 v1（旧浏览器收藏）与 v2（本库导出）两种结构，见 LibraryStore.import_payload。
+    兼容 v1（旧浏览器收藏）、v2（旧本机库）与 v3（内置收藏夹）结构。
     """
 
     payload: Dict[str, Any]

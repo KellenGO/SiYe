@@ -3,15 +3,16 @@
 覆盖产品方案里明确的几条规则：
 - 内容本体只存一份，唯一键 (platform, content_id)；
 - 一条内容可以同时属于多个收藏夹；
-- 「未分类」= 不属于任何收藏夹；
+- 「默认收藏夹」与「稍后再看」彼此独立，移出后内容仍留在「全部」；
 - 删除收藏夹保留内容，取消收藏是独立操作；
 - 重复收藏保留首次收藏时间与已有备注；
-- 兼容旧 localStorage 备份（v1）与导出的 v2 结构。
+- 兼容旧 localStorage 备份（v1）、旧本机备份（v2）与当前 v3 结构。
 """
 
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -50,10 +51,13 @@ def test_add_and_read_item(store: LibraryStore) -> None:
     assert item["result"]["title"] == "露营装备怎么选"
     assert item["result"]["metrics"] == {"likes": 12, "comments": 3}
     assert item["collections"] == []
+    assert item["in_default"] is True
+    assert item["watch_later"] is False
 
     stats = store.stats()
     assert stats["total"] == 1
-    assert stats["unclassified"] == 1
+    assert stats["default_count"] == 1
+    assert stats["unclassified"] == 0
 
 
 def test_duplicate_keeps_first_saved_at_and_existing_note(store: LibraryStore) -> None:
@@ -85,6 +89,7 @@ def test_one_item_can_belong_to_multiple_collections(store: LibraryStore) -> Non
 def test_unclassified_view_excludes_filed_items(store: LibraryStore) -> None:
     collection = store.create_collection("已整理")
     store.add_item(_result(content_id="a"))
+    store.remove_items_from_system_collection([("xhs", "a")], "default")
     store.add_item(_result(content_id="b"), collection_ids=[collection["id"]])
 
     unclassified = store.list_items(only_unclassified=True)
@@ -154,6 +159,9 @@ def test_collection_name_rules(store: LibraryStore) -> None:
         store.create_collection("  ")
     with pytest.raises(ValueError):
         store.rename_collection(999, "不存在")
+    for reserved in ("全部", "默认收藏夹", "稍后再看"):
+        with pytest.raises(ValueError, match="系统收藏夹"):
+            store.create_collection(reserved)
 
 
 def test_export_then_import_roundtrip(store: LibraryStore) -> None:
@@ -162,7 +170,7 @@ def test_export_then_import_roundtrip(store: LibraryStore) -> None:
     store.add_item(_result(content_id="b"), note="备注 B")
 
     payload = store.export_payload()
-    assert payload["version"] == 2
+    assert payload["version"] == 3
     assert len(payload["items"]) == 2
 
     fresh = LibraryStore(store.db_path.parent / "restored.db")
@@ -175,6 +183,47 @@ def test_export_then_import_roundtrip(store: LibraryStore) -> None:
     assert restored is not None
     assert restored["note"] == "备注 A"
     assert [c["name"] for c in restored["collections"]] == ["我的夹"]
+
+
+def test_system_collections_are_independent_and_removal_keeps_item(store: LibraryStore) -> None:
+    entry = {"result": _result(content_id="later")}
+    store.add_items_to_system_collection([entry], "watch_later")
+    item = store.get_item("xhs", "later")
+    assert item is not None
+    assert item["in_default"] is False
+    assert item["watch_later"] is True
+
+    store.add_items_to_system_collection([entry], "default")
+    item = store.get_item("xhs", "later")
+    assert item is not None and item["in_default"] and item["watch_later"]
+
+    assert store.remove_items_from_system_collection([("xhs", "later")], "default") == {"removed": 1}
+    item = store.get_item("xhs", "later")
+    assert item is not None and not item["in_default"] and item["watch_later"]
+    assert store.list_items()["total"] == 1
+
+
+def test_v3_roundtrip_preserves_system_membership(store: LibraryStore) -> None:
+    store.add_item(_result(content_id="none"), in_default=False)
+    store.add_item(_result(content_id="both"), in_default=True, watch_later=True)
+    fresh = LibraryStore(store.db_path.parent / "v3-restored.db")
+    fresh.import_payload(store.export_payload())
+
+    none = fresh.get_item("xhs", "none")
+    both = fresh.get_item("xhs", "both")
+    assert none is not None and not none["in_default"] and not none["watch_later"]
+    assert both is not None and both["in_default"] and both["watch_later"]
+
+
+def test_import_keeps_historical_reserved_custom_folder(store: LibraryStore) -> None:
+    payload = {
+        "version": 2,
+        "collections": [{"name": "稍后再看"}],
+        "items": [{"result": _result(), "collections": [{"name": "稍后再看"}]}],
+    }
+    store.import_payload(payload)
+    assert store.list_collections()[0]["name"] == "稍后再看"
+    assert store.get_item("xhs", "n1")["in_default"] is False
 
 
 def test_import_legacy_localstorage_backup(store: LibraryStore) -> None:
@@ -272,3 +321,24 @@ def test_capacity_reports_partial_import_without_erasing_old_items(store: Librar
     ]})
     assert stats == {"added": 1, "updated": 0, "skipped": 1, "total": 2}
     assert store.get_item("xhs", "old")["note"] == "保留"
+
+
+def test_old_schema_upgrade_moves_only_unfiled_items_to_default(tmp_path: Path) -> None:
+    db_path = tmp_path / "old-library.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.executescript("""
+        CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE TABLE collections (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE COLLATE NOCASE, position INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);
+        CREATE TABLE items (id INTEGER PRIMARY KEY AUTOINCREMENT, platform TEXT NOT NULL, content_id TEXT NOT NULL, content_type TEXT NOT NULL DEFAULT '', title TEXT NOT NULL DEFAULT '', snippet TEXT, author TEXT NOT NULL DEFAULT '', url TEXT NOT NULL DEFAULT '', published_at TEXT, cover_url TEXT, metrics TEXT NOT NULL DEFAULT '{}', note TEXT NOT NULL DEFAULT '', saved_at TEXT NOT NULL, fetched_at TEXT, UNIQUE(platform, content_id));
+        CREATE TABLE item_collections (item_id INTEGER NOT NULL, collection_id INTEGER NOT NULL, added_at TEXT NOT NULL, PRIMARY KEY(item_id, collection_id));
+        INSERT INTO collections(id,name,position,created_at) VALUES (1,'资料',1,'2026-09-01');
+        INSERT INTO items(id,platform,content_id,title,url,saved_at) VALUES (1,'xhs','loose','未分类','https://example.com/loose','2026-09-01');
+        INSERT INTO items(id,platform,content_id,title,url,saved_at) VALUES (2,'xhs','filed','已分类','https://example.com/filed','2026-09-01');
+        INSERT INTO item_collections(item_id,collection_id,added_at) VALUES (2,1,'2026-09-01');
+        """)
+
+    upgraded = LibraryStore(db_path)
+    assert upgraded.get_item("xhs", "loose")["in_default"] is True
+    assert upgraded.get_item("xhs", "filed")["in_default"] is False
+    assert upgraded.get_item("xhs", "loose")["watch_later"] is False
+    assert upgraded.stats()["default_count"] == 1

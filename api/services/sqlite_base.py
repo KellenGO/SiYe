@@ -6,7 +6,7 @@
 """两个 SQLite 存储层共用的底座。
 
 `library_store`（本地收藏库）与 `remote_favorites_store`（跨平台收藏归档）写的是
-**同一个** `data/library.db`，但历史上各自复制了一份 `_now()` / `default_db_path()`
+**同一个**稳定系统目录下的 `library.db`，但历史上各自复制了一份 `_now()` / `default_db_path()`
 / `_conn()` / 字段白名单。这里把它们收成一份，避免改一处漏一处。
 
 只放"两边确实一样"的东西：建库、连接、事务、时间戳、结果字段白名单。
@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator, Optional, Tuple
 
-from base.runtime_paths import writable_path
+from base.runtime_paths import library_data_root
 
 #: 结果的公开字段白名单：只持久化这些，避免把内部/嵌套字段写进库里。
 #: 两个表共用同一套列名（收藏同步表额外自己拼 collection_names）。
@@ -40,8 +40,8 @@ RESULT_FIELDS: Tuple[str, ...] = (
 
 
 def default_db_path() -> Path:
-    """默认库文件位置（源码模式 = 项目根，打包后 = EXE 同级）。"""
-    return writable_path("data", "library.db")
+    """统一收藏库位置；源码与不同版本 EXE 共用。"""
+    return library_data_root() / "library.db"
 
 
 def utc_now() -> str:

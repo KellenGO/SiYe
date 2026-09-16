@@ -273,6 +273,8 @@ body {
 .btn { display: inline-flex; justify-content: center; align-items: center; gap: 8px; min-height: 39px; padding: 9px 15px; border: 1px solid var(--siye-line-strong); border-radius: 9px; background: var(--siye-bg); color: var(--siye-ink); font-size: 12px; line-height: 1.5; white-space: nowrap; }
 .btn:hover { border-color: var(--siye-brand); color: var(--siye-brand-ink); }
 .btn.primary { background: var(--siye-brand); border-color: var(--siye-brand); color: #fff; }
+.btn.danger { border-color: color-mix(in srgb, #b42318 35%, var(--siye-line)); color: #b42318; }
+.btn.danger:hover { border-color: #b42318; background: color-mix(in srgb, #b42318 7%, var(--siye-bg)); color: #b42318; }
 html.dark .btn.primary { color: #101525; }
 .btn.ghost { border-color: transparent; background: none; }
 .btn.small { min-height: 32px; padding: 6px 10px; font-size: 12px; }
@@ -443,12 +445,24 @@ html.dark .search-submit { color: #101525; }
 .library-inline-form .field { flex: 1; min-width: 0; padding: 6px 9px; font-size: 12.5px; }
 .library-batch { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; padding: 10px 14px; border: 1px solid var(--siye-line-strong); border-radius: 11px; background: var(--siye-brand-soft); color: var(--siye-brand-ink); font-size: 12.5px; }
 .library-batch .btn { padding: 6px 12px; font-size: 12.5px; }
+.bookmark-meta-actions { display: inline-flex; align-items: center; gap: 8px; }
+.membership-editor { position: relative; }
+.membership-editor > .text-link { display: inline-flex; align-items: center; gap: 4px; }
+.membership-editor > .text-link svg { width: 13px; height: 13px; }
+.membership-card { position: absolute; z-index: 25; top: calc(100% + 7px); right: 0; display: flex; flex-direction: column; width: 210px; padding: 12px; border: 1px solid var(--siye-line-strong); border-radius: 11px; background: var(--siye-bg); box-shadow: 0 14px 38px #2029451f; color: var(--siye-secondary); }
+.membership-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 7px; }
+.membership-card-head p { margin: 0; color: var(--siye-ink); font-size: 12px; font-weight: 600; }
+.membership-card-head .text-link { font-size: 11px; }
+.membership-card label { display: flex; align-items: center; gap: 8px; padding: 6px 3px; cursor: pointer; }
+.membership-card label:has(input:disabled) { cursor: default; }
+.membership-card input { accent-color: var(--siye-brand); }
 @media (max-width: 900px) {
   .library-layout { grid-template-columns: minmax(0, 1fr); gap: 18px; }
   .library-side { position: static; flex-direction: row; flex-wrap: wrap; gap: 6px; }
   .library-side-title { flex-basis: 100%; margin-top: 10px; }
   .library-side-row { flex: none; }
   .library-side-action { opacity: 1; }
+  .membership-card { position: fixed; top: auto; right: 16px; bottom: 16px; left: 16px; width: auto; max-height: min(420px, calc(100vh - 32px)); overflow-y: auto; }
 }
 
 .settings-layout { display: grid; grid-template-columns: 195px minmax(0, 1fr); gap: 60px; }

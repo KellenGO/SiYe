@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  AlertTriangle, Bookmark, Check, FolderHeart, FolderPlus, Loader2, Pencil, RefreshCw, Trash2, X,
+  AlertTriangle, Bookmark, Check, Clock3, FolderHeart, FolderPlus, Loader2, Pencil, RefreshCw, Trash2, X,
 } from "lucide-react";
 import { ResultTabs } from "@/components/search/ResultTabs";
 import { BookmarkBackup } from "@/components/search/BookmarkBackup";
 import { useBookmarks } from "@/hooks/useBookmarks";
 import { useFavorites } from "@/hooks/useFavorites";
-import { parseGroupKey } from "@/lib/resultTools";
+import { parseGroupKey, resultSources } from "@/lib/resultTools";
 import type { PlatformSlug } from "@/types/search";
 import { PLATFORM_COLORS, PLATFORM_LABELS, STATUS_LABELS } from "@/types/search";
 import { PLATFORM_SLUGS } from "@/lib/platformMeta";
 
 const PLATFORMS = PLATFORM_SLUGS;
+const RECOVERY_NOTICE_PREFIX = "siye_library_recovery_notice_";
 
 
 function errorMessage(error: unknown): string {
@@ -19,8 +20,12 @@ function errorMessage(error: unknown): string {
   return typeof detail === "string" ? detail : "收藏夹同步失败，请稍后重试。";
 }
 
-/** 本地收藏左侧选择：全部 / 未分类 / 某个收藏夹。 */
-type LibrarySelection = { kind: "all" } | { kind: "unclassified" } | { kind: "collection"; id: number };
+/** 本地收藏左侧选择：全部 / 两个内置收藏夹 / 某个自建收藏夹。 */
+type LibrarySelection = { kind: "all" } | { kind: "default" } | { kind: "watch_later" } | { kind: "collection"; id: number };
+
+function customCollectionLabel(name: string): string {
+  return ["全部", "全部收藏", "默认收藏夹", "稍后再看"].includes(name) ? `${name}（自建）` : name;
+}
 
 interface FavoritesPageProps {
   activeTab?: "local" | "remote";
@@ -47,14 +52,17 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
   const [renaming, setRenaming] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [moving, setMoving] = useState(false);
+  const [showRecoveryNotice, setShowRecoveryNotice] = useState(false);
 
-  const unclassifiedCount = useMemo(
-    () => library.items.filter((item) => item.collections.length === 0).length,
+  const defaultCount = useMemo(
+    () => library.items.filter((item) => item.inDefault).length,
     [library.items],
   );
+  const watchLaterCount = useMemo(() => library.items.filter((item) => item.watchLater).length, [library.items]);
   const visibleItems = useMemo(() => {
     if (selection.kind === "all") return library.items;
-    if (selection.kind === "unclassified") return library.items.filter((item) => item.collections.length === 0);
+    if (selection.kind === "default") return library.items.filter((item) => item.inDefault);
+    if (selection.kind === "watch_later") return library.items.filter((item) => item.watchLater);
     return library.items.filter((item) => item.collections.some((tag) => tag.id === selection.id));
   }, [library.items, selection]);
   const localResults = useMemo(() => visibleItems.map((item) => item.result), [visibleItems]);
@@ -62,12 +70,26 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
     ? library.collections.find((item) => item.id === selection.id) ?? null
     : null;
 
-  // 收藏夹被删除后回到「全部收藏」
+  // 收藏夹被删除后回到「全部」
   useEffect(() => {
     if (selection.kind === "collection" && !library.collections.some((item) => item.id === selection.id)) {
       setSelection({ kind: "all" });
     }
   }, [library.collections, selection]);
+
+  useEffect(() => {
+    const migration = library.stats?.migration;
+    if (!migration || !migration.source_count) return;
+    const id = migration.id || `${migration.source_count}-${migration.local_items}-${migration.remote_items}`;
+    const key = `${RECOVERY_NOTICE_PREFIX}${id}`;
+    try {
+      if (window.localStorage.getItem(key) === "1") return;
+      window.localStorage.setItem(key, "1");
+    } catch {
+      // Storage permissions do not affect the recovered database.
+    }
+    setShowRecoveryNotice(true);
+  }, [library.stats?.migration]);
 
   // 切换选择时清空勾选
   useEffect(() => {
@@ -75,6 +97,12 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
   }, [selection]);
 
   const data = remote.data;
+  const retainedCounts = useMemo(() => Object.fromEntries(PLATFORMS.map((platform) => [
+    platform,
+    new Set((data?.results ?? []).flatMap(resultSources)
+      .filter((result) => result.platform === platform)
+      .map((result) => result.content_id)).size,
+  ])) as Record<PlatformSlug, number>, [data]);
   const fetchedAt = useMemo(
     () => Object.fromEntries(PLATFORMS.map((platform) => [platform, data?.platforms[platform]?.synced_at ?? null])),
     [data],
@@ -142,10 +170,34 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
     }
   };
 
+  const batchSystem = async (collection: "default" | "watch_later", enabled: boolean) => {
+    if (!selectedItemKeys.length) return;
+    setMoving(true);
+    const ok = await library.setSystemMembership(selectedItemKeys, collection, enabled);
+    setMoving(false);
+    if (ok) {
+      setSelectedKeys([]);
+      setSelectionResetKey((value) => value + 1);
+    }
+  };
+
+  const batchDelete = async () => {
+    if (!selectedItemKeys.length || !window.confirm(`确定从本机彻底删除这 ${selectedItemKeys.length} 条收藏吗？此操作会同时移除所有收藏夹归属。`)) return;
+    setMoving(true);
+    const ok = await library.deleteItems(selectedItemKeys);
+    setMoving(false);
+    if (ok) {
+      setSelectedKeys([]);
+      setSelectionResetKey((value) => value + 1);
+    }
+  };
+
   const localHeading = activeCollection
-    ? `「${activeCollection.name}」共 ${activeCollection.item_count} 条 · 收藏与备注保存在本机`
-    : selection.kind === "unclassified"
-      ? `${visibleItems.length} 条未分类 · 可以把它们整理进收藏夹`
+    ? `「${customCollectionLabel(activeCollection.name)}」共 ${activeCollection.item_count} 条 · 收藏与备注保存在本机`
+    : selection.kind === "default"
+      ? `${defaultCount} 条默认收藏 · 点击收藏按钮可独立加入或移出`
+      : selection.kind === "watch_later"
+        ? `${watchLaterCount} 条稍后再看 · 不会修改平台原生收藏`
       : `${library.items.length} 条已收藏 · 收藏与备注保存在本机数据库`;
 
   return (
@@ -188,6 +240,14 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
       </div>
 
       {library.error && <div className="status-line" role="alert"><AlertTriangle />{library.error}</div>}
+      {tab === "local" && showRecoveryNotice && (library.stats?.migration?.source_count ?? 0) > 0 && (
+        <div className="status-line" role="status"><Check />
+          已从 {library.stats?.migration?.source_count} 个旧版本数据目录恢复收藏：本地新增 {library.stats?.migration?.local_items ?? 0} 条，跨平台缓存新增 {library.stats?.migration?.remote_items ?? 0} 条。
+        </div>
+      )}
+      {tab === "local" && (library.stats?.migration?.warnings?.length ?? 0) > 0 && (
+        <div className="status-line" role="alert"><AlertTriangle />部分旧收藏库未能读取，原文件没有被修改。请从「备份管理」导入可用备份。</div>
+      )}
       {tab === "remote" && remote.error && <div className="status-line" role="alert"><AlertTriangle />{errorMessage(remote.error)}<button type="button" className="text-link" onClick={onNavigateAccounts}>检查账号状态</button></div>}
       {tab === "remote" && data?.persistence_error && <div className="status-line" role="alert"><AlertTriangle />{data.persistence_error}</div>}
 
@@ -210,14 +270,21 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
               className={`library-side-item ${selection.kind === "all" ? "active" : ""}`}
               onClick={() => setSelection({ kind: "all" })}
             >
-              <Bookmark aria-hidden="true" />全部收藏<span>{library.items.length}</span>
+              <Bookmark aria-hidden="true" />全部<span>{library.items.length}</span>
             </button>
             <button
               type="button"
-              className={`library-side-item ${selection.kind === "unclassified" ? "active" : ""}`}
-              onClick={() => setSelection({ kind: "unclassified" })}
+              className={`library-side-item ${selection.kind === "default" ? "active" : ""}`}
+              onClick={() => setSelection({ kind: "default" })}
             >
-              <FolderHeart aria-hidden="true" />未分类<span>{unclassifiedCount}</span>
+              <FolderHeart aria-hidden="true" />默认收藏夹<span>{defaultCount}</span>
+            </button>
+            <button
+              type="button"
+              className={`library-side-item ${selection.kind === "watch_later" ? "active" : ""}`}
+              onClick={() => setSelection({ kind: "watch_later" })}
+            >
+              <Clock3 aria-hidden="true" />稍后再看<span>{watchLaterCount}</span>
             </button>
 
             <p className="library-side-title">收藏夹</p>
@@ -247,7 +314,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
                       className={`library-side-item ${selection.kind === "collection" && selection.id === collection.id ? "active" : ""}`}
                       onClick={() => setSelection({ kind: "collection", id: collection.id })}
                     >
-                      <FolderHeart aria-hidden="true" /><span className="library-folder-name" title={collection.name}>{collection.name}</span><span className="library-folder-count">{collection.item_count}</span>
+                      <FolderHeart aria-hidden="true" /><span className="library-folder-name" title={collection.name}>{customCollectionLabel(collection.name)}</span><span className="library-folder-count">{collection.item_count}</span>
                     </button>
                     <button
                       type="button"
@@ -299,18 +366,41 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
                     className="field select"
                     aria-label="加入收藏夹"
                     value=""
-                    disabled={moving || !library.collections.length}
-                    onChange={(event) => { const id = Number(event.target.value); if (id) void batchAdd(id); }}
+                    disabled={moving}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      if (value === "system:default") void batchSystem("default", true);
+                      else if (value === "system:watch_later") void batchSystem("watch_later", true);
+                      else if (value.startsWith("custom:")) void batchAdd(Number(value.slice(7)));
+                    }}
                   >
-                    <option value="">{library.collections.length ? "加入收藏夹…" : "先新建一个收藏夹"}</option>
-                    {library.collections.map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}
+                    <option value="">加入收藏夹…</option>
+                    <option value="system:default">默认收藏夹</option>
+                    <option value="system:watch_later">稍后再看</option>
+                    {library.collections.map((collection) => <option key={collection.id} value={`custom:${collection.id}`}>{customCollectionLabel(collection.name)}</option>)}
                   </select>
                 </label>
-                {activeCollection && (
-                  <button type="button" className="btn" disabled={moving} onClick={() => void batchRemove(activeCollection.id)}>
-                    移出「{activeCollection.name}」
-                  </button>
-                )}
+                <label>
+                  <span className="sr-only">移出收藏夹</span>
+                  <select
+                    className="field select"
+                    aria-label="移出收藏夹"
+                    value=""
+                    disabled={moving}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      if (value === "system:default") void batchSystem("default", false);
+                      else if (value === "system:watch_later") void batchSystem("watch_later", false);
+                      else if (value.startsWith("custom:")) void batchRemove(Number(value.slice(7)));
+                    }}
+                  >
+                    <option value="">移出收藏夹…</option>
+                    <option value="system:default">默认收藏夹</option>
+                    <option value="system:watch_later">稍后再看</option>
+                    {library.collections.map((collection) => <option key={collection.id} value={`custom:${collection.id}`}>{customCollectionLabel(collection.name)}</option>)}
+                  </select>
+                </label>
+                <button type="button" className="btn danger" disabled={moving} onClick={() => void batchDelete()}>从本机彻底删除</button>
               </div>
             )}
 
@@ -320,7 +410,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
               /* key 里带上当前收藏夹：切换时强制重挂载，内部勾选/筛选/平台页签一并重置，
                  避免上一个收藏夹里勾选的内容泄漏到下一个视图的批量操作里 */
               <ResultTabs
-                key={`${selection.kind}-${selection.kind === "collection" ? selection.id : "all"}`}
+                key={`${selection.kind}-${selection.kind === "collection" ? selection.id : "system"}`}
                 results={localResults}
                 overall="completed"
                 platforms={PLATFORMS}
@@ -334,8 +424,8 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
             ) : (
               <div className="empty">
                 <div className="empty-symbol"><Bookmark /></div>
-                <h2>{activeCollection ? "这个收藏夹还是空的" : selection.kind === "unclassified" ? "没有未分类的内容" : "收藏夹还空着"}</h2>
-                <p>{activeCollection ? "在「全部收藏」里勾选内容，再选择「加入收藏夹」。另：同一条内容可以同时属于多个收藏夹。" : "遇到值得再读的内容，点一下结果右侧的收藏图标。"}</p>
+                <h2>{activeCollection ? "这个收藏夹还是空的" : selection.kind === "default" ? "默认收藏夹还是空的" : selection.kind === "watch_later" ? "还没有稍后再看的内容" : "收藏夹还空着"}</h2>
+                <p>{activeCollection ? "在「全部」里勾选内容，再选择「加入收藏夹」。同一条内容可以同时属于多个收藏夹。" : selection.kind === "watch_later" ? "在结果右侧点“稍后再看”，需要时再回来。" : "遇到值得再读的内容，点一下结果右侧的收藏图标。"}</p>
               </div>
             )}
           </div>
@@ -347,7 +437,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
           <p className="collection-count">本机已保存 {data.results.length} 条 · 每次最多更新各平台最新 100 条，未取到的旧内容保留</p>
           <div className="progress-strip" aria-live="polite">
             {Object.entries(data.platforms).map(([platform, info]) => info && <span key={platform} className="progress-item">
-              {PLATFORM_LABELS[platform as PlatformSlug]}：{info.status === "running" ? "同步中" : STATUS_LABELS[info.status]} · 本次 {info.result_count} 条
+              {PLATFORM_LABELS[platform as PlatformSlug]}：{info.status === "running" ? "同步中" : STATUS_LABELS[info.status]} · 本次获取 {info.result_count} 条 · 本机保留 {retainedCounts[platform as PlatformSlug]} 条
               {info.synced_at && <small>同步于 {new Date(info.synced_at).toLocaleString("zh-CN")}</small>}
             </span>)}
           </div>

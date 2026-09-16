@@ -42,6 +42,15 @@ app = FastAPI(
     version="0.2.1"
 )
 
+
+@app.on_event("startup")
+async def _prepare_library_storage():
+    """Merge legacy per-folder databases before the API starts serving data."""
+    import asyncio
+    from .services.library_migration import migrate_legacy_libraries
+
+    await asyncio.to_thread(migrate_legacy_libraries)
+
 # Production frontend build directory. It is intentionally kept outside the
 # API package so the static server cannot expose arbitrary repository files.
 WEBUI_DIR = resource_path("webui", "dist")
