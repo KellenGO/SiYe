@@ -143,13 +143,16 @@ function MembershipEditor({ bookmark, library }: { bookmark: Bookmark & { key: s
     <button type="button" className="text-link" aria-expanded={open} onClick={() => setOpen(!open)}><FolderCog />编辑归属</button>
     {open && <div className="membership-card" role="group" aria-label={`编辑收藏夹归属 ${bookmark.result.title}`}>
       <div className="membership-card-head"><p>收藏夹归属</p><button type="button" className="text-link" onClick={() => setOpen(false)}>完成</button></div>
-      <label><input type="checkbox" checked disabled />全部</label>
-      <label><input type="checkbox" checked={bookmark.inDefault} disabled={busy} onChange={(event) => void updateSystem("default", event.target.checked)} />默认收藏夹</label>
-      <label><input type="checkbox" checked={bookmark.watchLater} disabled={busy} onChange={(event) => void updateSystem("watch_later", event.target.checked)} />稍后再看</label>
-      {library.collections.map((collection) => <label key={collection.id}>
-        <input type="checkbox" checked={customIds.has(collection.id)} disabled={busy} onChange={(event) => void updateCustom(collection.id, event.target.checked)} />
-        {customCollectionLabel(collection.name)}
-      </label>)}
+      <label><input type="checkbox" checked disabled /><span className="membership-folder-name" title="全部">全部</span></label>
+      <label><input type="checkbox" checked={bookmark.inDefault} disabled={busy} onChange={(event) => void updateSystem("default", event.target.checked)} /><span className="membership-folder-name" title="默认收藏夹">默认收藏夹</span></label>
+      <label><input type="checkbox" checked={bookmark.watchLater} disabled={busy} onChange={(event) => void updateSystem("watch_later", event.target.checked)} /><span className="membership-folder-name" title="稍后再看">稍后再看</span></label>
+      {library.collections.map((collection) => {
+        const label = customCollectionLabel(collection.name);
+        return <label key={collection.id}>
+          <input type="checkbox" checked={customIds.has(collection.id)} disabled={busy} onChange={(event) => void updateCustom(collection.id, event.target.checked)} />
+          <span className="membership-folder-name" title={label}>{label}</span>
+        </label>;
+      })}
     </div>}
   </div>;
 }
@@ -164,7 +167,7 @@ export function BookmarkNote({ bookmark, onSave, library }: {
   const id = useId();
   useEffect(() => setDraft(bookmark.note), [bookmark.note]);
   return (
-    <div className="mt-1 px-3 py-2">
+    <div className="bookmark-note px-3 py-2">
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-cyber-text-muted mb-2">
         <span>收藏于 {new Date(bookmark.savedAt).toLocaleString("zh-CN")}</span>
         <span className="bookmark-meta-actions">

@@ -189,7 +189,7 @@ export function ResultTabs({
           const key = groupKey(result);
           const bookmark = bookmarks.get(resultKey(result));
           return (
-            <div key={key}>
+            <div key={key} className={savedView ? "saved-result-item" : undefined}>
               {exportOpen && <div className="mb-1.5 flex items-center gap-2 px-1">
                 <label className="flex min-w-0 items-center gap-1.5 text-xs text-cyber-text-muted">
                   <input type="checkbox" aria-label={`选择 ${result.title}`} checked={selected.has(key)} onChange={() => setSelected((previous) => {

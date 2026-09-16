@@ -154,26 +154,56 @@ def main():
                 assert store.get_item("xhs", "a")["note"] == "新的学习备注"
                 (ROOT / "build").mkdir(exist_ok=True)
                 page.get_by_role("button", name="新建收藏夹", exact=True).click()
-                long_name = "LongFolder" * 6
+                long_name = "超长收藏夹LongFolder" * 4
                 page.get_by_role("textbox", name="新收藏夹名称").fill(long_name)
                 page.get_by_role("button", name="创建收藏夹", exact=True).click()
+                saved_items = page.locator(".saved-result-item")
+                assert saved_items.count() == 2
+                assert saved_items.first.locator(":scope > .result-row").count() == 1
+                assert saved_items.first.locator(":scope > .bookmark-note").count() == 1
+                assert saved_items.first.locator(".result-number").evaluate(
+                    "el => getComputedStyle(el, '::before').width",
+                ) == "14px"
+                assert saved_items.first.locator(".bookmark-note").evaluate(
+                    "el => getComputedStyle(el).backgroundColor !== 'rgba(0, 0, 0, 0)'",
+                )
                 for width in (1440, 1024, 390):
                     page.set_viewport_size({"width": width, "height": 900})
                     expect(page.get_by_text(long_name, exact=True)).to_be_visible()
                     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+                    if width == 390:
+                        assert saved_items.first.locator(".result-number").evaluate(
+                            "el => getComputedStyle(el).display",
+                        ) == "none"
                     label = page.locator(".library-folder-name").filter(has_text=long_name)
                     assert label.evaluate("el => el.scrollWidth > el.clientWidth")
                     assert label.get_attribute("title") == long_name
+                    page.get_by_role("button", name="编辑归属", exact=True).first.click()
+                    card = page.locator(".membership-card")
+                    expect(card).to_be_visible()
+                    membership_label = card.locator(".membership-folder-name").filter(has_text=long_name)
+                    expect(membership_label).to_be_visible()
+                    assert membership_label.evaluate("el => el.scrollWidth > el.clientWidth")
+                    assert membership_label.get_attribute("title") == long_name
+                    assert card.evaluate("el => el.scrollWidth <= el.clientWidth")
+                    assert card.evaluate("el => getComputedStyle(el).overflowY === 'auto'")
+                    bounds = card.bounding_box()
+                    assert bounds is not None
+                    assert bounds["x"] >= 0 and bounds["x"] + bounds["width"] <= width
+                    card.get_by_role("button", name="完成", exact=True).click()
                 page.set_viewport_size({"width": 1440, "height": 1000})
-                page.get_by_role("button", name="重命名收藏夹 跨平台学习", exact=True).hover()
+                page.get_by_role("button", name="编辑归属", exact=True).first.click()
                 page.screenshot(path=str(ROOT / "build" / "review-favorites-desktop.png"), full_page=True)
+                page.locator(".membership-card").get_by_role("button", name="完成", exact=True).click()
                 for width in (1024, 390):
                     page.set_viewport_size({"width": width, "height": 844})
                     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), f"local layout overflow at {width}"
                 page.get_by_role("combobox", name="切换主题", exact=True).click()
                 page.get_by_role("option", name="Dark", exact=True).click()
                 page.wait_for_function("getComputedStyle(document.body).backgroundColor === 'rgb(16, 18, 24)'")
+                page.get_by_role("button", name="编辑归属", exact=True).first.click()
                 page.screenshot(path=str(ROOT / "build" / "review-favorites-local-mobile-dark.png"), full_page=True)
+                page.locator(".membership-card").get_by_role("button", name="完成", exact=True).click()
                 page.set_viewport_size({"width": 1440, "height": 1000})
                 page.reload()
                 expect(page.get_by_text("新的学习备注", exact=True)).to_be_visible()
