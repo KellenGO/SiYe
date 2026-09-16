@@ -241,6 +241,7 @@ body {
 }
 
 .brand-link { display: flex; align-items: center; gap: 12px; color: var(--siye-ink); cursor: default; user-select: none; }
+.brand-mark { width: 30px; height: 30px; flex-shrink: 0; border-radius: 50%; }
 .brand-name { font-size: 25px; font-weight: 700; letter-spacing: -1px; }
 .brand-caption { font-size: 11px; color: var(--siye-muted); border-left: 1px solid var(--siye-line); padding-left: 12px; letter-spacing: 1px; }
 .nav { display: flex; gap: 6px; align-items: center; }
@@ -582,6 +583,7 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
   .app-header { min-height: 72px; }
   .header-inner { min-height: 72px; padding: 16px 20px; gap: 10px; flex-wrap: wrap; }
   .brand-name { font-size: 23px; }
+  .brand-mark { width: 26px; height: 26px; }
   .app-header .nav > button, .app-header .nav .account-status-link { padding: 7px 8px; font-size: 12px; }
   .account-link, .nav-separator { display: none; }
   .header-actions { margin-left: 0; }

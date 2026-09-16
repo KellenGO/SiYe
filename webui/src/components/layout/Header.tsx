@@ -208,8 +208,9 @@ export function Header({ viewMode, onNavigate }: HeaderProps) {
   return (
     <header className="app-header site-header bg-cyber-bg-primary">
       <div className="header-inner">
-        {/* 字标：保持纯文字，品牌色只出现在交互状态 */}
+        {/* 字标：应用 icon + 文字，品牌色只出现在交互状态 */}
         <div className="brand-link" aria-label="四野，聚合搜索">
+          <img className="brand-mark" src="/siye-icon.png" alt="" width={30} height={30} />
           <strong className="brand-name">{t('brand.name')}</strong>
           <span className="brand-caption">聚合搜索</span>
         </div>
