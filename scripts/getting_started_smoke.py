@@ -142,17 +142,55 @@ def main():
                 expect(guide.get_by_role("heading", name="连接平台", exact=True)).to_be_visible()
                 guide.get_by_role("button", name="下一步", exact=True).click()
                 expect(page).to_have_url(origin + "/#/search")
+                expect(guide.get_by_text("带 ✓ 的平台会参与搜索", exact=False)).to_be_visible()
                 search = page.locator("form input[type='text']")
-                search.fill("剪辑入门")
+                xhs_button = page.get_by_role("button", name="小红书", exact=True)
+                douyin_button = page.get_by_role("button", name="抖音", exact=True)
+                bilibili_button = page.get_by_role("button", name="B站", exact=True)
+                zhihu_button = page.get_by_role("button", name="知乎", exact=True)
+                for button in (douyin_button, bilibili_button, zhihu_button):
+                    button.click()
+                    expect(button).to_have_attribute("aria-pressed", "false")
+                expect(xhs_button).to_have_attribute("aria-pressed", "true")
+
                 before_search = len([item for item in mutations if item[1] == "/api/search/jobs"])
-                assert before_search == 0, "Tutorial navigation must not start a search"
+                search.focus()
+                page.get_by_role("button", name="效率工作流", exact=True).click()
+                expect(search).to_have_value("效率工作流")
+                expect(search).to_be_focused()
+                expect(page.get_by_role("button", name="效率工作流", exact=True)).to_have_count(0)
+                assert len([item for item in mutations if item[1] == "/api/search/jobs"]) == before_search
+                expect(xhs_button).to_have_attribute("aria-pressed", "true")
+                for button in (douyin_button, bilibili_button, zhihu_button):
+                    expect(button).to_have_attribute("aria-pressed", "false")
+
+                search.fill("剪辑入门")
+                assert before_search == 0, "Tutorial navigation and recommendation pick must not start a search"
                 search.press("Enter")
                 expect(page.get_by_role("button", name="收藏 剪辑入门 PRIVATE_RESULT", exact=True)).to_be_visible()
+
+                douyin_button.click()
+                xhs_button.click()
+                expect(douyin_button).to_have_attribute("aria-pressed", "true")
+                expect(xhs_button).to_have_attribute("aria-pressed", "false")
+                search.fill("临时关键词")
+                search.focus()
+                history_pick = page.get_by_title(re.compile("填入「剪辑入门」"))
+                expect(history_pick).to_be_visible()
+                expect(page.get_by_text("上次：小", exact=False)).to_be_visible()
+                history_pick.click()
+                expect(search).to_have_value("剪辑入门")
+                expect(search).to_be_focused()
+                assert len([item for item in mutations if item[1] == "/api/search/jobs"]) == 1
+                expect(douyin_button).to_have_attribute("aria-pressed", "true")
+                expect(xhs_button).to_have_attribute("aria-pressed", "false")
+                assert json.loads(page.evaluate("localStorage.getItem('aggregate_search_platform_pref')")) == ["douyin"]
+
                 page.get_by_role("button", name="收藏 剪辑入门 PRIVATE_RESULT", exact=True).click()
-                expect(page.get_by_role("button", name="取消收藏 剪辑入门 PRIVATE_RESULT", exact=True)).to_be_visible()
+                expect(page.get_by_role("button", name="移出收藏 剪辑入门 PRIVATE_RESULT", exact=True)).to_be_visible()
                 guide.get_by_role("button", name="下一步", exact=True).click()
                 expect(page).to_have_url(origin + "/#/favorites/local")
-                expect(page.get_by_role("button", name="取消收藏 剪辑入门 PRIVATE_RESULT", exact=True)).to_be_visible()
+                expect(page.get_by_role("button", name="移出收藏 剪辑入门 PRIVATE_RESULT", exact=True)).to_be_visible()
                 page.reload()
                 expect(guide.get_by_role("heading", name="收藏与整理", exact=True)).to_be_visible()
                 page.set_viewport_size({"width": 390, "height": 844})
@@ -195,7 +233,7 @@ def main():
                 assert not errors, errors
                 context.close()
                 browser.close()
-            print("PASS: consent, skip, never again, restart, tutorial with search/save, reload, mobile, diagnostics copy/download/offline; no real platform requests")
+            print("PASS: consent, skip, never again, restart, keyword picks preserve platforms, tutorial with search/save, reload, mobile, diagnostics copy/download/offline; no real platform requests")
     finally:
         server.shutdown()
         server.server_close()

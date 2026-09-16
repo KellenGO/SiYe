@@ -23,12 +23,13 @@ interface SearchBarProps {
   onCancel?: () => void;
   isCancelling?: boolean;
   onReset: () => void;
-  // 下拉浮层（Round 14）：最近搜索 + 推荐搜索
+  // 下拉浮层：最近搜索 + 推荐搜索
   history: SearchHistoryItem[];
-  onHistoryClick: (item: SearchHistoryItem) => void;
+  onKeywordPick: (keyword: string) => void;
+  keywordPickRequest: number;
   onHistoryRemove: (index: number) => void;
   onHistoryClear: () => void;
-  // Round 15: 每个平台独立搜索数量（仅展示）。
+  // 每个平台独立搜索数量（仅展示）。
   limits: PlatformLimitMap;
 }
 
@@ -44,7 +45,8 @@ export function SearchBar({
   isCancelling,
   onReset,
   history,
-  onHistoryClick,
+  onKeywordPick,
+  keywordPickRequest,
   onHistoryRemove,
   onHistoryClear,
   limits,
@@ -57,8 +59,22 @@ export function SearchBar({
 
   // 整个搜索面板（form）的 ref：判断点击目标是否位于面板内部。
   const searchPanelRef = useRef<HTMLFormElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const suppressPopoverOnFocusRef = useRef(false);
+  const previousKeywordPickRequestRef = useRef(keywordPickRequest);
 
-  // Round 14.1：浮层打开时监听 document 的 pointerdown 与 Escape。
+  // 历史记录和推荐词只负责填词。父组件递增请求后，在关键词已经渲染进
+  // 输入框的这一帧关闭浮层并交还焦点；程序化 focus 不应再次打开浮层。
+  useEffect(() => {
+    if (keywordPickRequest === previousKeywordPickRequestRef.current) return;
+    previousKeywordPickRequestRef.current = keywordPickRequest;
+    dispatchPopover({ type: "picked" });
+    suppressPopoverOnFocusRef.current = true;
+    searchInputRef.current?.focus();
+    suppressPopoverOnFocusRef.current = false;
+  }, [keywordPickRequest]);
+
+  // 浮层打开时监听 document 的 pointerdown 与 Escape。
   // - pointerdown 且目标位于整个搜索 form 之外 → outside_pointer 关闭；
   // - 目标在 form 内部（输入框/清空按钮/浮层内按钮/平台选择/面板空白）→ 不关闭，
   //   因此内部按钮的 click 事件照常触发（不 preventDefault/stopPropagation）。
@@ -116,23 +132,20 @@ export function SearchBar({
     onReset();
   }, [onKeywordChange, onReset]);
 
-  // 历史项点击：立即回放关键词与平台组合并只发起一次搜索（hook 双 guard 保证）。
+  // 历史项点击：只填入关键词；历史平台仅用于展示，不覆盖当前勾选。
   const handleHistoryItemClick = useCallback(
     (item: SearchHistoryItem) => {
-      dispatchPopover({ type: "picked" });
-      onHistoryClick(item);
+      onKeywordPick(item.keyword);
     },
-    [onHistoryClick]
+    [onKeywordPick]
   );
 
-  // 推荐词：填入关键词并搜索。
+  // 推荐词与历史项一致：只填入，不自动搜索。
   const handleRecommend = useCallback(
     (word: string) => {
-      dispatchPopover({ type: "picked" });
-      onKeywordChange(word);
-      onSearch(word, Array.from(selectedPlatforms) as PlatformSlug[]);
+      onKeywordPick(word);
     },
-    [onKeywordChange, onSearch, selectedPlatforms]
+    [onKeywordPick]
   );
 
   return (
@@ -160,15 +173,20 @@ export function SearchBar({
         </div>
         <div className="search-input-wrap">
           <input
+            ref={searchInputRef}
             type="text"
             value={keyword}
             onChange={(e) => onKeywordChange(e.target.value)}
             placeholder={home ? t("search.placeholderHome") : t("search.placeholder")}
             maxLength={200}
             disabled={isSearching}
-            // Round 14.1：只有输入框聚焦打开浮层；关闭由 document pointerdown
+            // 只有输入框聚焦打开浮层；关闭由 document pointerdown
             // 外部点击 / Escape / 提交搜索驱动，不再依赖 blur。
-            onFocus={() => dispatchPopover({ type: "focus_within" })}
+            onFocus={() => {
+              if (!suppressPopoverOnFocusRef.current) {
+                dispatchPopover({ type: "focus_within" });
+              }
+            }}
             className="w-full h-[58px] rounded-full border-0 bg-transparent text-[16px] text-cyber-text-primary placeholder:text-cyber-text-muted focus:outline-none disabled:opacity-50"
           />
 

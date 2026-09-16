@@ -7,7 +7,6 @@ import { useSearchExperience } from "@/hooks/useSearchExperience";
 import { usePlatformLimits } from "@/hooks/usePlatformLimits";
 import type { PlatformSlug } from "@/types/search";
 import { PLATFORM_COLORS, PLATFORM_LABELS } from "@/types/search";
-import type { SearchHistoryItem } from "@/lib/searchExperience";
 import { useBookmarks } from "@/hooks/useBookmarks";
 import { TOOL_BUTTON } from "./ResultTools";
 import { useHomePreferencesStore } from "@/store/homePreferencesStore";
@@ -21,15 +20,15 @@ interface SearchPageProps {
 }
 
 /**
- * Round 14 搜索页：主体从搜索框开始，下面直接呈现状态与搜索结果。
- * 业务状态逻辑（Round 12–13）原样保留：快照 / 单平台重试合并 / 取消 /
+ * 搜索页主体从搜索框开始，下面直接呈现状态与搜索结果。
+ * 业务状态逻辑原样保留：快照 / 单平台重试合并 / 取消 /
  * 历史 / 任务恢复 —— 本组件只改布局与视觉。
  */
 export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateAccounts }: SearchPageProps) {
   const { t } = useTranslation();
   const library = useBookmarks();
   const homePreferences = useHomePreferencesStore();
-  // Round 15: 每个平台独立搜索数量（展示用；搜索请求由 useSearchExperience 读取）。
+  // 每个平台独立搜索数量（展示用；搜索请求由 useSearchExperience 读取）。
   const { limits } = usePlatformLimits();
   const {
     displayJobResponse: latestJobResponse,
@@ -71,6 +70,7 @@ export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateA
 
   // 受控输入：初始平台选择来自 localStorage 偏好（至少一个平台）。
   const [keyword, setKeyword] = useState("");
+  const [keywordPickRequest, setKeywordPickRequest] = useState(0);
   const [selectedPlatforms, setSelectedPlatforms] = useState<Set<PlatformSlug>>(
     () => new Set(platformPref)
   );
@@ -105,22 +105,12 @@ export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateA
     handleReset();
   }, [handleReset]);
 
-  // 历史回放：先同步可见控件（关键词/平台选择/平台偏好），再用 item 参数
-  // 直接发起搜索 —— 不依赖 state 更新完成后的读取；取消提示由新任务的
-  // search_start 清除。
-  // 【组件接线，人工验收】即使搜索 POST 失败，可见平台选择与 localStorage
-  // 偏好也保持历史项的平台（用户已主动切换搜索条件）；只发起一次搜索由
-  // hook 的 busy + taskInFlight 双 guard 保证。
-  const handleHistoryClickLocal = useCallback(
-    (item: SearchHistoryItem) => {
-      onSearchStarted?.();
-      setKeyword(item.keyword);
-      setSelectedPlatforms(new Set(item.platforms));
-      updatePlatformPref(item.platforms); // 同步持久化偏好（刷新后保持）
-      void handleFullSearch(item.keyword, item.platforms);
-    },
-    [handleFullSearch, onSearchStarted, updatePlatformPref]
-  );
+  // 历史记录和推荐词统一只填入关键词。递增请求即使关键词相同也会让
+  // SearchBar 关闭浮层并重新聚焦；当前平台勾选和持久化偏好保持不变。
+  const handleKeywordPick = useCallback((nextKeyword: string) => {
+    setKeyword(nextKeyword);
+    setKeywordPickRequest((current) => current + 1);
+  }, []);
 
   const isCancellingState = isCancelling;
   const hasError = !!createError || !!pollError;
@@ -147,7 +137,7 @@ export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateA
   const isHome = homeRequested;
   const recentResults = latestJobResponse?.results.slice(0, 3) ?? [];
 
-  // Round 15.1: 本次搜索中真正返回 login_required 的平台。
+  // 本次搜索中真正返回 login_required 的平台。
   // 只取 displayJobResponse.platforms 的 key 并按 status 筛选，不解析
   // error_summary、不根据顶部账号状态推断。显隐判断与平台标签共用同一数组。
   const loginRequiredPlatforms: PlatformSlug[] = displayJobResponse
@@ -172,7 +162,8 @@ export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateA
         isCancelling={isCancellingState}
         onReset={handleResetLocal}
         history={history}
-        onHistoryClick={handleHistoryClickLocal}
+        onKeywordPick={handleKeywordPick}
+        keywordPickRequest={keywordPickRequest}
         onHistoryRemove={removeHistory}
         onHistoryClear={clearHistory}
         limits={limits}
@@ -185,7 +176,7 @@ export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateA
             {history.length > 0 ? (
               <div className="words">
                 {history.slice(0, 10).map((item) => (
-                  <button key={`${item.keyword}-${item.searchedAt}`} type="button" onClick={() => handleHistoryClickLocal(item)}>
+                  <button key={`${item.keyword}-${item.searchedAt}`} type="button" onClick={() => handleKeywordPick(item.keyword)}>
                     {item.keyword}
                   </button>
                 ))}
@@ -237,7 +228,7 @@ export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateA
         </div>
       )}
 
-      {/* 取消失败（Round 13）：固定安全文案，绝不显示 axios 500 原文；
+      {/* 取消失败：固定安全文案，绝不显示 axios 500 原文；
           任务仍在运行（轮询继续），提供"再次取消"，不清除旧结果，
           不错误显示"已取消"。 */}
       {cancelError && (

@@ -38,10 +38,9 @@ function platformInitials(platforms: string[]): string {
 }
 
 /**
- * 搜索下拉浮层（Round 14）：最近搜索 + 推荐搜索。
- * - 点击历史项立即回放关键词与平台组合（由父组件 handleHistoryClick 接线，
- *   只发起一次搜索由 hook 的 busy + taskInFlight 双 guard 保证）；
- * - 点击推荐词填入并搜索；
+ * 搜索下拉浮层：最近搜索 + 推荐搜索。
+ * - 点击历史项只填入关键词，旧平台组合仅作为历史信息展示；
+ * - 点击推荐词同样只填入关键词；
  * - 关闭规则由 lib/searchPopover 的 reducer 驱动（focus_left / search_started / picked）。
  */
 export function SearchPopover({
@@ -89,7 +88,7 @@ export function SearchPopover({
                     <Clock className="w-[14px] h-[14px] text-cyber-text-muted flex-shrink-0" />
                     <b className="text-[13px] font-semibold text-cyber-text-primary truncate">{item.keyword}</b>
                     <small className="ml-auto flex-shrink-0 text-[10.5px] text-cyber-text-muted">
-                      {platformInitials(item.platforms)}
+                      {t("search.historyPlatforms", { platforms: platformInitials(item.platforms) })}
                       {time && ` · ${time}`}
                     </small>
                   </button>
@@ -113,7 +112,7 @@ export function SearchPopover({
       <div className="mb-1.5">
         <strong className="text-[12px] text-cyber-text-primary flex items-center gap-1.5">
           <TrendingUp className="w-3.5 h-3.5 text-cyber-text-muted" />
-          推荐搜索
+          {t("search.recommended")}
         </strong>
       </div>
       <div className="flex flex-wrap gap-2">

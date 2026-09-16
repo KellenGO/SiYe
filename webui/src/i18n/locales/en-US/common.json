@@ -11,7 +11,7 @@
     "connectBody": "Choose a platform on the accounts page below, click Scan to log in, and scan with its mobile app. One or two platforms are enough to start. Continue after login is confirmed. Finish login or close the login window before searching.",
     "connectAction": "Open accounts",
     "searchTitle": "Search and explore",
-    "searchBody": "Enter a topic, select only the platforms you connected, and search. Results arrive progressively. Switch platforms or sort by relevance, recency, or engagement. Open a title to read the source, or expand its available text. Find keyword filtering under Export / Copy.",
+    "searchBody": "The four platform buttons below the search box define this search. Platforms marked ✓ are included; click a button to select or clear it, with at least one platform kept selected. Choose only platforms you connected, enter a keyword, then press Enter or the arrow to search. Results arrive progressively. Switch platforms or sort by relevance, recency, or engagement. Open a title to read the source, or expand its available text. Find keyword filtering under Export / Copy.",
     "searchAction": "Open search",
     "saveTitle": "Save and organize",
     "saveBody": "Use the bookmark icon on a search result to save it. Local favorites supports collections, notes, and backups. Remote favorites lets you manually sync items saved on each platform. If your library is empty, return to search and save a result.",
@@ -115,7 +115,8 @@
     "placeholderHome": "Search something?",
     "clearKeyword": "Clear keyword",
     "perPlatformHint": "Up to {{count}} per platform this round",
-    "historyItemTitle": "Search \"{{keyword}}\" · {{platforms}}",
+    "historyItemTitle": "Fill \"{{keyword}}\" (previous search: {{platforms}})",
+    "historyPlatforms": "Last: {{platforms}}",
     "deleteHistory": "Delete history item \"{{keyword}}\""
   },
   "footer": {

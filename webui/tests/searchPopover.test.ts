@@ -1,11 +1,11 @@
 /**
- * Round 14 搜索下拉浮层状态机测试 —— 直接 import 编译后的生产模块
+ * 搜索下拉浮层状态机测试 —— 直接 import 编译后的生产模块
  * （webui/src/lib/searchPopover.ts），不复制任何生产逻辑。
  *
  * 覆盖"最近搜索浮层的显示/关闭逻辑"：
  * - 输入框获得焦点 → open；
  * - 焦点完全离开（等价点击外部）→ closed；
- * - 开始搜索 / 点击历史项 / 点击推荐词 → closed；
+ * - 开始搜索 / 点击历史项填词 / 点击推荐词填词 → closed；
  * - 事件幂等与非法事件不改变状态。
  */
 
@@ -44,12 +44,12 @@ test("开始搜索后浮层关闭", () => {
   assert.equal(closed, "closed");
 });
 
-test("点击历史项（picked）后浮层关闭", () => {
+test("点击历史项填词（picked）后浮层关闭", () => {
   const closed = step(INITIAL_POPOVER_STATE, { type: "focus_within" }, { type: "picked" });
   assert.equal(closed, "closed");
 });
 
-test("点击推荐词（picked）后浮层关闭", () => {
+test("点击推荐词填词（picked）后浮层关闭", () => {
   const closed = step(INITIAL_POPOVER_STATE, { type: "focus_within" }, { type: "picked" });
   assert.equal(closed, "closed");
 });
@@ -78,7 +78,7 @@ test("非法事件类型保持原状态（default 分支）", () => {
   assert.equal(state, "open");
 });
 
-// ── Round 14.1：outside_pointer（点击面板外）/ escape（Escape 键）──
+// ── outside_pointer（点击面板外）/ escape（Escape 键）──
 // 注意：DOM 的 contains 判断属于组件接线（SearchBar 的 searchPanelRef），
 // 本测试只验证纯状态转换，不声称覆盖 DOM 判断。
 
