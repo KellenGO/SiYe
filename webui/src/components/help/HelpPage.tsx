@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { ExternalLink } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { SupportDiagnostics } from './SupportDiagnostics'
@@ -12,6 +13,18 @@ interface HelpPageProps {
 
 export function HelpPage({ onShowDisclaimer, onStartGuide }: HelpPageProps) {
   const { t } = useTranslation()
+  // 版本号以后端报告为准（前后端版本不匹配时用户能立刻看出来）。
+  const [apiVersion, setApiVersion] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/health')
+      .then((response) => (response.ok ? response.json() : null))
+      .then((payload) => {
+        if (!cancelled && payload && typeof payload.version === 'string') setApiVersion(payload.version)
+      })
+      .catch(() => { /* 取不到就不显示，帮助页其余内容照常可用 */ })
+    return () => { cancelled = true }
+  }, [])
   return (
     <div className="preview-container help-page">
       <div className="page-heading">
@@ -68,6 +81,7 @@ export function HelpPage({ onShowDisclaimer, onStartGuide }: HelpPageProps) {
         <section className="help-section">
           <h2>项目与作者</h2>
           <p>当前界面与功能由 KellenGong 维护，基础采集能力来自 MediaCrawler 原项目。</p>
+          {apiVersion && <p className="mt-2">当前版本 v{apiVersion}</p>}
           <div className="button-row">
             <a className="text-link" href={CURRENT_PROJECT_URL} target="_blank" rel="noreferrer">当前项目 <ExternalLink /></a>
             <a className="text-link" href={ORIGINAL_PROJECT_URL} target="_blank" rel="noreferrer">原项目 <ExternalLink /></a>

@@ -14,11 +14,13 @@ from pathlib import Path
 from typing import Dict, Optional, Tuple
 
 from api.schemas.search import HealthPlatformStatus, HealthResponse
+from base.app_version import APP_VERSION
 from base.runtime_paths import resource_path
 
 from . import accounts as accounts_service
 
-API_VERSION = "0.2.2"
+#: 健康检查对外报告的版本（与 `base.app_version` 同源，避免两处漂移）。
+API_VERSION = APP_VERSION
 _PLATFORMS = ("xhs", "douyin", "bilibili", "zhihu")
 _VALID_SEARCH_MODES = {
     "fast_path", "browser_fallback", "api", "page", "unavailable",

@@ -171,6 +171,13 @@ function App() {
           },
         }}
       />
+
+      {/* 搜索失败类提示：页面上方居中、几秒后自动消失，走品牌蓝而不是告警色。
+          这些提示是"这次没搜到"的通知，不是错误，不该用 warn / danger。 */}
+      <Toaster
+        position="top-center"
+        toastOptions={{ className: 'siye-toast-info', duration: 6000 }}
+      />
     </div>
   )
 }

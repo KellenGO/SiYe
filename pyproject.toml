@@ -1,7 +1,7 @@
 [project]
 name = "mediacrawler"
 authors = [{name = "relakkes", email = "relakkes@gmail.com"}]
-version = "0.2.2"
+version = "0.2.3"
 description = "Cross-platform Chinese social content search for Xiaohongshu, Douyin, Bilibili, and Zhihu."
 readme = "README.md"
 requires-python = ">=3.11"

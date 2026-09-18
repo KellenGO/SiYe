@@ -1362,3 +1362,19 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
   .guide-steps button { padding: 5px 7px; }
   .getting-started .btn { white-space: normal; }
 }
+
+/* 搜索失败提示：顶部居中、自动消失，用品牌蓝而不是告警色（它不是错误，是"这次没搜到"）。 */
+[data-sonner-toast].siye-toast-info {
+  background: rgb(var(--brand-soft));
+  border: 1px solid rgb(var(--brand) / 0.45);
+  color: rgb(var(--brand-ink));
+  box-shadow: 0 10px 26px rgb(15 30 45 / 0.14);
+}
+[data-sonner-toast].siye-toast-info [data-description] { color: rgb(var(--brand-ink) / 0.78); }
+[data-sonner-toast].siye-toast-info [data-button] {
+  background: rgb(var(--brand) / 0.14);
+  color: rgb(var(--brand-ink));
+  border: 1px solid rgb(var(--brand) / 0.35);
+  font-weight: 500;
+}
+[data-sonner-toast].siye-toast-info [data-button]:hover { background: rgb(var(--brand) / 0.22); }

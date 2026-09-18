@@ -27,6 +27,7 @@ from fastapi import FastAPI
 from fastapi import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from base.app_version import APP_VERSION
 from base.runtime_paths import resource_path
 
 from .routers.search import search_router
@@ -39,7 +40,7 @@ from .services.favorites_job_manager import favorites_job_manager
 app = FastAPI(
     title="SiYe WebUI API",
     description="API for controlling SiYe from WebUI",
-    version="0.2.2"
+    version=APP_VERSION
 )
 
 
@@ -126,7 +127,7 @@ def _serve_frontend(path: str = ""):
         raise HTTPException(status_code=404, detail="WebUI build not found")
     return {
         "message": "SiYe WebUI API",
-        "version": "0.2.2",
+        "version": APP_VERSION,
         "docs": "/docs",
         "note": "WebUI not found, please build it first: cd webui && npm run build",
     }

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { AlertTriangle, ArrowUpRight, Clock3, RotateCcw, Loader2, UserCog, RefreshCw, Search } from "lucide-react";
 import { SearchBar } from "./SearchBar";
 import { PlatformStatus } from "./PlatformStatus";
@@ -18,6 +19,17 @@ interface SearchPageProps {
   onSearchStarted?: () => void;
   onNavigateAccounts?: () => void;
 }
+
+/** 这些状态都算"这个平台这次没搜到"：失败就自动取消勾选，并弹一次顶部提示。 */
+const FAILED_PLATFORM_STATUSES = ["failed", "login_required", "timed_out", "rate_limited"] as const;
+
+/** 弹窗里陈述的原因（不吓人、不复述 error_summary 原文）。 */
+const FAILURE_REASON_KEYS: Record<string, string> = {
+  login_required: "search.reasonLoginRequired",
+  failed: "search.reasonFailed",
+  timed_out: "search.reasonTimedOut",
+  rate_limited: "search.reasonRateLimited",
+};
 
 /**
  * 搜索页主体从搜索框开始，下面直接呈现状态与搜索结果。
@@ -120,6 +132,39 @@ export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateA
     displayJobResponse?.overall === "failed" ||
     displayJobResponse?.overall === "cancelled";
 
+  // 搜索结束后，把这次失败的平台从勾选里去掉，并弹一次顶部提示。
+  // 取消会写进持久化偏好（用户明确要求：勾选保持上次的选择），所以下次进来不会白搜一遍。
+  // 同一 job 的同一平台只处理一次：用 ref 记录，避免 effect 重跑时重复弹窗。
+  const handledFailuresRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const job = displayJobResponse;
+    if (!job || !isTerminal) return;
+    const failed = (Object.keys(job.platforms) as PlatformSlug[]).filter((platform) =>
+      (FAILED_PLATFORM_STATUSES as readonly string[]).includes(job.platforms[platform].status)
+    );
+    const fresh = failed.filter((platform) => !handledFailuresRef.current.has(`${job.job_id}:${platform}`));
+    if (fresh.length === 0) return;
+    fresh.forEach((platform) => handledFailuresRef.current.add(`${job.job_id}:${platform}`));
+
+    const remaining = Array.from(selectedPlatforms).filter((platform) => !fresh.includes(platform));
+    handlePlatformsChange(remaining);
+
+    fresh.forEach((platform) => {
+      const label = PLATFORM_LABELS[platform] || platform;
+      const reason = t(FAILURE_REASON_KEYS[job.platforms[platform].status] ?? "search.reasonFailed");
+      toast(t("search.platformFailedToast", { platform: label, reason }), {
+        description: t("search.autoUnchecked", { platform: label }),
+        position: "top-center",
+        duration: 6000,
+        className: "siye-toast-info",
+        action:
+          job.platforms[platform].status === "login_required" && onNavigateAccounts
+            ? { label: `${t("search.goAccounts")} →`, onClick: handleGoAccounts }
+            : undefined,
+      });
+    });
+  }, [displayJobResponse, isTerminal, selectedPlatforms, handlePlatformsChange, handleGoAccounts, onNavigateAccounts, t]);
+
   // Type-safe error extractor for axios errors (including 422 detail arrays)
   function getErrorMessage(err: unknown): string {
     const e = err as { response?: { status?: number; data?: { detail?: unknown } }; message?: string };
@@ -136,15 +181,6 @@ export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateA
   const showInitialLoading = !displayJobResponse && busy && !hasError;
   const isHome = homeRequested;
   const recentResults = latestJobResponse?.results.slice(0, 3) ?? [];
-
-  // 本次搜索中真正返回 login_required 的平台。
-  // 只取 displayJobResponse.platforms 的 key 并按 status 筛选，不解析
-  // error_summary、不根据顶部账号状态推断。显隐判断与平台标签共用同一数组。
-  const loginRequiredPlatforms: PlatformSlug[] = displayJobResponse
-    ? (Object.keys(displayJobResponse.platforms) as PlatformSlug[]).filter(
-        (p) => displayJobResponse.platforms[p].status === "login_required"
-      )
-    : [];
 
   return (
     <div className={isHome ? `home ${homePreferences.mode === "min" ? "minimal" : ""}` : "preview-container search-shell"}>
@@ -373,26 +409,8 @@ export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateA
             </div>
           ))}
 
-          {loginRequiredPlatforms.length > 0 && (
-            <div className="mb-3 p-3 rounded-xl border border-warn/30 bg-warn-soft/60">
-              <p className="text-xs text-warn mb-2">{t("search.loginNeeded")}</p>
-              <div className="flex flex-wrap gap-2 mb-2">
-                {loginRequiredPlatforms.map((p) => (
-                  <span
-                    key={p}
-                    className="px-2.5 py-1 rounded-full bg-warn-soft border border-warn/40 text-warn text-[11.5px] font-medium"
-                  >
-                    {PLATFORM_LABELS[p] || p}
-                  </span>
-                ))}
-              </div>
-              <button onClick={handleGoAccounts}
-                className="px-3 py-1.5 rounded-lg bg-warn-soft border border-warn/40 text-warn hover:bg-warn/10 text-xs transition-all">
-                <UserCog className="w-3 h-3 inline mr-1" />
-                {t("search.goSettings")}
-              </button>
-            </div>
-          )}
+          {/* 失败平台不再挂常驻黄卡：改为顶部弹窗（会自动消失）+ 自动取消勾选，
+              平台自身的失败状态由 PlatformStatus 的状态块呈现。 */}
 
           {displayJobResponse.hydration_status === "running" && (
             <p role="status" className="mt-3 text-xs text-cyber-text-muted">正在补充指标和简介，已有结果可以先查看。</p>

@@ -28,6 +28,11 @@
 - Inno Setup 只是构建机依赖。普通用户不需要安装它；本机构建需 Inno Setup 6.3+，也可用 `INNO_SETUP_COMPILER` 指定 `ISCC.exe`。
 - 简体中文消息文件固定在 `installer/languages/`，避免本机与 CI 的 Inno Setup 语言组件不同导致构建失败；来源和许可证保存在同目录。
 - 当前只有 Windows x64 安装器；Mac、Linux 和 Windows ARM 原生包不在本轮范围内。
+- **版本号只有一个真值**：运行时统一读 `base/app_version.py` 的 `APP_VERSION`（`api/main.py` 与
+  `api/services/environment_health.py` 都从它取）。`pyproject.toml`（打包与安装器）和
+  `webui/package.json`（前后端版本匹配）由 `tests/test_repo_hygiene.py` 盯着对齐。
+  以前这五处各写一份，发版时改一个漏一个。帮助页「项目与作者」区显示当前版本。
+  发版顺序：**先改这三处 → 提交 → 再打 tag**（`scripts/build_exe.ps1` 会校验 tag 与 pyproject 一致）。
 
 ## 测试怎么跑
 
