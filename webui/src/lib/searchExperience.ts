@@ -154,10 +154,12 @@ export function parsePlatformPref(raw: unknown, all: PlatformSlug[] = PLATFORM_S
   return valid.length > 0 ? valid : [...all];
 }
 
+// 首次进入（没有任何存储值）返回空集：允许"零勾选"，由用户亲手选择平台；
+// 损坏 / 不可读的存储仍回退全选，避免把用户卡住（见下方 catch）。
 export function readPlatformPref(storage: StorageLike, all: PlatformSlug[] = PLATFORM_SLUGS): PlatformSlug[] {
   try {
     const raw = storage.getItem(PLATFORM_PREF_STORAGE_KEY);
-    if (raw === null) return [...all];
+    if (raw === null) return [];
     return parsePlatformPref(JSON.parse(raw), all);
   } catch {
     return [...all];
@@ -862,7 +864,7 @@ export interface ExperienceState {
   display: SearchDisplayState;
   /** 最近搜索历史（10 条上限，去重移前）。 */
   history: SearchHistoryItem[];
-  /** 平台选择偏好（至少一个平台）。 */
+  /** 平台选择偏好。首次进入（无存储值）为空集；一旦用户勾选过任一平台，本偏好落地后始终保持至少一个平台。 */
   platformPref: PlatformSlug[];
 }
 
@@ -904,7 +906,7 @@ export type ExperienceEvent =
 
 export function createInitialExperienceState(
   history: SearchHistoryItem[] = [],
-  platformPref: PlatformSlug[] = [...PLATFORM_SLUGS]
+  platformPref: PlatformSlug[] = []
 ): ExperienceState {
   return {
     display: {
@@ -1246,7 +1248,10 @@ export function applySearchTransition(state: ExperienceState, event: ExperienceE
       return { ...state, history: [] };
     }
     case "platform_pref_set": {
-      // 规范化：过滤非法 slug、去重；空 → 保持原偏好（至少一个平台）。
+      // 规范化：过滤非法 slug、去重；空 → 保持原偏好。
+      // 不变量的边界：首次进入（readPlatformPref 无存储值）允许空集；但偏好一旦
+      // 落地（用户勾选过任一平台），传入空集时保留原偏好，避免把已落地的偏好清空。
+      // UI 层始终允许手动取消到零，只是提交时统一提示"先选平台"。
       const valid = [...new Set(event.platforms.filter(isPlatformSlug))];
       if (valid.length === 0) return state;
       return { ...state, platformPref: valid };

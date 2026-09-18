@@ -148,10 +148,12 @@ def main():
                 douyin_button = page.get_by_role("button", name="抖音", exact=True)
                 bilibili_button = page.get_by_role("button", name="B站", exact=True)
                 zhihu_button = page.get_by_role("button", name="知乎", exact=True)
-                for button in (douyin_button, bilibili_button, zhihu_button):
-                    button.click()
-                    expect(button).to_have_attribute("aria-pressed", "false")
+                # 默认不预选任何平台（首次进入允许零勾选）：按钮初始都是未勾选。
+                # 这里只勾选小红书，其余保持未勾选，作为"只搜已连接平台"的样例。
+                xhs_button.click()
                 expect(xhs_button).to_have_attribute("aria-pressed", "true")
+                for button in (douyin_button, bilibili_button, zhihu_button):
+                    expect(button).to_have_attribute("aria-pressed", "false")
 
                 before_search = len([item for item in mutations if item[1] == "/api/search/jobs"])
                 search.focus()
@@ -184,6 +186,8 @@ def main():
                 assert len([item for item in mutations if item[1] == "/api/search/jobs"]) == 1
                 expect(douyin_button).to_have_attribute("aria-pressed", "true")
                 expect(xhs_button).to_have_attribute("aria-pressed", "false")
+                # 点击历史词只填词、保留当前勾选：偏好仍是上一步勾选得到的 ["douyin"]，
+                # 不随历史词回到其原平台 ["xhs"]。这条行为在"默认零勾选"改动下必须保持。
                 assert json.loads(page.evaluate("localStorage.getItem('aggregate_search_platform_pref')")) == ["douyin"]
 
                 page.get_by_role("button", name="收藏 剪辑入门 PRIVATE_RESULT", exact=True).click()
