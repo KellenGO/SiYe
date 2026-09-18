@@ -178,11 +178,15 @@ export function Header({ viewMode, onNavigate }: HeaderProps) {
       })
     }
 
-    // 2) 首次加载完成且存在未登录平台 → 一次性低干扰提醒
+    // 2) 首次加载完成且存在未登录平台 → 一次性低干扰提醒。
+    //    这是"提醒"不是错误：顶部居中 + 品牌蓝，几秒自动消失。
     if (initialLoaded && prev === null) {
       const n = unverifiedWarningCount(accounts)
       if (n > 0 && consumeUnverifiedWarning()) {
-        toast(t('header.unverifiedWarningToast', { count: n }))
+        toast(t('header.unverifiedWarningToast', { count: n }), {
+          position: 'top-center',
+          className: 'siye-toast-info',
+        })
       }
     }
   }, [accounts, initialLoaded, onNavigate, t])

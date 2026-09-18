@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AlertTriangle, ArrowUpRight, Clock3, RotateCcw, Loader2, UserCog, RefreshCw, Search } from "lucide-react";
 import { SearchBar } from "./SearchBar";
@@ -22,6 +22,11 @@ interface SearchPageProps {
 
 /** 这些状态都算"这个平台这次没搜到"：失败就自动取消勾选，并弹一次顶部提示。 */
 const FAILED_PLATFORM_STATUSES = ["failed", "login_required", "timed_out", "rate_limited"] as const;
+
+/** 已提醒过的 "job:平台" 组合。
+ *  必须是模块级而不是组件内 ref：切到别的页面再切回来时 SearchPage 会重新挂载，
+ *  任务响应会被重新恢复 —— ref 挡不住重复弹窗，模块级集合挡得住（SPA 生命周期内有效）。 */
+const handledFailureKeys = new Set<string>();
 
 /** 弹窗里陈述的原因（不吓人、不复述 error_summary 原文）。 */
 const FAILURE_REASON_KEYS: Record<string, string> = {
@@ -134,17 +139,17 @@ export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateA
 
   // 搜索结束后，把这次失败的平台从勾选里去掉，并弹一次顶部提示。
   // 取消会写进持久化偏好（用户明确要求：勾选保持上次的选择），所以下次进来不会白搜一遍。
-  // 同一 job 的同一平台只处理一次：用 ref 记录，避免 effect 重跑时重复弹窗。
-  const handledFailuresRef = useRef<Set<string>>(new Set());
+  // 同一 job 的同一平台只提醒一次：记录在模块级 handledFailureKeys 里，
+  // 切页返回导致组件重新挂载也不会重复弹。
   useEffect(() => {
     const job = displayJobResponse;
     if (!job || !isTerminal) return;
     const failed = (Object.keys(job.platforms) as PlatformSlug[]).filter((platform) =>
       (FAILED_PLATFORM_STATUSES as readonly string[]).includes(job.platforms[platform].status)
     );
-    const fresh = failed.filter((platform) => !handledFailuresRef.current.has(`${job.job_id}:${platform}`));
+    const fresh = failed.filter((platform) => !handledFailureKeys.has(`${job.job_id}:${platform}`));
     if (fresh.length === 0) return;
-    fresh.forEach((platform) => handledFailuresRef.current.add(`${job.job_id}:${platform}`));
+    fresh.forEach((platform) => handledFailureKeys.add(`${job.job_id}:${platform}`));
 
     const remaining = Array.from(selectedPlatforms).filter((platform) => !fresh.includes(platform));
     handlePlatformsChange(remaining);
@@ -179,7 +184,9 @@ export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateA
 
   const showInitialIdle = !displayJobResponse && !busy && !hasError;
   const showInitialLoading = !displayJobResponse && busy && !hasError;
-  const isHome = homeRequested;
+  // 「首页」只在还没有本轮结果时显示大搜索框；切到别的页面再回来时，
+  // 保留切走前的搜索状态，而不是重置成初始首页（任务响应会自动恢复）。
+  const isHome = homeRequested && !displayJobResponse && !busy;
   const recentResults = latestJobResponse?.results.slice(0, 3) ?? [];
 
   return (
