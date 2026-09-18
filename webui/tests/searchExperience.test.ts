@@ -657,7 +657,7 @@ test("groupByPlatform 保持平台内部顺序", () => {
 
 function initState(
   history: SearchHistoryItem[] = [],
-  platformPref: PlatformSlug[] = [...PLATFORM_SLUGS]
+  platformPref: PlatformSlug[] = []
 ): ExperienceState {
   return createInitialExperienceState(history, platformPref);
 }
@@ -979,7 +979,7 @@ test("⑬ reset 清除任务与展示；历史与平台偏好保留", () => {
   assert.deepEqual(state.platformPref, pref); // 平台偏好保留
 });
 
-test("⑭ 历史删除/清空走 reducer；platform_pref_set 过滤非法且空集保持原偏好", () => {
+test("⑭ 历史删除/清空走 reducer；platform_pref_set 过滤非法且空集保持已落地偏好", () => {
   const history = [h("a", ["xhs"], "2026-07-01T00:00:00.000Z"), h("b", ["douyin"], "2026-07-02T00:00:00.000Z")];
   const state = initState(history, ["xhs"]);
   const removed = step(state, { type: "history_remove", index: 0 });
@@ -989,8 +989,24 @@ test("⑭ 历史删除/清空走 reducer；platform_pref_set 过滤非法且空�
   // 测试防御性过滤：事件类型声明为合法 slug，测试用断言注入非法值。
   const prefSet = step(state, { type: "platform_pref_set", platforms: ["xhs", "bogus", "xhs", "zhihu"] as PlatformSlug[] });
   assert.deepEqual(prefSet.platformPref, ["xhs", "zhihu"]); // 过滤非法 + 去重
+  // 新规则：首次进入（readPlatformPref 无存储值）才允许空集；偏好一旦落地
+  // （这里初始为 ["xhs"]），reducer 的 platform_pref_set 仍维持"至少一个平台"
+  // —— 传入空集时保留已落地的原偏好，避免把已有偏好清空。UI 层始终允许手动
+  // 取消到零，只是提交时统一提示"先选平台"（见 SearchBar）。
   const prefEmpty = step(state, { type: "platform_pref_set", platforms: [] });
-  assert.deepEqual(prefEmpty.platformPref, ["xhs"]); // 空集保持原偏好（至少一个平台）
+  assert.deepEqual(prefEmpty.platformPref, ["xhs"]); // 空集保持已落地偏好（至少一个平台）
+});
+
+test("⑭b readPlatformPref 无存储值：首次进入允许零勾选（返回空集）", () => {
+  // 与"损坏时默认全选"不同：key 完全不存在才是首次进入，返回空集而不是全选。
+  const storage = new MemoryStorage();
+  assert.deepEqual(readPlatformPref(storage), []);
+});
+
+test("⑭c readPlatformPref 损坏值仍回退全选（不被首次进入的空集规则影响）", () => {
+  const storage = new MemoryStorage();
+  storage.setItem(PLATFORM_PREF_STORAGE_KEY, "###broken###");
+  assert.deepEqual(readPlatformPref(storage), [...PLATFORM_SLUGS]);
 });
 
 // ── Round 13：取消请求 / 取消失败 / 真实取消终态 ────────────────────────

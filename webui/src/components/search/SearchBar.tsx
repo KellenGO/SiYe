@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef, FormEvent, Dispatch, SetStateAction } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState, FormEvent, Dispatch, SetStateAction } from "react";
 import { ArrowRight, Search, Loader2, X } from "lucide-react";
 import type { PlatformSlug } from "@/types/search";
 import { PLATFORM_LABELS, PLATFORM_COLORS } from "@/types/search";
@@ -52,6 +52,8 @@ export function SearchBar({
   limits,
 }: SearchBarProps) {
   const { t } = useTranslation();
+  // 零勾选提交时的提示：不禁用按钮，仅提示先选平台；用户开始勾选即清除。
+  const [platformPrompt, setPlatformPrompt] = useState(false);
   // 浮层开/关由生产 reducer 驱动（lib/searchPopover，node:test 已覆盖规则）。
   // 注意：reducer 状态是字符串 "open"/"closed"，两者都 truthy，
   // 因此 JSX 必须用 === "open" 判断，不能用 {popoverOpen && ...}。
@@ -106,11 +108,12 @@ export function SearchBar({
     (p: PlatformSlug) => {
       const next = new Set(selectedPlatforms);
       if (next.has(p)) {
-        if (next.size > 1) next.delete(p); // 至少保留一个平台
+        next.delete(p); // 允许取消到零：提交时统一提示"先选平台"，不在勾选层拦
       } else {
         next.add(p);
       }
       onPlatformsChange(Array.from(next) as PlatformSlug[]);
+      setPlatformPrompt(false); // 用户已开始勾选 → 清除"先选平台"提示
     },
     [selectedPlatforms, onPlatformsChange]
   );
@@ -120,6 +123,11 @@ export function SearchBar({
       e.preventDefault();
       const trimmed = keyword.trim();
       if (!trimmed) return;
+      // 零勾选：不禁用按钮，而是给出"先勾选至少一个平台"的提示，等待用户选择。
+      if (selectedPlatforms.size === 0) {
+        setPlatformPrompt(true);
+        return;
+      }
       dispatchPopover({ type: "search_started" }); // 开始搜索后关闭浮层
       onSearch(trimmed, Array.from(selectedPlatforms) as PlatformSlug[]);
     },
@@ -251,6 +259,11 @@ export function SearchBar({
         })}
         <span className="sr-only">{t("search.perPlatformHint", { count: Math.max(...Object.values(limits)) })}</span>
       </div>
+      {platformPrompt && (
+        <p className="mt-1 text-xs text-warn" role="status">
+          {t("onboarding.emptyPlatformPrompt")}
+        </p>
+      )}
     </form>
   );
 }
