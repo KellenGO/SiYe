@@ -23,7 +23,7 @@ import { PLATFORM_SLUGS } from '@/lib/platformMeta'
 
 const PLATFORM_ORDER = PLATFORM_SLUGS
 
-export type ViewMode = 'search' | 'favorites' | 'accounts' | 'help'
+export type ViewMode = 'search' | 'favorites' | 'history' | 'accounts' | 'help'
 export type SettingsSection = 'search' | 'accounts' | 'appearance'
 
 interface HeaderProps {
@@ -202,6 +202,7 @@ export function Header({ viewMode, onNavigate }: HeaderProps) {
   const navItems: { key: ViewMode; label: string; section?: SettingsSection }[] = [
     { key: 'search', label: '首页' },
     { key: 'favorites', label: '收藏' },
+    { key: 'history', label: '历史' },
     { key: 'accounts', label: '设置', section: 'search' },
   ]
 

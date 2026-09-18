@@ -22,6 +22,10 @@ interface ResultTabsProps {
   library?: BookmarkLibrary;
   savedView?: boolean;
   fetchedAt?: Partial<Record<PlatformSlug, string | null>>;
+  /** 关闭内置排序、严格按传入顺序渲染（历史页按最近浏览倒序时需要）。 */
+  disableSort?: boolean;
+  /** 每条结果的可删除回调（历史页用来删除单条记录）。 */
+  onDeleteItem?: (result: UnifiedSearchResult) => void;
   /** 勾选状态变化时回调（收藏夹页用同一套勾选做批量加入 / 移出）。 */
   onSelectionChange?: (keys: string[]) => void;
   /** 勾选工具按钮在收起状态的文案，默认“导出 / 复制”。 */
@@ -60,6 +64,8 @@ export function ResultTabs({
   onSelectionChange,
   selectionToolLabel,
   selectionResetKey,
+  disableSort = false,
+  onDeleteItem,
 }: ResultTabsProps) {
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [filters, setFilters] = useState<ResultFilters>({ ...DEFAULT_FILTERS });
@@ -97,7 +103,7 @@ export function ResultTabs({
   // 先按当前标签筛选，再按所选模式排序（纯前端计算，不发任何请求）。
   const filteredResults = useMemo(() => {
     const scoped = filterResultGroups(results, filters, nowMs, effectiveTab);
-    const sorted = sortResults(scoped, sortMode, keyword);
+    const sorted = disableSort ? scoped : sortResults(scoped, sortMode, keyword);
     const resultKey = (r: UnifiedSearchResult) => `${r.platform}|${r.content_id}`;
     const signature = [
       jobId ?? "",
@@ -201,7 +207,8 @@ export function ResultTabs({
                 renderBookmark={library ? (source) => <>
                   <BookmarkControl result={source} library={library} fetchedAt={fetchedAt} />
                   <WatchLaterControl result={source} library={library} fetchedAt={fetchedAt} />
-                </> : undefined} />
+                </> : undefined}
+                onDelete={onDeleteItem ? () => onDeleteItem(result) : undefined} />
               {savedView && bookmark && library && <BookmarkNote bookmark={bookmark} onSave={library.saveNote} library={library} />}
             </div>
           );

@@ -15,6 +15,8 @@
 | Windows 安装器（默认发布方式） | [features/windows-installer.md](features/windows-installer.md) | `installer/SiYe.iss`、`scripts/build_installer.ps1`、`.github/workflows/release-package.yml` |
 | 登录与账号（扩展 / 扫码 / profile） | [features/extension-login.md](features/extension-login.md) | `api/services/accounts.py`、`aggregate_search/worker.py` |
 | 许可与免责声明（首次启动接受门） | [features/license-disclaimer.md](features/license-disclaimer.md) | `webui/src/components/license/LicenseDisclaimer.tsx`、`webui/src/App.tsx` |
+| 观看历史（自动记录点开看过的内容） | [features/watch-history.md](features/watch-history.md) | `api/services/watch_history_store.py`、`webui/src/components/history/HistoryPage.tsx` |
+| 外观与主题色（8 种色 × 深浅） | [features/appearance-themes.md](features/appearance-themes.md) | `webui/src/store/themeStore.ts`、`webui/src/index.css` |
 
 ## 其他文档
 
@@ -23,6 +25,7 @@
 - [`favorite-metrics.md`](favorite-metrics.md) —— 收藏指标补全的来源与字段
 - [`plans/2026-09-18-更新方向与难度评估.md`](plans/2026-09-18-更新方向与难度评估.md) —— 后续更新清单、难度判断与排期
 - [`plans/2026-09-18-三项执行方案.md`](plans/2026-09-18-三项执行方案.md) —— Installer 收尾 / 失败提示改弹窗 / 教程补平台勾选的具体做法
+- [`plans/2026-09-18-主题色与观看历史.md`](plans/2026-09-18-主题色与观看历史.md) —— 8 种主题色与观看历史的做法与待确认点
 - [`plans/`](plans/) —— 一次性方案与改造计划（**不是当前行为的依据**，看功能 wiki）
 - [`history/2026-09-14-三项功能审查与修复.md`](history/2026-09-14-三项功能审查与修复.md) —— 历史修复记录，当前行为以功能 wiki 为准
 - [`repository-map.md`](repository-map.md) —— 目录用途、唯一启动入口与整理边界

@@ -53,7 +53,7 @@ import {
   type ScanLoginTone,
 } from "@/lib/scanLogin";
 import type { SettingsSection } from "@/components/layout/Header";
-import { useThemeStore } from "@/store/themeStore";
+import { ACCENTS, useThemeStore } from "@/store/themeStore";
 import { useHomePreferencesStore } from "@/store/homePreferencesStore";
 
 const API_BASE = ACCOUNTS_API_BASE;
@@ -232,7 +232,7 @@ export function AccountsPage({ activeSection, onSectionChange, onNavigateSearch,
   }, [activeSection, apiRunning, queryClient]);
   // 每个平台独立搜索数量（localStorage 持久化，修改即保存）。
   const { limits, setLimit, resetAll } = usePlatformLimits();
-  const { theme, setTheme } = useThemeStore();
+  const { theme, setTheme, accent, setAccent } = useThemeStore();
   const homePreferences = useHomePreferencesStore();
   const [extensionState, setExtensionState] = useState<
     "checking" | "connected" | "outdated" | "not-installed" | "unknown"
@@ -996,6 +996,14 @@ export function AccountsPage({ activeSection, onSectionChange, onNavigateSearch,
 
       {activeSection === "appearance" && <section>
         <div className="settings-title"><h2>外观与首页</h2><p>安静一点，或多一些内容。按你的习惯来。</p></div>
+        <div className="setting-label">主题色</div>
+        <div className="accent-grid" role="group" aria-label="主题色">
+          {ACCENTS.map((item) => <button key={item.key} type="button" className="accent-swatch"
+            title={item.label} aria-label={`主题色 ${item.label}`} aria-pressed={accent === item.key}
+            style={{ ["--swatch" as string]: item.swatch }}
+            onClick={() => setAccent(item.key)} />)}
+        </div>
+        <p className="accent-name">{ACCENTS.find((item) => item.key === accent)?.label}　·　深浅在下面单独选</p>
         <div className="theme-choices">
           {(["light", "dark"] as const).map((value) => <button key={value} type="button" className="theme-card" aria-pressed={theme === value} onClick={() => setTheme(value)}>
             <div className={`theme-preview ${value === "dark" ? "night" : ""}`} aria-hidden="true" />

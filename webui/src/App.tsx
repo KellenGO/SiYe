@@ -16,6 +16,9 @@ const AccountsPage = lazy(() =>
 const FavoritesPage = lazy(() =>
   import('@/components/favorites/FavoritesPage').then((m) => ({ default: m.FavoritesPage }))
 )
+const HistoryPage = lazy(() =>
+  import('@/components/history/HistoryPage').then((m) => ({ default: m.HistoryPage }))
+)
 const HelpPage = lazy(() =>
   import('@/components/help/HelpPage').then((m) => ({ default: m.HelpPage }))
 )
@@ -38,6 +41,7 @@ function routeFromHash(): { view: ViewMode; settings: SettingsSection; favorites
   if (path.startsWith('/settings/accounts')) return { view: 'accounts', settings: 'accounts', favorites: 'local', home: false }
   if (path.startsWith('/settings/appearance')) return { view: 'accounts', settings: 'appearance', favorites: 'local', home: false }
   if (path.startsWith('/settings')) return { view: 'accounts', settings: 'search', favorites: 'local', home: false }
+  if (path.startsWith('/history')) return { view: 'history', settings: 'search', favorites: 'local', home: false }
   if (path.startsWith('/help')) return { view: 'help', settings: 'search', favorites: 'local', home: false }
   if (path.startsWith('/search')) return { view: 'search', settings: 'search', favorites: 'local', home: false }
   return { view: 'search', settings: 'search', favorites: 'local', home: true }
@@ -78,9 +82,11 @@ function App() {
       ? `/settings/${section || settingsSection}`
       : mode === 'favorites'
         ? '/favorites/local'
-        : mode === 'help'
-          ? '/help'
-          : '/'
+        : mode === 'history'
+          ? '/history'
+          : mode === 'help'
+            ? '/help'
+            : '/'
     if (window.location.hash === `#${nextHash}`) {
       const route = routeFromHash()
       setViewMode(route.view)
@@ -139,6 +145,8 @@ function App() {
                 <FavoritesPage activeTab={favoritesSection} onTabChange={changeFavoritesSection} onNavigateAccounts={() => navigate('accounts', 'accounts')} />
               ) : viewMode === 'help' ? (
                 <HelpPage onShowDisclaimer={handleShowDisclaimer} onStartGuide={() => onboarding.goTo(0)} />
+              ) : viewMode === 'history' ? (
+                <HistoryPage />
               ) : null}
             </Suspense>
             {/* Keep active login polling alive when navigating back to search. */}

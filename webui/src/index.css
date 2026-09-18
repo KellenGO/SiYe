@@ -216,6 +216,261 @@ html.dark {
   --siye-red: #ef8b97;
 }
 
+/* ============================================================
+   主题色（accent）：只覆盖品牌色那一组变量，深浅仍由 .dark 独立控制。
+   data-accent 由 src/store/themeStore.ts 写在 <html> 上，默认 azure
+   即上面 :root / html.dark 的默认值，所以这里只列其余七种。
+   中性背景、文字与平台自身颜色（小红书红、抖音黑…）不随主题色变化。
+   ============================================================ */
+
+html[data-accent="azure"] {
+  --brand: 101 115 255;
+  --brand-2: 79 91 210;
+  --brand-soft: 238 240 255;
+  --brand-ink: 79 91 210;
+  --primary: 235 100% 70%;
+  --accent: 235 100% 70%;
+  --ring: 235 100% 70%;
+  --cyber-neon-cyan: 101 115 255;
+  --cyber-neon-cyan-dim: 79 91 210;
+  --cyber-border-glow: 101 115 255;
+  --siye-brand: #6573ff;
+  --siye-brand-soft: #f0f2ff;
+  --siye-brand-ink: #4e5bd2;
+}
+html.dark[data-accent="azure"] {
+  --brand: 139 149 255;
+  --brand-2: 168 176 255;
+  --brand-soft: 29 32 62;
+  --brand-ink: 168 176 255;
+  --primary: 235 100% 78%;
+  --accent: 235 100% 78%;
+  --ring: 235 100% 78%;
+  --cyber-neon-cyan: 139 149 255;
+  --cyber-neon-cyan-dim: 168 176 255;
+  --cyber-border-glow: 139 149 255;
+  --siye-brand: #98a2ff;
+  --siye-brand-soft: #20263d;
+  --siye-brand-ink: #abb3ff;
+}
+
+html[data-accent="graphite"] {
+  --brand: 75 85 99;
+  --brand-2: 55 65 81;
+  --brand-soft: 243 244 246;
+  --brand-ink: 17 24 39;
+  --primary: 220 9% 46%;
+  --accent: 220 9% 46%;
+  --ring: 220 9% 46%;
+  --cyber-neon-cyan: 75 85 99;
+  --cyber-neon-cyan-dim: 55 65 81;
+  --cyber-border-glow: 75 85 99;
+  --siye-brand: #4b5563;
+  --siye-brand-soft: #f3f4f6;
+  --siye-brand-ink: #374151;
+}
+html.dark[data-accent="graphite"] {
+  --brand: 203 213 225;
+  --brand-2: 229 231 235;
+  --brand-soft: 39 39 42;
+  --brand-ink: 237 239 242;
+  --primary: 220 9% 84%;
+  --accent: 220 9% 84%;
+  --ring: 220 9% 84%;
+  --cyber-neon-cyan: 203 213 225;
+  --cyber-neon-cyan-dim: 229 231 235;
+  --cyber-border-glow: 203 213 225;
+  --siye-brand: #cbd5e1;
+  --siye-brand-soft: #27272a;
+  --siye-brand-ink: #e5e7eb;
+}
+
+html[data-accent="pine"] {
+  --brand: 61 138 106;
+  --brand-2: 41 103 78;
+  --brand-soft: 232 245 238;
+  --brand-ink: 18 43 33;
+  --primary: 154 31% 39%;
+  --accent: 154 31% 39%;
+  --ring: 154 31% 39%;
+  --cyber-neon-cyan: 61 138 106;
+  --cyber-neon-cyan-dim: 41 103 78;
+  --cyber-border-glow: 61 138 106;
+  --siye-brand: #3d8a6a;
+  --siye-brand-soft: #e8f5ee;
+  --siye-brand-ink: #2a674e;
+}
+html.dark[data-accent="pine"] {
+  --brand: 129 199 168;
+  --brand-2: 165 220 196;
+  --brand-soft: 27 50 39;
+  --brand-ink: 234 242 238;
+  --primary: 152 40% 70%;
+  --accent: 152 40% 70%;
+  --ring: 152 40% 70%;
+  --cyber-neon-cyan: 129 199 168;
+  --cyber-neon-cyan-dim: 165 220 196;
+  --cyber-border-glow: 129 199 168;
+  --siye-brand: #81c7a8;
+  --siye-brand-soft: #1b3227;
+  --siye-brand-ink: #a5dcc0;
+}
+
+html[data-accent="teal"] {
+  --brand: 42 148 154;
+  --brand-2: 27 112 118;
+  --brand-soft: 228 246 246;
+  --brand-ink: 12 45 47;
+  --primary: 184 55% 39%;
+  --accent: 184 55% 39%;
+  --ring: 184 55% 39%;
+  --cyber-neon-cyan: 42 148 154;
+  --cyber-neon-cyan-dim: 27 112 118;
+  --cyber-border-glow: 42 148 154;
+  --siye-brand: #2a949a;
+  --siye-brand-soft: #e4f6f6;
+  --siye-brand-ink: #1f7076;
+}
+html.dark[data-accent="teal"] {
+  --brand: 116 205 210;
+  --brand-2: 155 226 230;
+  --brand-soft: 24 55 57;
+  --brand-ink: 233 248 248;
+  --primary: 184 57% 69%;
+  --accent: 184 57% 69%;
+  --ring: 184 57% 69%;
+  --cyber-neon-cyan: 116 205 210;
+  --cyber-neon-cyan-dim: 155 226 230;
+  --cyber-border-glow: 116 205 210;
+  --siye-brand: #74cdd2;
+  --siye-brand-soft: #183739;
+  --siye-brand-ink: #9bdde1;
+}
+
+html[data-accent="violet"] {
+  --brand: 124 106 199;
+  --brand-2: 93 76 168;
+  --brand-soft: 240 238 252;
+  --brand-ink: 32 26 58;
+  --primary: 250 43% 60%;
+  --accent: 250 43% 60%;
+  --ring: 250 43% 60%;
+  --cyber-neon-cyan: 124 106 199;
+  --cyber-neon-cyan-dim: 93 76 168;
+  --cyber-border-glow: 124 106 199;
+  --siye-brand: #7c6ac7;
+  --siye-brand-soft: #f0eefc;
+  --siye-brand-ink: #5d4ca8;
+}
+html.dark[data-accent="violet"] {
+  --brand: 176 165 235;
+  --brand-2: 200 192 245;
+  --brand-soft: 41 37 63;
+  --brand-ink: 240 239 250;
+  --primary: 249 66% 78%;
+  --accent: 249 66% 78%;
+  --ring: 249 66% 78%;
+  --cyber-neon-cyan: 176 165 235;
+  --cyber-neon-cyan-dim: 200 192 245;
+  --cyber-border-glow: 176 165 235;
+  --siye-brand: #b0a5eb;
+  --siye-brand-soft: #29253f;
+  --siye-brand-ink: #c7c0f5;
+}
+
+html[data-accent="rose"] {
+  --brand: 199 84 116;
+  --brand-2: 158 60 90;
+  --brand-soft: 252 233 238;
+  --brand-ink: 56 22 33;
+  --primary: 342 45% 55%;
+  --accent: 342 45% 55%;
+  --ring: 342 45% 55%;
+  --cyber-neon-cyan: 199 84 116;
+  --cyber-neon-cyan-dim: 158 60 90;
+  --cyber-border-glow: 199 84 116;
+  --siye-brand: #c75474;
+  --siye-brand-soft: #fce9ee;
+  --siye-brand-ink: #9e3c5a;
+}
+html.dark[data-accent="rose"] {
+  --brand: 236 148 174;
+  --brand-2: 246 183 202;
+  --brand-soft: 61 35 44;
+  --brand-ink: 250 237 241;
+  --primary: 344 70% 75%;
+  --accent: 344 70% 75%;
+  --ring: 344 70% 75%;
+  --cyber-neon-cyan: 236 148 174;
+  --cyber-neon-cyan-dim: 246 183 202;
+  --cyber-border-glow: 236 148 174;
+  --siye-brand: #ec94ae;
+  --siye-brand-soft: #3d232c;
+  --siye-brand-ink: #f4b7c8;
+}
+
+html[data-accent="wine"] {
+  --brand: 155 60 68;
+  --brand-2: 120 43 50;
+  --brand-soft: 249 234 235;
+  --brand-ink: 45 17 19;
+  --primary: 355 44% 42%;
+  --accent: 355 44% 42%;
+  --ring: 355 44% 42%;
+  --cyber-neon-cyan: 155 60 68;
+  --cyber-neon-cyan-dim: 120 43 50;
+  --cyber-border-glow: 155 60 68;
+  --siye-brand: #9b3c44;
+  --siye-brand-soft: #f9eaeb;
+  --siye-brand-ink: #782e35;
+}
+html.dark[data-accent="wine"] {
+  --brand: 226 137 143;
+  --brand-2: 240 176 181;
+  --brand-soft: 58 34 36;
+  --brand-ink: 249 237 238;
+  --primary: 356 62% 71%;
+  --accent: 356 62% 71%;
+  --ring: 356 62% 71%;
+  --cyber-neon-cyan: 226 137 143;
+  --cyber-neon-cyan-dim: 240 176 181;
+  --cyber-border-glow: 226 137 143;
+  --siye-brand: #e2898f;
+  --siye-brand-soft: #3a2224;
+  --siye-brand-ink: #eeb0b4;
+}
+
+html[data-accent="ochre"] {
+  --brand: 193 116 41;
+  --brand-2: 150 88 28;
+  --brand-soft: 250 239 226;
+  --brand-ink: 51 32 12;
+  --primary: 30 65% 46%;
+  --accent: 30 65% 46%;
+  --ring: 30 65% 46%;
+  --cyber-neon-cyan: 193 116 41;
+  --cyber-neon-cyan-dim: 150 88 28;
+  --cyber-border-glow: 193 116 41;
+  --siye-brand: #c17429;
+  --siye-brand-soft: #faefe2;
+  --siye-brand-ink: #96581d;
+}
+html.dark[data-accent="ochre"] {
+  --brand: 232 172 108;
+  --brand-2: 244 200 148;
+  --brand-soft: 56 41 27;
+  --brand-ink: 249 241 231;
+  --primary: 33 73% 67%;
+  --accent: 33 73% 67%;
+  --ring: 33 73% 67%;
+  --cyber-neon-cyan: 232 172 108;
+  --cyber-neon-cyan-dim: 244 200 148;
+  --cyber-border-glow: 232 172 108;
+  --siye-brand: #e8ac6c;
+  --siye-brand-soft: #38291b;
+  --siye-brand-ink: #f2c894;
+}
+
 body {
   color: var(--siye-ink);
   background: var(--siye-bg);
@@ -1378,3 +1633,16 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
   font-weight: 500;
 }
 [data-sonner-toast].siye-toast-info [data-button]:hover { background: rgb(var(--brand) / 0.22); }
+
+/* 主题色选择器（外观与首页设置页）：8 个色块一排，选中用当前主题色描边。 */
+.accent-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 10px; margin-top: 10px; }
+.accent-swatch {
+  height: 38px; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--siye-line-strong); background: var(--swatch, #ccc);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.accent-swatch:hover { transform: translateY(-1px); }
+.accent-swatch[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--siye-bg), 0 0 0 4px var(--siye-brand); }
+.accent-swatch:focus-visible { outline: 2px solid var(--siye-brand); outline-offset: 3px; }
+.accent-name { margin-top: 8px; font-size: 12px; color: var(--siye-secondary); }
+@media (max-width: 700px) { .accent-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }

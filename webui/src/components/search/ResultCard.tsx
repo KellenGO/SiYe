@@ -1,15 +1,18 @@
 import { useLayoutEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
-import { ArrowUpRight, ChevronDown, Eye, MessageCircle, Share2, Star, ThumbsUp } from "lucide-react";
+import { ArrowUpRight, ChevronDown, Eye, MessageCircle, Share2, Star, ThumbsUp, Trash2 } from "lucide-react";
 import { BilibiliCoinIcon } from "@/components/icons/BilibiliCoinIcon";
 import type { GroupedSource, UnifiedSearchResult } from "@/types/search";
 import { PLATFORM_COLORS, PLATFORM_LABELS } from "@/types/search";
 import { highlightSegments, orderedMetrics, safeContentUrl as safeUrl } from "@/lib/resultTools";
+import { recordView } from "@/lib/historyApi";
 
 interface ResultCardProps {
   result: UnifiedSearchResult;
   index?: number;
   highlightQuery?: string;
   renderBookmark?: (result: UnifiedSearchResult) => ReactNode;
+  /** 历史页：删除单条记录的回调（点击时不会触发跳转）。 */
+  onDelete?: () => void;
 }
 
 function Highlight({ text, query }: { text: string; query: string }) {
@@ -52,13 +55,13 @@ const METRIC_ICONS: Record<string, MetricIcon> = {
   share_count: Share2,
 };
 
-function SourceLine({ source, query }: { source: GroupedSource; query: string }) {
+function SourceLine({ source, query, onOpen }: { source: GroupedSource; query: string; onOpen?: () => void }) {
   const url = safeUrl(source.url);
   const row = <div className="result-source-line"><i className="pd" style={{ backgroundColor: PLATFORM_COLORS[source.platform] }} /><span className="result-source-platform">{PLATFORM_LABELS[source.platform]}</span><span className="result-source-title"><Highlight text={source.title} query={query} /></span><span className="result-source-meta">{source.author}</span><ArrowUpRight className="result-source-arrow" /></div>;
-  return url ? <a href={url} target="_blank" rel="noreferrer">{row}</a> : row;
+  return url ? <a href={url} target="_blank" rel="noreferrer" onClick={onOpen}>{row}</a> : row;
 }
 
-export function ResultCard({ result, index = 0, highlightQuery = "", renderBookmark }: ResultCardProps) {
+export function ResultCard({ result, index = 0, highlightQuery = "", renderBookmark, onDelete }: ResultCardProps) {
   const [coverFailed, setCoverFailed] = useState(false);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
   const [contentClipped, setContentClipped] = useState(false);
@@ -66,6 +69,8 @@ export function ResultCard({ result, index = 0, highlightQuery = "", renderBookm
   const descriptionRef = useRef<HTMLParagraphElement>(null);
   const metaRef = useRef<HTMLDivElement>(null);
   const url = safeUrl(result.url);
+  // 用户点开结果链接即记一条观看历史；fire-and-forget，失败不阻塞跳转。
+  const handleOpen = () => { void recordView(result); };
   const groupedSources = result.grouped_sources && result.grouped_sources.length >= 2 ? result.grouped_sources : null;
   const title = <><Highlight text={result.title} query={highlightQuery} />{url && <ArrowUpRight />}</>;
   const metrics = orderedMetrics(result.metrics);
@@ -99,7 +104,7 @@ export function ResultCard({ result, index = 0, highlightQuery = "", renderBookm
         </div>
       )}
       <div className={`result-content result-preview ${detailsExpanded ? "is-expanded" : ""}`}>
-        <h2 ref={titleRef}>{url ? <a className="result-title" href={url} target="_blank" rel="noreferrer">{title}</a> : <span className="result-title">{title}</span>}</h2>
+        <h2 ref={titleRef}>{url ? <a className="result-title" href={url} target="_blank" rel="noreferrer" onClick={handleOpen}>{title}</a> : <span className="result-title">{title}</span>}</h2>
         {result.snippet && <p ref={descriptionRef} className="result-description"><Highlight text={result.snippet} query={highlightQuery} /></p>}
         <div ref={metaRef} className="result-meta">
           <span className="source"><i className="pd" style={{ backgroundColor: PLATFORM_COLORS[result.platform] }} />{groupedSources ? "跨平台聚合" : PLATFORM_LABELS[result.platform]}</span>
@@ -116,10 +121,10 @@ export function ResultCard({ result, index = 0, highlightQuery = "", renderBookm
         </div>
         {detailsExpanded && groupedSources && <div className="result-expanded-sources">
           <div className="result-details-heading">{groupedSources.length} 个平台的内容版本</div>
-          {groupedSources.map((source) => <SourceLine key={`${source.platform}-${source.content_id}`} source={source} query={highlightQuery} />)}
+          {groupedSources.map((source) => <SourceLine key={`${source.platform}-${source.content_id}`} source={source} query={highlightQuery} onOpen={handleOpen} />)}
         </div>}
       </div>
-      {(renderBookmark || hasDetails) && <div className="row-actions">
+      {(renderBookmark || hasDetails || onDelete) && <div className="row-actions">
         {renderBookmark?.(result)}
         {hasDetails && <button
           type="button"
@@ -129,6 +134,13 @@ export function ResultCard({ result, index = 0, highlightQuery = "", renderBookm
           title={detailsExpanded ? "收起完整内容" : "展开完整内容"}
           onClick={() => setDetailsExpanded((value) => !value)}
         ><ChevronDown /></button>}
+        {onDelete && <button
+          type="button"
+          className="details-toggle"
+          aria-label="从历史中移除"
+          title="从历史中移除"
+          onClick={(event) => { event.stopPropagation(); onDelete(); }}
+        ><Trash2 /></button>}
       </div>}
     </article>
   );
