@@ -8,14 +8,15 @@ import type { PlatformSlug } from "@/types/search";
 import { invalidateAccounts, useAccounts } from "@/hooks/useAccounts";
 import { usePlatformLimits } from "@/hooks/usePlatformLimits";
 import {
+  accountSearchVerdict,
+  accountActionHint,
   accountCardStatusLabel,
-  accountTone,
   diagnosticAccountStateLabel,
   diagnosticSearchModeLabel,
   accountUsageHint,
   accountOperationLabel,
   summarizeAccounts,
-  type AccountTone,
+  type SearchVerdictKind,
 } from "@/lib/accounts";
 import { MAX_PLATFORM_LIMIT, MIN_PLATFORM_LIMIT, PLATFORM_ORDER, parsePlatformLimitInput } from "@/lib/platformLimits";
 import {
@@ -57,7 +58,7 @@ import { useHomePreferencesStore } from "@/store/homePreferencesStore";
 
 const API_BASE = ACCOUNTS_API_BASE;
 
-/** 扫码登录状态行的文字色调（与 TONE_BADGE 的语义保持一致）。 */
+/** 扫码登录状态行的文字色调（与 VERDICT_BADGE 的语义保持一致）。 */
 const LOGIN_TONE_TEXT: Record<ScanLoginTone, string> = {
   idle: "text-cyber-text-muted",
   active: "text-brand-strong",
@@ -93,11 +94,23 @@ const BACKEND_TEXT: Record<string, string> = {
   custom: "自定义浏览器",
 };
 
-const TONE_BADGE: Record<AccountTone, string> = {
-  ok: "bg-ok-soft text-[#3d7d60] border-ok/40",
-  warn: "bg-warn-soft text-warn border-warn/40",
-  bad: "bg-danger-soft text-danger border-danger/40",
-  idle: "bg-cyber-bg-tertiary text-cyber-text-muted border-cyber-border-subtle",
+/** 卡片主结论徽章（可用 / 不可用 / 验证中），只用现有 token 色。 */
+const VERDICT_BADGE: Record<SearchVerdictKind, string> = {
+  available: "bg-ok-soft text-ok border-ok/40",
+  unavailable: "bg-danger-soft text-danger border-danger/40",
+  pending: "bg-cyber-bg-tertiary text-cyber-text-muted border-cyber-border-subtle",
+};
+
+const VERDICT_LINE: Record<SearchVerdictKind, string> = {
+  available: "text-ok",
+  unavailable: "text-danger",
+  pending: "text-warn",
+};
+
+const VERDICT_LABEL: Record<SearchVerdictKind, string> = {
+  available: "可用",
+  unavailable: "不可用",
+  pending: "验证中",
 };
 
 /**
@@ -197,7 +210,7 @@ interface AccountsPageProps {
 }
 
 export function AccountsPage({ activeSection, onSectionChange, onNavigateSearch, onNavigateHelp }: AccountsPageProps) {
-  const { accounts, apiRunning } = useAccounts();
+  const { accounts, apiRunning, browserAvailable } = useAccounts();
   // 账号 sync/verify/delete 完成后立即刷新共享缓存。
   const queryClient = useQueryClient();
   // One queue on page entry. The server deduplicates recent checks; GET polling
@@ -711,6 +724,15 @@ export function AccountsPage({ activeSection, onSectionChange, onNavigateSearch,
         {apiRunning === false && " · 本地 API 未运行"}
       </div>
 
+      {/* 本机浏览器不可用：搜索第一道关卡（全局），四个平台都搜不了 */}
+      {browserAvailable === false && (
+        <div className="mb-3 px-3.5 py-2.5 rounded-lg bg-danger-soft border border-danger/40 text-sm text-danger">
+          本机浏览器不可用：四个平台现在都无法搜索。请安装 Chrome / Edge，或执行
+          <code className="mx-1 px-1 py-0.5 rounded bg-cyber-bg-tertiary border border-cyber-border-subtle text-cyber-text-secondary">playwright install chromium</code>
+          后刷新本页。
+        </div>
+      )}
+
       {/* 平台卡片：统一浅色账号卡 */}
       <div className="flex flex-col gap-3">
         {(!accounts || accounts.length === 0) && PLATFORM_ORDER.map((platform) => (
@@ -745,9 +767,7 @@ export function AccountsPage({ activeSection, onSectionChange, onNavigateSearch,
           const busyLabel = busy[acc.platform];
           const name = PLATFORM_LABELS[acc.platform as keyof typeof PLATFORM_LABELS] || acc.platform;
           const color = PLATFORM_COLORS[acc.platform as keyof typeof PLATFORM_COLORS] || "#4ca4dc";
-          const tone = accountTone(acc);
           const diagnostic = acc.diagnostic;
-          const hasDiag = !!diagnostic || !!lastDiag[acc.platform];
           const snippetLabel = diagnostic?.snippet_available === true
             ? "简介可用"
             : diagnostic?.snippet_available === false
@@ -759,19 +779,22 @@ export function AccountsPage({ activeSection, onSectionChange, onNavigateSearch,
           const loginView = scanLoginView(loginJob);
           const loginLabel = scanLoginActionLabel(loginJob);
           const extensionReady = extensionState === "connected";
+          // 卡片主结论（可用 / 不可用 / 验证中）与动作提示：只回答「现在能不能搜、该点哪个按钮」。
+          const verdict = accountSearchVerdict(acc, browserAvailable);
+          const actionHint = accountActionHint(acc, verdict);
           return (
             <article key={acc.platform} className="account-card">
-              {/* 头部：平台标记 + 名称 + 状态徽章 + busy */}
+              {/* 头部：平台标记 + 名称 + 主结论徽章 + busy */}
               <div className="account-card-head">
                 <div>
-                    <h3>
-                      <i className="pd" style={{ backgroundColor: color }} aria-hidden="true" />
-                      <span>{name}</span>
-                      <span className={`px-2 py-0.5 rounded-full text-[10.5px] border ${TONE_BADGE[tone]}`}>
-                        {accountCardStatusLabel(acc)}
-                        {acc.verified && <ShieldCheck className="w-3 h-3 inline ml-1" />}
-                      </span>
-                    </h3>
+                  <h3>
+                    <i className="pd" style={{ backgroundColor: color }} aria-hidden="true" />
+                    <span>{name}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10.5px] border ${VERDICT_BADGE[verdict.kind]}`}>
+                      {VERDICT_LABEL[verdict.kind]}
+                      {acc.verified && <ShieldCheck className="w-3 h-3 inline ml-1" />}
+                    </span>
+                  </h3>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                   {busyLabel && (
@@ -785,81 +808,97 @@ export function AccountsPage({ activeSection, onSectionChange, onNavigateSearch,
                 </div>
               </div>
 
-              {/* 概要信息 */}
-              <p>{acc.verified ? `${acc.display_name || "账号已连接"} · 最近验证于 ${acc.last_verified_at ? new Date(acc.last_verified_at).toLocaleString("zh-CN") : "本次会话"}` : acc.safe_message || "先在浏览器登录平台，再同步登录状态。"}</p>
-              <div className="sr-only">后台会话：{acc.profile_exists ? "已存在" : "不存在"}；浏览器后端：{acc.browser_backend ? (BACKEND_TEXT[acc.browser_backend] || acc.browser_backend) : "未知"}</div>
+              {/* 主结论：可用 / 不可用（最短原因） */}
+              <p className={`text-sm font-medium ${VERDICT_LINE[verdict.kind]}`}>
+                {verdict.kind === "available" ? "✓ 可用" : verdict.kind === "unavailable" ? "✗ 不可用" : "… 验证中"}
+                {" · "}{verdict.reason}
+              </p>
 
-              <p>{accountUsageHint(acc)}</p>
-              {acc.verification && <p>最近检查：{new Date(acc.verification.checked_at).toLocaleString("zh-CN")} · 平台登录验证</p>}
-              <div className="account-evidence" aria-live="polite">
-                <span>{accountOperationLabel("search", acc.usage?.search)}</span>
-                <span>{accountOperationLabel("favorites", acc.usage?.favorites)}</span>
-              </div>
+              {/* 动作提示：现在该点哪个按钮，或为什么现在不能搜 */}
+              <p className="text-xs text-cyber-text-secondary">{actionHint}</p>
 
-              {acc.safe_message && (
-                <div className="mb-3 px-3.5 py-2 rounded-lg bg-warn-soft border border-warn/30 text-xs text-warn">
-                  {acc.safe_message}
-                </div>
-              )}
-
-              {/* 诊断信息：默认折叠 */}
-              {hasDiag && (
-                <div className="mb-3">
-                  <button
-                    type="button"
-                    onClick={() => toggleDiag(acc.platform)}
-                    className="flex items-center gap-1 text-[11.5px] text-cyber-text-muted hover:text-brand-strong transition-colors"
-                  >
-                    {openDiag[acc.platform] ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                    {openDiag[acc.platform] ? "收起平台诊断" : "平台诊断"}
-                  </button>
-                  {openDiag[acc.platform] && (
-                    <div className="mt-2 px-3.5 py-2.5 rounded-lg bg-cyber-bg-tertiary border border-cyber-border-subtle text-[11px] text-cyber-text-secondary">
-                      {diagnostic && (
-                        <>
-                          <div className="text-cyber-text-primary mb-1 font-semibold">历史搜索与内部诊断（非实时检测）</div>
-                          <p>以下信息可能来自重新登录之前，不代表当前搜索是否可用。</p>
-                          <div>记录路径：{diagnosticSearchModeLabel(diagnostic.search_mode)}</div>
-                          <div>账号状态：{diagnosticAccountStateLabel(diagnostic.account_state)}</div>
-                          <div>备用路径：{diagnostic.fallback_active ? "正在使用" : "未启用"}</div>
-                          <div>简介能力：{snippetLabel}</div>
-                          <div>诊断记录：{diagnostic.user_message || "暂无记录"}</div>
-                          <div>记录中的建议：{diagnostic.recommended_action || "无"}</div>
-                        </>
-                      )}
-                      {lastDiag[acc.platform] && (
-                        <div className={`${diagnostic ? "mt-2 pt-2 border-t border-cyber-border-subtle" : ""}`}>
-                          <div className="text-cyber-text-primary mb-1 font-semibold">最近一次同步细节</div>
-                          <div>
-                            阶段：{SYNC_STAGE_TEXT[lastDiag[acc.platform].sync_stage] || lastDiag[acc.platform].sync_stage || "—"}
-                            {" · "}读取 {lastDiag[acc.platform].received_cookie_count ?? "—"} 条
-                            {" / 接受 "}{lastDiag[acc.platform].accepted_cookie_count ?? "—"} 条
-                            {" / 跳过 "}{lastDiag[acc.platform].skipped_cookie_count ?? "—"} 条
-                          </div>
-                          <div>
-                            登录标记：
-                            {(LOGIN_MARKERS[acc.platform] || []).map((m) => {
-                              const v = lastDiag[acc.platform].login_marker_presence?.[m];
-                              return v === undefined ? null : `${m} ${v ? "✓" : "✗"}`;
-                            }).filter(Boolean).join(" · ") || "—"}
-                          </div>
-                          <div>
-                            标记判定（启发式，非登录结论）：{lastDiag[acc.platform].required_cookie_present === null
-                              ? "—" : lastDiag[acc.platform].required_cookie_present ? "有" : "无"}
-                            {" · 已验证（真实验证）："}{lastDiag[acc.platform].verified ? "是" : "否"}
-                          </div>
-                          {lastDiag[acc.platform].safe_error_code && (
-                            <div>
-                              错误码：{lastDiag[acc.platform].safe_error_code}
-                              {lastDiag[acc.platform].safe_message && ` · ${lastDiag[acc.platform].safe_message}`}
-                            </div>
-                          )}
-                        </div>
-                      )}
+              {/* 详情：所有具体原因、过程、诊断折叠在这里（默认收起） */}
+              <div className="mb-3">
+                <button
+                  type="button"
+                  onClick={() => toggleDiag(acc.platform)}
+                  className="flex items-center gap-1 text-[11.5px] text-cyber-text-muted hover:text-brand-strong transition-colors"
+                >
+                  {openDiag[acc.platform] ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                  {openDiag[acc.platform] ? "收起详情" : "详情"}
+                </button>
+                {openDiag[acc.platform] && (
+                  <div className="mt-2 px-3.5 py-2.5 rounded-lg bg-cyber-bg-tertiary border border-cyber-border-subtle text-[11px] text-cyber-text-secondary space-y-1">
+                    {/* 本机状态与原因 */}
+                    <div className="text-cyber-text-primary font-semibold">本机状态</div>
+                    <div>账号状态：{accountCardStatusLabel(acc)}</div>
+                    <div>本机登录信息：{acc.profile_exists ? "已保存" : "不存在"}</div>
+                    <div>浏览器后端：{acc.browser_backend ? (BACKEND_TEXT[acc.browser_backend] || acc.browser_backend) : "未知"}</div>
+                    {acc.verified && (
+                      <div>最近验证于 {acc.last_verified_at ? new Date(acc.last_verified_at).toLocaleString("zh-CN") : "本次会话"}</div>
+                    )}
+                    {acc.verification && (
+                      <div>最近检查：{new Date(acc.verification.checked_at).toLocaleString("zh-CN")} · 平台登录验证</div>
+                    )}
+                    <div>搜索能力：{accountUsageHint(acc)}</div>
+                    <div className="account-evidence" aria-live="polite">
+                      <span>{accountOperationLabel("search", acc.usage?.search)}</span>
+                      <span>{accountOperationLabel("favorites", acc.usage?.favorites)}</span>
                     </div>
-                  )}
-                </div>
-              )}
+                    {acc.status === "unverified" && (
+                      <div>已导入登录信息但还没验证：可以先试着搜索（公开搜索不一定有结果），搜不到再重新同步或扫码。</div>
+                    )}
+                    {acc.platform === "douyin" && (
+                      <div>抖音允许公开搜索：即使未登录也可能返回结果（公开内容，可能比登录态少）。</div>
+                    )}
+                    {acc.safe_message && (
+                      <div className="text-warn">提示：{acc.safe_message}</div>
+                    )}
+
+                    {diagnostic && (
+                      <div className="pt-2 mt-2 border-t border-cyber-border-subtle space-y-1">
+                        <div className="text-cyber-text-primary font-semibold">排查诊断</div>
+                        <p className="text-cyber-text-muted">以下为历史记录，仅供排查，不代表此刻一定能搜到。</p>
+                        <div>记录路径：{diagnosticSearchModeLabel(diagnostic.search_mode)}</div>
+                        <div>账号状态：{diagnosticAccountStateLabel(diagnostic.account_state)}</div>
+                        <div>备用路径：{diagnostic.fallback_active ? "正在使用" : "未启用"}</div>
+                        <div>简介能力：{snippetLabel}</div>
+                        <div>诊断记录：{diagnostic.user_message || "暂无记录"}</div>
+                        <div>记录中的建议：{diagnostic.recommended_action || "无"}</div>
+                      </div>
+                    )}
+                    {lastDiag[acc.platform] && (
+                      <div className={`${diagnostic ? "pt-2 mt-2 border-t border-cyber-border-subtle space-y-1" : "space-y-1"}`}>
+                        <div className="text-cyber-text-primary font-semibold">最近一次同步细节</div>
+                        <div>
+                          阶段：{SYNC_STAGE_TEXT[lastDiag[acc.platform].sync_stage] || lastDiag[acc.platform].sync_stage || "—"}
+                          {" · "}读取 {lastDiag[acc.platform].received_cookie_count ?? "—"} 条
+                          {" / 接受 "}{lastDiag[acc.platform].accepted_cookie_count ?? "—"} 条
+                          {" / 跳过 "}{lastDiag[acc.platform].skipped_cookie_count ?? "—"} 条
+                        </div>
+                        <div>
+                          登录标记：
+                          {(LOGIN_MARKERS[acc.platform] || []).map((m) => {
+                            const v = lastDiag[acc.platform].login_marker_presence?.[m];
+                            return v === undefined ? null : `${m} ${v ? "✓" : "✗"}`;
+                          }).filter(Boolean).join(" · ") || "—"}
+                        </div>
+                        <div>
+                          标记判定（启发式，非登录结论）：{lastDiag[acc.platform].required_cookie_present === null
+                            ? "—" : lastDiag[acc.platform].required_cookie_present ? "有" : "无"}
+                          {" · 已验证（真实验证）："}{lastDiag[acc.platform].verified ? "是" : "否"}
+                        </div>
+                        {lastDiag[acc.platform].safe_error_code && (
+                          <div>
+                            错误码：{lastDiag[acc.platform].safe_error_code}
+                            {lastDiag[acc.platform].safe_message && ` · ${lastDiag[acc.platform].safe_message}`}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
 
               {/* 主要操作：方案 A —— 扫码登录是主路径，扩展同步是可选加速 */}
               <div className="account-actions">
