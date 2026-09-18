@@ -15,7 +15,7 @@
 | 扫码登录实现（可见窗口 + 二维码） | `aggregate_search/worker.py` 的 `_run_login`；二维码只走 `tools/crawler_util.py` 的 `show_qrcode`（`aggregate_search/login.py` 只是转发 shim） |
 | 浏览器选择（自定义 > Chrome > Edge > 内置 Chromium） | `tools/browser_launcher.py`（`resolve_playwright_browser`） |
 | profile 与登录态配置 | `config/base_config.py`：`USER_DATA_DIR`、`SAVE_LOGIN_STATE` |
-| 前端账号页 | `webui/src/components/accounts/AccountsPage.tsx`、`useAccounts.ts`、`useAutoAccountSync.ts` |
+| 前端账号页 | `webui/src/components/accounts/AccountsPage.tsx`、`useAccounts.ts`、`useAutoAccountSync.ts`；主结论与动作提示在 `webui/src/lib/accounts.ts` 的 `accountSearchVerdict` / `accountActionHint` |
 | 扫码任务状态和跨页面搜索避让 | `webui/src/lib/scanLogin.ts`、`webui/src/App.tsx` |
 | 前端扩展通信与批量同步 | `webui/src/lib/extensionSync.ts`、`accountBulkSync.ts`、`accountGate.ts` |
 
@@ -50,6 +50,28 @@ profile 目录：`browser_data/{xhs,dy,bili,zhihu}_user_data_dir`。
 - worker 里 **CDP 模式被显式关掉**（`ENABLE_CDP_MODE=False`、`CDP_CONNECT_EXISTING=False`），
   所以「连到已打开的浏览器」这条路当前是关的（`tools/cdp_browser.py` 有实现可参考）。
 - 换账号不会隔离：应用自己的 profile 是「一个平台一个目录」，同一台机器换账号会覆盖同一份 profile。
+
+## 账号页：主结论「可用 / 不可用」与盲区（2026-09-18）
+
+账号页卡片从「平铺所有状态」改成「动作卡片」：每张卡先一行回答
+「这个平台现在能不能搜」，其余一律折叠进「详情」。
+
+- **主结论**：`accountSearchVerdict` 给出 `可用 / 不可用 / 验证中` 三态与最短原因
+  （如「登录已失效」「未登录」「浏览器不可用」）。判定只用前端能拿到的数据：
+  账号状态（`GET /api/search/accounts`）+ 本机浏览器可用性（`GET /api/health`）。
+  `accountActionHint` 回答「现在该点哪个按钮」。
+- **详情折叠**：本机登录信息、浏览器后端、验证时间、最近搜索/收藏证据、提示、
+  抖音公开搜索说明、登录待确认说明、排查诊断、最近一次同步细节全部收进「详情」，
+  不展开看不到。诊断标题从「历史搜索与内部诊断（非实时检测）」改为「排查诊断」，
+  保留"历史记录，不代表此刻一定能搜到"的小字提示。
+- **补上的盲区**：
+  - 关卡 0 本机浏览器可用性——`/api/health` 的 `browser_available`，账号页顶部与
+    每张卡主结论都会体现；浏览器不可用时四平台统一「不可用 · 浏览器不可用」。
+  - 抖音允许公开搜索（`worker.py` 对 dy 开 `allow_public_search`）——静态产品规则，
+    抖音卡主结论标「可用 · 抖音允许公开搜索」，并在详情说明"即使未登录也可能出结果"。
+- **仍拿不到、本轮未做**：关卡 5 平台冷却（`cooldown_until`）只在搜索 job 响应里
+  （`webui/src/types/search.ts`），账号页拿不到，没有编造；冷却状态仍在搜索结果页体现。
+  如需在账号页展示，需后端在 `GET /api/search/accounts` 增加冷却字段。
 
 ## 测试怎么跑
 

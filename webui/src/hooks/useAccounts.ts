@@ -34,6 +34,15 @@ export interface UseAccountsResult {
   /** 最近一次请求失败（曾成功加载时保留旧 accounts，由 UI 用 stale 区分）。 */
   error: boolean;
   apiRunning: boolean | null;
+  /**
+   * 本机浏览器是否可用（来自 /api/health 的 EnvironmentHealth）。
+   * null 表示尚未确定（健康检查未决 / 失败），UI 据此区分「浏览器不可用」与「未知」。
+   * 这是搜索可用的第一道关卡（自定义 > Chrome > Edge > 内置 Chromium）；
+   * 浏览器不可用时四个平台全都无法搜索。
+   */
+  browserAvailable: boolean | null;
+  /** 实际被选中的浏览器后端（chrome / edge / playwright_chromium / custom / null）。 */
+  browserBackend: string | null;
 }
 
 /** 轮询间隔决策（纯函数）：后台页返回 false（停止轮询），否则固定 3s。 */
@@ -84,6 +93,14 @@ export function useAccounts(): UseAccountsResult {
     ? null
     : healthQuery.data !== false;
 
+  // 浏览器可用性只在健康检查成功（data 为 EnvironmentHealth 对象）时才有意义；
+  // data === false（健康检查失败）或 undefined（未决）时记为 null（未知）。
+  const health = healthQuery.data;
+  const browserAvailable: boolean | null =
+    health && typeof health !== "boolean" ? health.browser_available : null;
+  const browserBackend: string | null =
+    health && typeof health !== "boolean" ? health.browser_backend : null;
+
   const accountsQuery = useQuery({
     ...accountsQueryOptions(apiRunning === true),
     queryFn: async () => {
@@ -98,5 +115,7 @@ export function useAccounts(): UseAccountsResult {
     initialLoaded: accountsQuery.data !== undefined,
     error: accountsQuery.isError || apiRunning === false,
     apiRunning,
+    browserAvailable,
+    browserBackend,
   };
 }

@@ -345,3 +345,98 @@ export function accountOperationLabel(operation: "search" | "favorites", evidenc
   const labels: Record<string, string> = { succeeded: "成功", empty: "完成，无结果", login_required: "要求登录", rate_limited: "受到平台限制", timed_out: "超时", failed: "失败" };
   return `最近${name}${labels[evidence.status] || "未完成"} · ${new Date(evidence.checked_at).toLocaleString("zh-CN")}`;
 }
+
+// ── 账号卡片主结论：这个平台现在能不能搜 ────────────────────────────────
+//
+// 用户最想知道的是「能不能用」。卡片主结论只回答 可用 / 不可用 / 验证中，
+// 所有具体原因、过程、诊断都折叠进详情。判断只依赖前端能拿到的数据：
+//   账号状态（GET /api/search/accounts）+ 本机浏览器可用性（GET /api/health）。
+// 拿不到的维度（如平台冷却 cooldown_until，只在搜索 job 响应里）不在此判断，
+// 留给详情与搜索结果页说明，避免编造。
+
+export type SearchVerdictKind = "available" | "unavailable" | "pending";
+
+export interface SearchVerdict {
+  kind: SearchVerdictKind;
+  /** 最短原因，跟在主结论「可用/不可用」后面。 */
+  reason: string;
+  /** 抖音允许公开搜索（未登录也可能有结果）。 */
+  douyinPublic?: boolean;
+}
+
+/**
+ * 卡片主结论推导。
+ * - 浏览器不可用（全局）：四个平台全 不可用 · 浏览器不可用；
+ * - 抖音：worker 对 dy 开 allow_public_search，跳过登录门禁，只要浏览器可用就能公开搜索；
+ * - 真实验证登录（connected + verified）：可用；
+ * - 其余状态映射为 不可用（带最短原因）或 验证中（verifying/syncing）。
+ */
+export function accountSearchVerdict(
+  acc: Pick<AccountStatusInfo, "platform" | "status" | "verified" | "profile_exists" | "display_name">,
+  browserAvailable: boolean | null,
+): SearchVerdict {
+  if (browserAvailable === false) {
+    return { kind: "unavailable", reason: "浏览器不可用" };
+  }
+  // 抖音公开搜索：不依赖登录态，本机浏览器可用即可搜公开内容。
+  if (acc.platform === "douyin") {
+    return { kind: "available", reason: "抖音允许公开搜索", douyinPublic: true };
+  }
+  if (isAccountVerified(acc)) {
+    return { kind: "available", reason: acc.display_name ? `已登录 ${acc.display_name}` : "已登录" };
+  }
+  switch (acc.status) {
+    case "expired":
+      return { kind: "unavailable", reason: "登录已失效" };
+    case "failed":
+      return { kind: "unavailable", reason: "同步失败" };
+    case "disconnected":
+      return { kind: "unavailable", reason: "未登录" };
+    case "unverified":
+      return { kind: "unavailable", reason: "未登录" };
+    case "unavailable":
+      return { kind: "unavailable", reason: "暂未确认登录" };
+    case "verifying":
+    case "syncing":
+      return { kind: "pending", reason: "正在验证" };
+    default:
+      return { kind: "pending", reason: "状态未知" };
+  }
+}
+
+/**
+ * 动作提示：每张卡只回答一件事——现在该点哪个按钮，或为什么现在不能搜。
+ * 与 accountSearchVerdict 配合，构成「动作卡片」的主信息。
+ */
+export function accountActionHint(
+  acc: Pick<AccountStatusInfo, "platform" | "status" | "verified" | "profile_exists">,
+  verdict: SearchVerdict,
+): string {
+  if (verdict.kind === "unavailable" && verdict.reason === "浏览器不可用") {
+    return "先安装 Chrome / Edge，或执行 playwright install chromium 后刷新本页。";
+  }
+  if (verdict.kind === "pending") {
+    return "正在确认登录状态，稍后回来查看结果。";
+  }
+  if (verdict.kind === "available" && verdict.douyinPublic) {
+    return "可直接搜索公开内容；登录后结果通常更完整。";
+  }
+  if (verdict.kind === "available") {
+    return "已就绪，直接去搜索即可。";
+  }
+  // 不可用（具体状态）：指向最该点的按钮。
+  switch (acc.status) {
+    case "expired":
+      return "点「扫码登录」重新登录。";
+    case "failed":
+      return "点「重新验证」或「扫码登录」再试。";
+    case "disconnected":
+      return "点「扫码登录」开始（也可从已登录的浏览器同步）。";
+    case "unverified":
+      return "点「重新验证」确认，或点「扫码登录」。";
+    case "unavailable":
+      return "点「重新验证」或「扫码登录」试试。";
+    default:
+      return "点「扫码登录」或「重新验证」。";
+  }
+}
