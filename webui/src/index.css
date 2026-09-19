@@ -568,6 +568,15 @@ html.dark .search-submit { color: #101525; }
 .platform-choice[aria-pressed="false"] .pd { opacity: .3 !important; }
 .platform-choice .check { width: 12px; color: var(--siye-brand-ink); font-size: 11px; }
 .platform-choice:hover { background: var(--siye-soft) !important; }
+/* 每颗平台胶囊右边跟一个"单独获取"小按钮：只补/只更新这一个平台的结果。 */
+.platform-choice-group { display: inline-flex; align-items: center; gap: 1px; }
+.platform-fetch {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 6px; color: var(--siye-muted);
+}
+.platform-fetch:hover { color: var(--siye-brand-ink); background: var(--siye-soft); }
+.platform-fetch:disabled { opacity: .4; cursor: not-allowed; }
+.platform-fetch svg { width: 13px; height: 13px; }
 .home-panels { display: grid; grid-template-columns: 1fr 1.3fr; gap: 20px; margin-top: 53px; }
 .panel { min-width: 0; padding: 23px 25px; border: 1px solid var(--siye-line); border-radius: 16px; background: var(--siye-bg); }
 .panel-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 19px; }
@@ -1640,14 +1649,21 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
 .accent-name { margin-top: 8px; font-size: 12px; color: var(--siye-secondary); }
 @media (max-width: 700px) { .accent-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 
-/* 热搜卡片：按平台分列，每列一小组词。右栏（热搜）比左栏（最近搜索）更大，
-   因为"各平台在热什么"需要横向空间，而关键词列表窄一点没关系。 */
-.home-panels { grid-template-columns: 1fr 1.9fr; }
+/* 热搜卡片：顶部平台标签切换，一次展示一个平台的词（两列排），点一条直接搜。
+   右栏比左栏（最近搜索）宽一些，因为词条要放得下长度。 */
+.home-panels { grid-template-columns: 1fr 1.5fr; }
 .home-shell > .home-panels { max-width: 1080px; }
-.trending-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin-top: 12px; }
-.trending-column { min-width: 0; }
-.trending-platform { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; color: rgb(var(--cyber-text-secondary)); font-size: 12px; }
-.trending-list { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.trending-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 12px; }
+.trending-tab {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px; border-radius: 999px;
+  color: rgb(var(--cyber-text-secondary)); font-size: 12px;
+}
+.trending-tab:hover { background: rgb(var(--cyber-bg-tertiary)); }
+.trending-tab.active { color: rgb(var(--brand-ink)); background: rgb(var(--brand-soft)); font-weight: 600; }
+.trending-tab.muted { color: rgb(var(--cyber-text-muted)); }
+.trending-panel-body { min-height: 132px; margin-top: 12px; }
+.trending-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 18px; margin: 0; padding: 0; list-style: none; }
 .trending-list button {
   display: flex; align-items: center; gap: 7px; width: 100%; min-width: 0;
   padding: 3px 4px; border-radius: 6px; text-align: left;
@@ -1658,3 +1674,4 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
 .trending-rank.hot { color: rgb(var(--brand-ink)); font-weight: 600; }
 .trending-word { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .trending-heat { flex: none; color: rgb(var(--cyber-text-muted)); font-size: 11px; font-variant-numeric: tabular-nums; }
+@media (max-width: 700px) { .trending-list { grid-template-columns: 1fr; } }

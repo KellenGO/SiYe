@@ -2,18 +2,19 @@
  * 热搜卡片纯逻辑测试 —— 直接 import 生产模块（webui/src/lib/trendingApi.ts）。
  *
  * 覆盖三件容易出错的事：热度格式化（万/亿进位）、后端脏数据的兜底、
- * 以及"只展示有词的平台"这条展示规则。
+ * 以及标签页规则（四个平台都在、默认选第一个有词的）。
  */
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  MAX_WORDS_PER_COLUMN,
+  MAX_WORDS_SHOWN,
   formatHeat,
+  initialTab,
   toTrendingSnapshot,
   topWords,
-  visiblePlatforms,
+  trendingTabs,
 } from "../src/lib/trendingApi.js";
 
 test("热度按万 / 亿进位，拿不到就返回 null", () => {
@@ -56,7 +57,7 @@ test("规整后端响应：丢掉未知平台、脏项与非法状态", () => {
   assert.equal(snapshot.cached, true);
 });
 
-test("只展示有词的平台，顺序按固定平台顺序", () => {
+test("标签页：四个平台都在，并标出谁有词", () => {
   const snapshot = toTrendingSnapshot({
     platforms: {
       xhs: { status: "unavailable", words: [] },
@@ -65,17 +66,38 @@ test("只展示有词的平台，顺序按固定平台顺序", () => {
       zhihu: { status: "ok", words: [{ rank: 1, word: "b" }] },
     },
   });
-  assert.deepEqual(visiblePlatforms(snapshot), ["douyin", "zhihu"]);
-  assert.deepEqual(visiblePlatforms(undefined), []);
+  const tabs = trendingTabs(snapshot);
+  assert.deepEqual(tabs.map((tab) => tab.platform), ["xhs", "douyin", "bilibili", "zhihu"]);
+  assert.deepEqual(tabs.map((tab) => tab.hasWords), [false, true, false, true]);
+  assert.deepEqual(tabs.map((tab) => tab.status), ["unavailable", "ok", "failed", "ok"]);
 });
 
-test("每列只取前 N 条", () => {
-  const words = Array.from({ length: MAX_WORDS_PER_COLUMN + 5 }, (_, index) => ({
+test("还没拿到数据时四个标签都在（status 记 missing）", () => {
+  const tabs = trendingTabs(undefined);
+  assert.equal(tabs.length, 4);
+  assert.ok(tabs.every((tab) => tab.status === "missing" && !tab.hasWords));
+});
+
+test("默认选中第一个有词的平台", () => {
+  const snapshot = toTrendingSnapshot({
+    platforms: {
+      xhs: { status: "unavailable", words: [] },
+      bilibili: { status: "ok", words: [{ rank: 1, word: "b" }] },
+    },
+  });
+  assert.equal(initialTab(snapshot), "bilibili");
+  // 一个词都没有时退回第一个平台，保证标签页始终有选中项
+  assert.equal(initialTab(toTrendingSnapshot({ platforms: {} })), "xhs");
+  assert.equal(initialTab(undefined), "xhs");
+});
+
+test("每个标签只取前 N 条", () => {
+  const words = Array.from({ length: MAX_WORDS_SHOWN + 5 }, (_, index) => ({
     rank: index + 1,
     word: `w${index}`,
     hotValue: null,
   }));
-  assert.equal(topWords(words).length, MAX_WORDS_PER_COLUMN);
+  assert.equal(topWords(words).length, MAX_WORDS_SHOWN);
   assert.equal(topWords(words, 3).length, 3);
   assert.equal(topWords(words, 0).length, 0);
 });

@@ -2,10 +2,13 @@
  * 热搜词 API 客户端（后端 /api/trending）。
  *
  * 热搜榜只取"词"：点一条 → 交给既有的聚合搜索去搜，内容不用这里管。
- * 按平台分开返回，聚合视图（如果有）由展示层决定 —— 聚合不可逆，分平台随时能合。
+ * 按平台分开返回，卡片用标签切换展示（同时铺四列位置不够，切换更省地方）。
+ *
+ * 获取时机只有两个：**刚进软件时一次**（四个平台一起）、**用户手动刷新**。
+ * 所以这里只提供 IO 函数，定时/聚焦刷新交给 hook 关掉。
  *
  * 分两层，便于测试：
- * - 纯函数：规整 / 选平台 / 取前 N / 热度格式化（trending.test.ts 覆盖）；
+ * - 纯函数：规整 / 标签页 / 取前 N / 热度格式化（trending.test.ts 覆盖）；
  * - IO 函数：axios 调后端。
  */
 
@@ -16,8 +19,8 @@ import { PLATFORM_SLUGS } from "./platformMeta.js";
 
 export const TRENDING_API_BASE = "/api/trending";
 
-/** 面板每列最多放几条词（后端会返回更多，展示层自己截）。 */
-export const MAX_WORDS_PER_COLUMN = 10;
+/** 每个平台标签最多展示几条词（后端会返回更多，展示层自己截）。 */
+export const MAX_WORDS_SHOWN = 15;
 
 export interface TrendingWord {
   rank: number;
@@ -38,6 +41,13 @@ export interface TrendingSnapshot {
   platforms: Partial<Record<PlatformSlug, PlatformTrending>>;
   fetchedAt: string | null;
   cached: boolean;
+}
+
+/** 一个平台标签：平台 + 这次拿到的状态。 */
+export interface TrendingTab {
+  platform: PlatformSlug;
+  status: PlatformTrendingStatus | "missing";
+  hasWords: boolean;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -91,14 +101,26 @@ export function toTrendingSnapshot(raw: unknown): TrendingSnapshot {
   };
 }
 
-/** 有词的平台，按固定顺序（小红书 / 抖音 / B站 / 知乎）。 */
-export function visiblePlatforms(snapshot: TrendingSnapshot | undefined): PlatformSlug[] {
-  if (!snapshot) return [];
-  return PLATFORM_SLUGS.filter((slug) => (snapshot.platforms[slug]?.words.length ?? 0) > 0);
+/** 四个平台都要有标签（没拉到词的也保留，点进去才知道为什么）。 */
+export function trendingTabs(snapshot: TrendingSnapshot | undefined): TrendingTab[] {
+  return PLATFORM_SLUGS.map((platform) => {
+    const info = snapshot?.platforms[platform];
+    return {
+      platform,
+      status: info?.status ?? "missing",
+      hasWords: (info?.words.length ?? 0) > 0,
+    };
+  });
 }
 
-/** 每列只展示前 N 条。 */
-export function topWords(words: TrendingWord[], limit: number = MAX_WORDS_PER_COLUMN): TrendingWord[] {
+/** 默认选中第一个有词的平台；都没有就选第一个。 */
+export function initialTab(snapshot: TrendingSnapshot | undefined): PlatformSlug {
+  const tabs = trendingTabs(snapshot);
+  return (tabs.find((tab) => tab.hasWords) ?? tabs[0]).platform;
+}
+
+/** 每个标签只展示前 N 条。 */
+export function topWords(words: TrendingWord[], limit: number = MAX_WORDS_SHOWN): TrendingWord[] {
   return words.slice(0, Math.max(0, limit));
 }
 
@@ -111,6 +133,7 @@ export function formatHeat(value: number | null): string | null {
   return String(value);
 }
 
+/** 取热搜：`refresh=true` 是用户手动刷新（跳过后端缓存读取）。 */
 export async function fetchTrending(refresh = false): Promise<TrendingSnapshot> {
   const { data } = await axios.get(TRENDING_API_BASE, {
     params: refresh ? { refresh: true } : {},

@@ -222,6 +222,10 @@ export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateA
         onHistoryRemove={removeHistory}
         onHistoryClear={clearHistory}
         limits={limits}
+        // 单独获取某个平台：复用当前的"单平台重试"链路 —— 它用本轮关键词只重跑该平台，
+        // 结果合并进当前结果，其它平台不动；平台是否勾选都不影响。
+        onPlatformFetch={displayJobResponse ? handleRetry : undefined}
+        fetchingPlatform={retryingPlatform}
       />
 
       {isHome && homePreferences.mode === "full" && (homePreferences.history || homePreferences.trending) && (

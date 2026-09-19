@@ -120,6 +120,7 @@
     "placeholderHome": "搜点什么？",
     "clearKeyword": "清空关键词",
     "perPlatformHint": "每个平台本轮最多 {{count}} 条",
+    "fetchPlatformTitle": "单独获取「{{platform}}」的结果（不影响其它平台）",
     "historyItemTitle": "填入「{{keyword}}」（上次搜索：{{platforms}}）",
     "historyPlatforms": "上次：{{platforms}}",
     "deleteHistory": "删除历史「{{keyword}}」"
@@ -132,7 +133,8 @@
     "empty": "暂时没有取到热搜",
     "failed": "热搜暂时取不到，稍后再试",
     "updatedAt": "更新于 {{time}}",
-    "pickHint": "点一条直接搜"
+    "pickHint": "点一条直接搜",
+    "manualOnly": "只在你点刷新时更新"
   },
   "footer": {
     "basedOn": "四野 · 基于 MediaCrawler 的本地聚合检索工作台",

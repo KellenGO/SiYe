@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState, FormEvent, Dispatch, SetStateAction } from "react";
-import { ArrowRight, Search, Loader2, X } from "lucide-react";
+import { ArrowRight, Search, Loader2, X, RotateCcw } from "lucide-react";
 import type { PlatformSlug } from "@/types/search";
 import { PLATFORM_LABELS, PLATFORM_COLORS } from "@/types/search";
 import type { SearchHistoryItem } from "@/lib/searchExperience";
@@ -31,6 +31,13 @@ interface SearchBarProps {
   onHistoryClear: () => void;
   // 每个平台独立搜索数量（仅展示）。
   limits: PlatformLimitMap;
+  /**
+   * 单独获取某个平台的结果（不重跑其它平台）。仅当已有本轮搜索时可用 ——
+   * 它复用的是当前任务的关键词，平台是否处于勾选状态不影响。
+   */
+  onPlatformFetch?: (platform: PlatformSlug) => void;
+  /** 正在单独获取的平台（显示转圈）。 */
+  fetchingPlatform?: PlatformSlug | null;
 }
 
 export function SearchBar({
@@ -50,6 +57,8 @@ export function SearchBar({
   onHistoryRemove,
   onHistoryClear,
   limits,
+  onPlatformFetch,
+  fetchingPlatform,
 }: SearchBarProps) {
   const { t } = useTranslation();
   // 零勾选提交时的提示：不禁用按钮，仅提示先选平台；用户开始勾选即清除。
@@ -233,28 +242,43 @@ export function SearchBar({
         )}
       </div>
 
-      {/* 平台选择：浅色胶囊 */}
+      {/* 平台选择：浅色胶囊。每颗胶囊右边的 ⟳ 是"单独获取这个平台"，
+          用于只补/只更新某一个平台的结果，不重跑其它平台（见 SearchPage.handleRetry）。 */}
       <div className="scope search-scope">
         <span className="scope-label">{t("search.scope")}</span>
         {ALL_PLATFORMS.map((p) => {
           const isSelected = selectedPlatforms.has(p);
           const color = PLATFORM_COLORS[p];
+          const isFetching = fetchingPlatform === p;
           return (
-            <button
-              key={p}
-              type="button"
-              disabled={isSearching}
-              onClick={() => togglePlatform(p)}
-              className="platform-choice"
-              aria-pressed={isSelected}
-            >
-              <i
-                className="pd"
-                style={{ backgroundColor: color, opacity: isSelected ? 1 : 0.45 }}
-              />
-              {PLATFORM_LABELS[p]}
-              <span className="check" aria-hidden="true">{isSelected ? "✓" : ""}</span>
-            </button>
+            <span key={p} className="platform-choice-group">
+              <button
+                type="button"
+                disabled={isSearching}
+                onClick={() => togglePlatform(p)}
+                className="platform-choice"
+                aria-pressed={isSelected}
+              >
+                <i
+                  className="pd"
+                  style={{ backgroundColor: color, opacity: isSelected ? 1 : 0.45 }}
+                />
+                {PLATFORM_LABELS[p]}
+                <span className="check" aria-hidden="true">{isSelected ? "✓" : ""}</span>
+              </button>
+              {onPlatformFetch && (
+                <button
+                  type="button"
+                  className="platform-fetch"
+                  disabled={isSearching || isFetching}
+                  onClick={() => onPlatformFetch(p)}
+                  title={t("search.fetchPlatformTitle", { platform: PLATFORM_LABELS[p] })}
+                  aria-label={t("search.fetchPlatformTitle", { platform: PLATFORM_LABELS[p] })}
+                >
+                  {isFetching ? <Loader2 className="spinner" /> : <RotateCcw />}
+                </button>
+              )}
+            </span>
           );
         })}
         <span className="sr-only">{t("search.perPlatformHint", { count: Math.max(...Object.values(limits)) })}</span>

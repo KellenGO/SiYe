@@ -120,6 +120,7 @@
     "placeholderHome": "Search something?",
     "clearKeyword": "Clear keyword",
     "perPlatformHint": "Up to {{count}} per platform this round",
+    "fetchPlatformTitle": "Fetch only \"{{platform}}\" (other platforms untouched)",
     "historyItemTitle": "Fill \"{{keyword}}\" (previous search: {{platforms}})",
     "historyPlatforms": "Last: {{platforms}}",
     "deleteHistory": "Delete history item \"{{keyword}}\""
@@ -132,7 +133,8 @@
     "empty": "No trending topics right now",
     "failed": "Trending is unavailable, please retry",
     "updatedAt": "Updated {{time}}",
-    "pickHint": "Click one to search"
+    "pickHint": "Click one to search",
+    "manualOnly": "Refreshes only when you ask"
   },
   "footer": {
     "basedOn": "四野 · Local aggregate search built on MediaCrawler",
