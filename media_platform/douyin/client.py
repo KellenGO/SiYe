@@ -61,6 +61,12 @@ class DouYinClient(ReusableHttpClientMixin, AbstractApiClient):
         ]
         self.playwright_page = playwright_page
         self.cookie_dict = cookie_dict
+        # ── 搜索响应诊断（排障用；只记"形状"，绝不记任何凭据值）──
+        # 抖音"搜不到内容"时最需要知道的两件事：请求带没带页面里的 xmst
+        # （msToken 的来源，见 __process_req_params），以及返回体是什么形状。
+        self._last_xmst_present = False
+        self._last_xmst_len = 0
+        self.last_search_diag: Dict = {}
 
     async def __process_req_params(
         self,
@@ -74,6 +80,11 @@ class DouYinClient(ReusableHttpClientMixin, AbstractApiClient):
             return
         headers = headers or self.headers
         local_storage: Dict = await self.playwright_page.evaluate("() => window.localStorage")  # type: ignore
+        # 只记"有/无 + 长度"，绝不记值：日志脱敏会丢弃含 token 字样的行，
+        # 所以这里统一用 xmst 表达（它就是页面里 msToken 的来源键）。
+        _xmst = local_storage.get("xmst")
+        self._last_xmst_present = bool(_xmst)
+        self._last_xmst_len = len(_xmst) if isinstance(_xmst, str) else 0
         common_params = {
             "device_platform": "webapp",
             "aid": "6383",
@@ -218,7 +229,39 @@ class DouYinClient(ReusableHttpClientMixin, AbstractApiClient):
         referer_url = f"https://www.douyin.com/search/{keyword}?aid=f594bbd9-a0e2-4651-9319-ebe3cb6298c1&type=general"
         headers = copy.copy(self.headers)
         headers["Referer"] = urllib.parse.quote(referer_url, safe=':/')
-        return await self.get("/aweme/v1/web/general/search/single/", query_params, headers=headers)
+        response = await self.get("/aweme/v1/web/general/search/single/", query_params, headers=headers)
+        self._record_search_diag(response, offset)
+        return response
+
+    def _record_search_diag(self, response: Any, offset: int) -> None:
+        """记下这次搜索响应的**形状**（排障用，不含任何凭据值）。
+
+        抖音"搜不到内容"时，这一行要能回答：请求带没带页面里的 xmst、
+        平台返回的是空列表还是错误码、有没有 logid（风控判定用得到）。
+        """
+        if not isinstance(response, dict):
+            self.last_search_diag = {"shape": type(response).__name__}
+            utils.logger.warning("[DouYin] search-resp 非字典响应: %s", type(response).__name__)
+            return
+        raw = response.get("data")
+        diag = {
+            "offset": offset,
+            "status_code": response.get("status_code"),
+            "data_len": len(raw) if isinstance(raw, list) else -1,
+            "has_more": response.get("has_more"),
+            "cursor_present": "cursor" in response,
+            "logid_present": bool((response.get("extra") or {}).get("logid"))
+            if isinstance(response.get("extra"), dict) else False,
+            "xmst_present": self._last_xmst_present,
+            "xmst_len": self._last_xmst_len,
+        }
+        self.last_search_diag = diag
+        utils.logger.info(
+            "[DouYin] search-resp offset=%s status_code=%s data_len=%s has_more=%s "
+            "cursor_present=%s logid_present=%s xmst_present=%s xmst_len=%s",
+            diag["offset"], diag["status_code"], diag["data_len"], diag["has_more"],
+            diag["cursor_present"], diag["logid_present"], diag["xmst_present"],
+            diag["xmst_len"])
 
     async def get_collected_awemes(self, cursor: int = 0, count: int = 20) -> Dict:
         """Return the current account's collected videos (read only)."""

@@ -40,16 +40,19 @@ export function PlatformStatus({ response, onRetry, retryingPlatform, retryDisab
         if (!info) return null;
         const status = info.status;
         const statusText = statusLine(status, info);
+        // 0 结果也要能说明原因：抖音登录正常却拿到 0 条时，worker 会给一条
+        // 安全摘要（疑似平台风控），显示出来比光秃秃的"无结果"有用。
+        const detail = status === "empty" && info.error_summary ? info.error_summary : statusText;
         const freshness = freshnessLine(info);
         const remaining = cooldownSeconds(info.cooldown_until, nowMs);
         const isRetrying = retryingPlatform === platform;
         const retryable = Boolean(onRetry && RETRYABLE_STATUSES.includes(status));
 
         return (
-          <span key={platform} className="progress-item" title={[statusText, freshness].filter(Boolean).join(" · ")}>
+          <span key={platform} className="progress-item" title={[detail, freshness].filter(Boolean).join(" · ")}>
             <i className="pd" style={{ backgroundColor: PLATFORM_COLORS[platform] }} aria-hidden="true" />
             {PLATFORM_LABELS[platform]}
-            <small>{remaining > 0 ? `冷却 ${remaining} 秒` : statusText}</small>
+            <small>{remaining > 0 ? `冷却 ${remaining} 秒` : detail}</small>
             {isRetrying ? (
               <span className="text-link"><Loader2 className="spinner" />重试中</span>
             ) : retryable ? (

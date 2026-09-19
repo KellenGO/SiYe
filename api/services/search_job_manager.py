@@ -791,7 +791,12 @@ class SearchJobManager:
 
             if event.event == "status":
                 sd = event.data or {}
-                job.set_platform_status(platform, sd.get("status", "running"))
+                # error_summary 要透传给前端（例如抖音"已登录但 0 条，疑似风控"）。
+                # 只接受字符串，且只作为安全摘要使用。
+                summary = sd.get("error_summary")
+                job.set_platform_status(
+                    platform, sd.get("status", "running"),
+                    error_summary=summary if isinstance(summary, str) and summary else None)
             elif event.event == "result":
                 rd = event.data
                 if isinstance(rd, dict) and rd.get("platform") == platform:

@@ -168,7 +168,8 @@ class DouYinCrawler(AbstractCrawler):
             self._report_metric("navigation")
 
             self.dy_client = await self.create_douyin_client(None)
-            if not await self.dy_client.pong(browser_context=self.browser_context):
+            pong_ok = await self.dy_client.pong(browser_context=self.browser_context)
+            if not pong_ok:
                 # pong 未确认登录：默认行为不变（fail_fast 抛错 / 交互式扫码），
                 # 但聚合搜索可开启 allow_public_search —— 跳过登录门禁直接
                 # 尝试公开搜索（搜索 API 不登录也可能返回结果）。
@@ -190,6 +191,10 @@ class DouYinCrawler(AbstractCrawler):
                         urls=self.cookie_urls,
                     )
             self._report_metric("preflight")
+            # 排障一行：抖音"搜不到内容"时先要知道登录态到底通没通、
+            # 是不是走了匿名公开搜索（匿名搜索常只拿回空列表）。
+            utils.logger.info("[DouYin] preflight pong_ok=%s anonymous_public_search=%s",
+                              pong_ok, self.anonymous_public_search)
             crawler_type_var.set(config.CRAWLER_TYPE)
             if config.CRAWLER_TYPE == "search":
                 await self.search()

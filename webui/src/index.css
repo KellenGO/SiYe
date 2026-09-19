@@ -543,6 +543,11 @@ html.dark .btn.primary { color: #101525; }
   padding: 61px 0 55px;
 }
 .home.minimal { min-height: calc(100vh - 208px); display: flex; flex-direction: column; justify-content: center; padding-bottom: 12vh; }
+/* 搜索区：结果页在搜索框左侧放「返回首页」按钮（主题色圆角矩形），首页只有搜索框。 */
+.search-zone { display: flex; align-items: flex-start; gap: 12px; }
+.home > .search-zone { margin-top: 34px; }
+.search-zone > .search-area { flex: 1 1 auto; min-width: 0; margin-top: 0; }
+.search-zone .home-back { flex: 0 0 auto; margin-top: 7px; border-radius: 10px; }
 .hero { text-align: center; }
 .wordmark { display: inline-block; }
 .wordmark b { color: var(--siye-ink); font-size: 56px; letter-spacing: -2px; font-weight: 700; line-height: 1.15; }
@@ -588,14 +593,16 @@ html.dark .search-submit { color: #101525; }
 .panel-footnote { margin: 27px 0 0; color: var(--siye-muted); font-size: 11px; }
 .home-note { margin: 27px 0 0; color: var(--siye-muted); font-size: 11px; letter-spacing: .2px; text-align: center; }
 
-.search-shell > .search-area { max-width: 800px; margin: 0 0 28px; }
-.search-shell > .search-area .search-box { min-height: 52px; }
-.search-shell > .search-area .search-box input { height: 36px; font-size: 15px; }
-.search-shell > .search-area .search-submit { width: 36px; height: 36px; }
-.search-shell > .search-area .scope { justify-content: flex-start; margin-top: 11px; }
+.search-shell > .search-zone { max-width: 800px; margin: 0 0 28px; }
+.search-shell > .search-zone .search-box { min-height: 52px; }
+.search-shell > .search-zone .search-box input { height: 36px; font-size: 15px; }
+.search-shell > .search-zone .search-submit { width: 36px; height: 36px; }
+.search-shell > .search-zone .scope { justify-content: flex-start; margin-top: 11px; }
 .search-headline { display: flex; align-items: baseline; gap: 12px; margin-bottom: 21px; }
 .search-headline h1 { margin: 0; color: var(--siye-ink); font-size: 23px; letter-spacing: -.5px; font-weight: 650; }
 .search-headline span { color: var(--siye-muted); font-size: 12px; }
+/* 带着结果回到首页时的「查看上次结果」入口：与上面的搜索范围留出间距，别挤在一起。 */
+.home-back-row { display: flex; justify-content: center; margin: 22px 0 4px; }
 .progress-strip { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 23px; padding: 13px 0; border-top: 1px solid var(--siye-line); border-bottom: 1px solid var(--siye-line); margin-bottom: 22px; }
 .progress-item { display: flex; align-items: center; gap: 7px; color: var(--siye-secondary); font-size: 12px; }
 .progress-item small { color: var(--siye-muted); font-size: 11px; }
@@ -849,7 +856,7 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
   .home.minimal { min-height: calc(100vh - 220px); padding-top: 0; padding-bottom: 9vh; }
   .wordmark b { font-size: 47px; }
   .swoosh { width: 113px; height: 12px; }
-  .search-area { margin-top: 29px; }
+  .home > .search-zone { margin-top: 29px; }
   .search-box { min-height: 56px; padding-left: 18px; gap: 10px; }
   .search-box input { font-size: 14px; }
   .search-submit { width: 40px; height: 40px; }
@@ -866,7 +873,7 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
   .description { font-size: 12px; }
   .search-headline { flex-wrap: wrap; gap: 6px 12px; }
   .search-headline h1 { font-size: 21px; }
-  .search-shell > .search-area .scope { justify-content: center; }
+  .search-shell > .search-zone .scope { justify-content: center; }
   .progress-strip { gap: 10px 16px; }
   .progress-item { font-size: 11px; }
   .toolbar { align-items: flex-start; flex-wrap: wrap; gap: 13px; }

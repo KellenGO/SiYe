@@ -14,6 +14,8 @@ and honors behavior keywords carried in the request's ``keyword`` field:
 - ``__no_status__``     → emit only done (manager must decide succeeded/empty
                           on its own, same as the real worker's contract)
 - ``__slow_5__``        → sleep 5s before succeeded + done (timeout tests)
+- ``__empty_with_reason__`` → status empty + safe ``error_summary``
+                          （验证 manager 把 0 结果的原因透传给前端）
 - ``__exit_3__``        → succeeded + done, then ``os._exit(3)``
                           (done + nonzero → strict failed)
 - ``__delayed_exit_0__`` → succeeded + done, sleep 0.3s, then exit 0
@@ -83,6 +85,12 @@ def _handle_request(request) -> int:
         emit_status(request.job_id, platform, "succeeded")
     elif keyword == "__no_status__":
         pass
+    elif keyword == "__empty_with_reason__":
+        # 0 结果 + 安全原因：验证 manager 会把 error_summary 透传给前端
+        emit_status(request.job_id, platform, "empty", {
+            "message": "No results found.",
+            "error_summary": "平台返回 0 条（测试原因）",
+        })
     elif keyword == "__crash_7__":
         os._exit(7)  # 硬崩溃：不发 done
     elif keyword == "__slow_5__":

@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, Clock3, RotateCcw, Loader2, UserCog, RefreshCw } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Clock3, RotateCcw, Loader2, UserCog, RefreshCw } from "lucide-react";
 import { SearchBar } from "./SearchBar";
 import { PlatformStatus } from "./PlatformStatus";
 import { ResultTabs } from "./ResultTabs";
@@ -20,20 +20,22 @@ interface SearchPageProps {
   onNavigateAccounts?: () => void;
 }
 
-/** 这些状态都算"这个平台这次没搜到"：失败就自动取消勾选，并弹一次顶部提示。 */
-const FAILED_PLATFORM_STATUSES = ["failed", "login_required", "timed_out", "rate_limited"] as const;
+/** 这些状态都算"这个平台这次没搜到"：失败就自动取消勾选，并弹一次顶部提示。
+ *  `empty`（0 条）也算 —— 用户明确要求"没搜到东西就算搜索失败"。 */
+const FAILED_PLATFORM_STATUSES = ["failed", "login_required", "timed_out", "rate_limited", "empty"] as const;
 
 /** 已提醒过的 "job:平台" 组合。
  *  必须是模块级而不是组件内 ref：切到别的页面再切回来时 SearchPage 会重新挂载，
  *  任务响应会被重新恢复 —— ref 挡不住重复弹窗，模块级集合挡得住（SPA 生命周期内有效）。 */
 const handledFailureKeys = new Set<string>();
 
-/** 弹窗里陈述的原因（不吓人、不复述 error_summary 原文）。 */
+/** 弹窗里陈述的原因（不吓人、不复述 error_summary 原文）—— 平台自带安全原因时优先用它的。 */
 const FAILURE_REASON_KEYS: Record<string, string> = {
   login_required: "search.reasonLoginRequired",
   failed: "search.reasonFailed",
   timed_out: "search.reasonTimedOut",
   rate_limited: "search.reasonRateLimited",
+  empty: "search.reasonEmpty",
 };
 
 /**
@@ -173,7 +175,10 @@ export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateA
 
     fresh.forEach((platform) => {
       const label = PLATFORM_LABELS[platform] || platform;
-      const reason = t(FAILURE_REASON_KEYS[job.platforms[platform].status] ?? "search.reasonFailed");
+      const info = job.platforms[platform];
+      // 平台自带的安全原因（例如抖音"疑似平台风控"）优先，比通用文案有信息量。
+      const reason = info.error_summary
+        || t(FAILURE_REASON_KEYS[info.status] ?? "search.reasonFailed");
       toast(t("search.platformFailedToast", { platform: label, reason }), {
         description: wasChecked.includes(platform)
           ? t("search.autoUnchecked", { platform: label })
@@ -203,36 +208,73 @@ export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateA
 
   const showInitialIdle = !displayJobResponse && !busy && !hasError;
   const showInitialLoading = !displayJobResponse && busy && !hasError;
-  // 「首页」只在还没有本轮结果时显示大搜索框；切到别的页面再回来时，
-  // 保留切走前的搜索状态，而不是重置成初始首页（任务响应会自动恢复）。
-  const isHome = homeRequested && !displayJobResponse && !busy;
+  // 首页视图与结果视图是**两页**，可以来回切：
+  // - 「返回首页」只切视图，**不删结果、不动任务**；
+  // - 首页在有结果时会显示一个「查看上次结果」入口切回来；
+  // - 发起点搜索（busy）时自动切到结果视图，否则用户会看着首页等结果；
+  // - 视图只在内存（刷新后：有结果就是结果页，保持原来的"恢复搜索状态"行为）。
+  const [view, setView] = useState<"results" | "home">(
+    latestJobResponse ? "results" : "home"
+  );
+  const prevHomeRequested = useRef(homeRequested);
+  useEffect(() => {
+    // 只在"首页被新点了一次"（false → true）时切过去；挂载时不抢，
+    // 这样带结果恢复页面仍然停在结果页。
+    if (homeRequested && !prevHomeRequested.current) setView("home");
+    prevHomeRequested.current = homeRequested;
+  }, [homeRequested]);
+  useEffect(() => {
+    if (busy) setView("results");
+  }, [busy]);
+  const isHome = view === "home";
+  const goHome = useCallback(() => setView("home"), []);
+  const showLastResults = useCallback(() => setView("results"), []);
 
   return (
     <div className={isHome ? `home ${homePreferences.mode === "min" ? "minimal" : ""}` : "preview-container search-shell"}>
       {isHome && <div className="hero"><div className="wordmark" aria-label="四野"><b>四野</b><svg className="swoosh" viewBox="0 0 120 12" aria-hidden="true"><defs><linearGradient id="wordmark-gradient"><stop stopColor="#6677fb"/><stop offset="1" stopColor="#29ddcc"/></linearGradient></defs><path d="M3 9Q60 0 117 9" stroke="url(#wordmark-gradient)" strokeWidth="3.5" fill="none" strokeLinecap="round"/></svg></div></div>}
-      {/* 搜索面板（含聚焦浮层：最近搜索 / 推荐搜索） */}
-      <SearchBar
-        home={isHome}
-        keyword={keyword}
-        onKeywordChange={setKeyword}
-        selectedPlatforms={selectedPlatforms}
-        onPlatformsChange={handlePlatformsChange}
-        onSearch={handleFullSearchLocal}
-        isSearching={busy}
-        onCancel={handleCancelClick}
-        isCancelling={isCancellingState}
-        onReset={handleResetLocal}
-        history={history}
-        onKeywordPick={handleKeywordPick}
-        keywordPickRequest={keywordPickRequest}
-        onHistoryRemove={removeHistory}
-        onHistoryClear={clearHistory}
-        limits={limits}
-        // 单独获取某个平台：只跑这一个平台并把结果并进现有结果（其它平台不动，
-        // 平台是否勾选都不影响）。实现见 handleFetchPlatform。
-        onPlatformFetch={displayJobResponse ? handleFetchPlatform : undefined}
-        fetchingPlatform={retryingPlatform}
-      />
+      {/* 搜索区：结果页在搜索框**左侧**放一个主题色圆角「返回首页」按钮；首页只有搜索框。 */}
+      <div className="search-zone">
+        {!isHome && (
+          <button type="button" className="btn primary home-back" onClick={goHome}>
+            <ArrowLeft className="w-3.5 h-3.5" />
+            {t("search.backToHome")}
+          </button>
+        )}
+        {/* 搜索面板（含聚焦浮层：最近搜索 / 推荐搜索） */}
+        <SearchBar
+          home={isHome}
+          keyword={keyword}
+          onKeywordChange={setKeyword}
+          selectedPlatforms={selectedPlatforms}
+          onPlatformsChange={handlePlatformsChange}
+          onSearch={handleFullSearchLocal}
+          isSearching={busy}
+          onCancel={handleCancelClick}
+          isCancelling={isCancellingState}
+          onReset={handleResetLocal}
+          history={history}
+          onKeywordPick={handleKeywordPick}
+          keywordPickRequest={keywordPickRequest}
+          onHistoryRemove={removeHistory}
+          onHistoryClear={clearHistory}
+          limits={limits}
+          // 单独获取某个平台：只跑这一个平台并把结果并进现有结果（其它平台不动，
+          // 平台是否勾选都不影响）。实现见 handleFetchPlatform。
+          // **只在结果页出现**：首页那排平台只用来勾选搜索范围，不提供单独重搜。
+          onPlatformFetch={!isHome && displayJobResponse ? handleFetchPlatform : undefined}
+          fetchingPlatform={retryingPlatform}
+        />
+      </div>
+
+      {/* 带着结果回到首页时的回程入口：结果没有被清掉，点这里回去。 */}
+      {isHome && displayJobResponse && (
+        <div className="home-back-row">
+          <button type="button" className="btn ghost small" onClick={showLastResults}>
+            {t("search.viewLastResults", { count: displayJobResponse.results.length })}
+          </button>
+        </div>
+      )}
 
       {isHome && homePreferences.mode === "full" && (homePreferences.history || homePreferences.trending) && (
         <div className="home-panels" style={!homePreferences.history || !homePreferences.trending ? { gridTemplateColumns: "1fr" } : undefined} aria-label="首页快捷内容">

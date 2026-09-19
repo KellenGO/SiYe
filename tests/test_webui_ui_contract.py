@@ -177,9 +177,53 @@ def test_login_required_reason_is_surfaced():
 
 
 def test_platform_status_exposes_full_status_text():
-    """状态文案被截断时用 title 提供完整内容。"""
+    """状态文案被截断时用 title 提供完整内容；0 结果也要能带上安全原因。
+
+    `detail` = 常规状态文案，或（empty 且有 error_summary 时）那条安全原因 ——
+    两者都进 title，保证截断后仍能看全。
+    """
     assert "statusText" in _PLATFORM_STATUS
-    assert "title={[statusText, freshness]" in _PLATFORM_STATUS
+    assert "title={[detail, freshness]" in _PLATFORM_STATUS
+    assert 'info.error_summary' in _PLATFORM_STATUS
+
+
+# ── 结果页「返回首页」+ 0 结果算失败（2026-09-19）────────────────────────
+
+def test_back_home_button_sits_left_of_search_box_with_brand_fill():
+    """返回首页按钮在搜索框左侧（.search-zone 内、SearchBar 之前）且用主题色底。"""
+    assert '"btn primary home-back"' in _SEARCH_PAGE
+    zone = _SEARCH_PAGE.index('className="search-zone"')
+    assert zone < _SEARCH_PAGE.index("<SearchBar", zone), "按钮必须在搜索框之前（左侧）"
+    css = (_ROOT / "index.css").read_text(encoding="utf-8")
+    assert ".search-zone .home-back" in css
+    assert ".search-zone > .search-area" in css
+
+
+def test_back_home_does_not_clear_results():
+    """「返回首页」只切视图：不能顺手清结果/任务。"""
+    go_home = _SEARCH_PAGE.split("const goHome = useCallback")[1].split("), [")[0]
+    assert "handleResetLocal" not in go_home, "回首页不该清结果（用户明确要求结果不删）"
+
+
+def test_home_view_hides_per_platform_fetch_button():
+    """首页那排平台只用于勾选范围：不显示 ⟳ 单独重搜按钮。"""
+    assert "onPlatformFetch={!isHome && displayJobResponse ? handleFetchPlatform : undefined}" in _SEARCH_PAGE
+
+
+def test_empty_result_counts_as_failure_and_surfaces_reason():
+    """没搜到东西也算搜索失败：进顶部提示那条链路，并优先用平台给的安全原因。"""
+    assert '"empty"' in _SEARCH_PAGE.split("FAILED_PLATFORM_STATUSES = [")[1].split("]")[0]
+    assert 'empty: "search.reasonEmpty"' in _SEARCH_PAGE
+    assert "info.error_summary" in _SEARCH_PAGE
+    assert _zh("search.reasonEmpty")
+
+
+def test_webui_i18n_back_home_keys_exist():
+    """返回首页 / 查看上次结果 两个键在两种语言里都要有。"""
+    for locale in ("zh-CN", "en-US"):
+        data = json.loads((_LOCALES / locale / "common.json").read_text(encoding="utf-8"))
+        assert data["search"]["backToHome"]
+        assert "{{count}}" in data["search"]["viewLastResults"]
 
 
 def test_app_root_mounts_autosync():

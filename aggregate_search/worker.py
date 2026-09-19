@@ -219,6 +219,9 @@ async def _run_standard_search(
     config.MAX_CONCURRENCY_NUM = 2 if core_platform == "xhs" else 1
     fast_crawler_holder: List[Any] = [None]
     browser_crawler_holder: List[Any] = [None]
+    # 浏览器路径是否走了"匿名公开搜索"（pong 未通过但允许继续搜）：
+    # 0 结果时用它区分"登录态失效"与"已登录但平台没给内容"。
+    anonymous_public_search_holder: List[bool] = [False]
 
     def emit_provider_metrics(trace: ProviderChainTrace) -> None:
         """Emit provider execution metadata using IDs only."""
@@ -280,6 +283,8 @@ async def _run_standard_search(
             )
             emit_status(job_id, platform, "running")
             await asyncio.wait_for(crawler.start(), timeout=WORKER_TIMEOUT_SECONDS)
+            anonymous_public_search_holder[0] = bool(
+                getattr(crawler, "anonymous_public_search", False))
             return pagination.emitted if pagination else total_emitted
 
         async def cleanup_browser_provider() -> None:
@@ -320,8 +325,22 @@ async def _run_standard_search(
                     and _classify_error(exc) != "rate_limited"))
             emit_provider_metrics(trace)
             if chain_result.emitted_count == 0:
-                emit_status(job_id, platform, "empty",
-                            {"message": "No results found."})
+                # 抖音 0 条要分清两种情况（实测：登录正常时平台会返回
+                # status_code=0、logid 有、data 为空的"软风控"响应）：
+                #   匿名公开搜索 → 登录态失效，报 login_required 让用户去登录；
+                #   已登录 → empty，但把安全原因带上，别让用户只看到"无结果"。
+                if core_platform == "dy" and anonymous_public_search_holder[0]:
+                    emit_error(job_id, platform, "login_required",
+                               "抖音未登录或登录态失效，公开搜索没有返回内容，请前往账号设置重新登录")
+                elif core_platform == "dy":
+                    emit_status(job_id, platform, "empty", {
+                        "message": "No results found.",
+                        # 前端会把这条当作"搜索失败"的原因弹在顶部提示里，文案要短。
+                        "error_summary": "疑似平台风控",
+                    })
+                else:
+                    emit_status(job_id, platform, "empty",
+                                {"message": "No results found."})
             else:
                 emit_status(job_id, platform, "succeeded")
         except asyncio.CancelledError:

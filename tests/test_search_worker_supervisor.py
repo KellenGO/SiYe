@@ -440,6 +440,19 @@ def test_worker_log_tail_is_logged_when_platform_ends_empty(caplog):
     assert any("page: 0 is empty" in m for m in messages)
 
 
+@pytest.mark.asyncio
+async def test_empty_status_error_summary_reaches_response(manager):
+    """worker 上报 `empty` + error_summary 时，原因要出现在响应里。
+
+    抖音"已登录但返回 0 条"就靠这条把"疑似平台风控"告诉前端，
+    否则用户只能看到光秃秃的"无结果"。
+    """
+    resp = await _run_to_completion(manager, _req("__empty_with_reason__"))
+    info = resp.platforms["xhs"]
+    assert info.status == "empty"
+    assert info.error_summary == "平台返回 0 条（测试原因）"
+
+
 def test_worker_log_tail_not_logged_when_platform_succeeded(caplog):
     """有结果时不该刷日志（正常路径保持安静）。"""
     manager = sjm.SearchJobManager()
