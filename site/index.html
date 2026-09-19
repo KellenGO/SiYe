@@ -679,6 +679,19 @@ html.js .reveal.in{opacity:1;transform:none}
         <p class="note">cookie 库读不出来时一律放行，绝不因为读不出文件就把搜索拦掉。</p>
       </article>
 
+      <article class="card reveal">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-3 6.2"/><path d="M20 5v6h-6"/></svg></span>
+        <h3>单平台重搜 ⟳</h3>
+        <p>每颗平台旁边一个 ⟳：只重跑这一个平台，拿到的是<strong>与上一轮不重复</strong>的新内容，替换它自己那一份，其它平台完全不动，也不会多出一批。</p>
+        <p class="note">「换一批」才是往后叠加新内容，「刷新结果」是整组重搜 —— 三种刷新各管一件事。</p>
+      </article>
+
+      <article class="card reveal">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg></span>
+        <h3>没搜到会说清原因</h3>
+        <p>某个平台 0 条 / 失败 / 限流 / 未登录时，页面上方直接说明原因（被平台风控时显示「疑似平台风控」），并自动取消它的勾选，不用再对着「无结果」猜。</p>
+      </article>
+
     </div>
 
     <details class="more reveal">

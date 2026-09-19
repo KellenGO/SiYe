@@ -19,4 +19,4 @@
 from __future__ import annotations
 
 #: 当前版本号（与 pyproject.toml、webui/package.json 保持一致）。
-APP_VERSION = "0.2.3"
+APP_VERSION = "0.3.0"
