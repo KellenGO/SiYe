@@ -270,6 +270,53 @@ async def test_account_change_rejects_old_progress(manager, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_continuation_can_add_a_new_platform(manager, monkeypatch):
+    """「单独获取某个平台」：换批时允许把新平台并进会话。
+
+    用户场景：这一轮只搜了小红书和B站，之后想补看知乎，且不想重搜前两个。
+    要求：知乎只跑它自己；结果显示三个平台；原会话继续有效（换批照常可用）。
+    """
+    calls = []
+
+    async def worker(job, platform):
+        req = WorkerRequest.model_validate_json(manager._build_request_json(job, platform))
+        calls.append(req)
+        start = req.pagination["page"]
+        for i in range(req.limit):
+            # 各平台内容互不相同，避免跨平台合卡干扰断言。
+            job.add_result(platform, result(platform, f"{platform}-{start + i}"))
+        job.apply_metrics(platform, {"pagination": PageState(page=start + req.limit).model_dump()})
+        job.set_platform_status(platform, "succeeded")
+
+    monkeypatch.setattr(manager, "_run_worker", worker)
+
+    first = await search(manager, platforms=["xhs", "bilibili"], limit_per_platform=2)
+    assert [c.platform for c in calls] == ["xhs", "bilibili"]
+
+    second = await search(manager, platforms=["zhihu"], limit_per_platform=2,
+                          continue_from=first.job_id)
+
+    # 只跑了新平台，其它平台没有被重搜
+    assert [c.platform for c in calls] == ["xhs", "bilibili", "zhihu"]
+    # 新平台的结果补进来了
+    assert {r.content_id for r in second.results if r.platform == "zhihu"} == {"zhihu-1", "zhihu-2"}
+    # 响应里三个平台的状态都在（状态条与各平台条数不能只剩一个）
+    assert set(second.platforms) == {"xhs", "bilibili", "zhihu"}
+    assert second.overall == "completed"
+    # 新平台进了会话，原平台进度没有被重置
+    session = manager._active_job.exploration
+    assert session.platforms == ["xhs", "bilibili", "zhihu"]
+    assert session.states["xhs"].page == 3 and session.states["bilibili"].page == 3
+    assert session.states["zhihu"].page == 3
+
+    # 原会话仍在 → 之后"换一批"照常可用（这正是不能改走独立任务的原因）
+    third = await search(manager, platforms=["xhs", "bilibili"], limit_per_platform=2,
+                         continue_from=second.job_id)
+    assert third.exploration["round"] == 3
+    assert manager._active_job.exploration.states["xhs"].page == 5
+
+
+@pytest.mark.asyncio
 async def test_cancel_commits_checkpoint_and_allows_next_batch(manager, monkeypatch):
     install_worker(manager, monkeypatch)
     first = await search(manager, limit_per_platform=2)

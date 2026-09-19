@@ -307,8 +307,11 @@ class SearchJobManager:
                         or previous.keyword != job.keyword or previous.exploration is None):
                     raise InvalidPlatformsError("上一轮已失效，请从当前搜索继续或重新搜索")
                 session = previous.exploration
-                if any(p not in session.platforms for p in platforms):
-                    raise InvalidPlatformsError("换批不能新增平台，请重新搜索")
+                # 单独获取某个平台：允许在换批里把一个**新平台**并进会话
+                # （它的进度从零开始），而不是拒绝。这样它的结果能补进来，
+                # 而且原会话继续有效 —— 之后「换一批」照常可用。
+                for platform in [p for p in platforms if p not in session.platforms]:
+                    session.add_platform(job, platform)
                 if not any(session.more(p) for p in platforms):
                     raise InvalidPlatformsError("当前主题没有更多可获取内容，或已达到累计上限")
                 job.exploration = session
@@ -1183,12 +1186,13 @@ class _ActiveJob:
                 if source.platform == result.platform and source.content_id == result.content_id:
                     source.metrics = dict(result.metrics)
 
-    def _compute_overall(self) -> str:
+    def _compute_overall(self, statuses: Optional[List[str]] = None) -> str:
         if self._cancelled:
             return "cancelled"
         if self._cancelling:
             return "cancelling"
-        statuses = [info.status for info in self.platforms_state.values()]
+        if statuses is None:
+            statuses = [info.status for info in self.platforms_state.values()]
         terminal = {"succeeded", "empty", "login_required",
                     "rate_limited", "timed_out", "failed", "cancelled"}
         if not all(s in terminal for s in statuses):
@@ -1201,23 +1205,37 @@ class _ActiveJob:
             return "partial"
         return "failed"
 
+    def response_statuses(self) -> Dict[str, PlatformStatusInfo]:
+        """这次响应该带上哪些平台的状态。
+
+        换批（含"单独获取某个平台"）只跑其中一部分平台，但用户看到的是整轮结果：
+        把会话里其它平台的既有状态一起带上，平台状态条与各平台条数才不会突然只剩一个。
+        本次真正在跑的平台用实时状态覆盖。
+        """
+        statuses: Dict[str, PlatformStatusInfo] = {}
+        if self.continuation and self.exploration is not None:
+            statuses.update(self.exploration.platforms_state)
+        statuses.update(self.platforms_state)
+        return statuses
+
     def to_response(self) -> SearchJobResponse:
         all_results = self.response_results()
+        statuses = self.response_statuses()
         pdict: Dict[str, PlatformStatusInfo] = {}
-        for p in self.platforms:
-            info = self.platforms_state.get(p)
-            if info:
-                pdict[p] = PlatformStatusInfo(
-                    status=info.status, result_count=info.result_count,
-                    error_summary=info.error_summary,
-                    cache_hit=info.cache_hit, fetched_at=info.fetched_at,
-                    cooldown_until=info.cooldown_until, cooldown_skipped=info.cooldown_skipped,
-                    timings=self.timings.get(p))
+        for p, info in statuses.items():
+            info = self.platforms_state.get(p, info)
+            pdict[p] = PlatformStatusInfo(
+                status=info.status, result_count=info.result_count,
+                error_summary=info.error_summary,
+                cache_hit=info.cache_hit, fetched_at=info.fetched_at,
+                cooldown_until=info.cooldown_until, cooldown_skipped=info.cooldown_skipped,
+                timings=self.timings.get(p))
         # Round 16: 平台的终态 status 事件会让 _compute_overall() 先于
         # finalize() 变成 terminal —— 此时 job 级 total_ms 尚未写入。这里
         # 在已终态时实时计算，避免响应出现"overall=completed 但 total_ms
         # 为 None"的竞态窗口（finalize 仍会写入最终值，二者一致）。
-        overall = self._compute_overall()
+        # 换批时按"整轮"的平台状态算，避免只跑了 1 个平台就报 completed。
+        overall = self._compute_overall([info.status for info in statuses.values()])
         job_total = self.total_ms
         if job_total is None and overall in (
                 "completed", "partial", "failed", "cancelled"):

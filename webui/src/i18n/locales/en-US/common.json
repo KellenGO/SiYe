@@ -115,6 +115,7 @@
     "reasonRateLimited": "rate limited by the platform",
     "platformFailedToast": "{{platform}}: {{reason}}, nothing fetched this time",
     "autoUnchecked": "Unchecked {{platform}} automatically",
+    "failedNotChecked": "No results from {{platform}} this time",
     "noResults": "No results on this platform",
     "retrying": "Retrying",
     "placeholderHome": "Search something?",

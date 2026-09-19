@@ -156,6 +156,43 @@ export function useSearchExperience() {
     [busy, base, state.display.jobResponse, limits, handleFullSearch]
   );
 
+  // ── 单独获取某个平台（"搜索范围"里每颗胶囊右边的 ⟳）────────────────────
+  // 与 handleRetry 的区别：这是"只补/只更新这一个平台，结果并进现有结果"。
+  // - 属于本轮换批会话时带上 continue_from：后端会把该平台并进会话
+  //   （新平台允许加入，进度从零开始），只跑它一个，其它平台不重搜；
+  // - 走 retry_* 事件而不是 search_accepted：不写搜索历史、不改搜索范围勾选；
+  // - 合并用 append：该平台原有的内容不会因为补了一次就消失。
+  const handleFetchPlatform = useCallback(
+    async (platform: PlatformSlug) => {
+      if (busy || taskInFlightRef.current) return;
+      const current = state.display.jobResponse;
+      const keyword = current?.keyword;
+      if (!current || !keyword) return;
+      const seq = ++taskSeqRef.current;
+      taskInFlightRef.current = true;
+      userStartedRef.current = true;
+      dispatch({ type: "retry_start", platform, mode: "append" });
+      try {
+        const job = await base.startSearch(
+          keyword,
+          [platform],
+          20,
+          selectedPlatformLimits(limits, [platform]),
+          true,
+          current.exploration ? current.job_id : undefined
+        );
+        if (taskSeqRef.current !== seq) return;
+        dispatch({ type: "retry_accepted", jobId: job.job_id });
+      } catch (err) {
+        if (taskSeqRef.current !== seq) return;
+        dispatch({ type: "search_rejected", errorSummary: safeErrorSummary(err) });
+      } finally {
+        if (taskSeqRef.current === seq) taskInFlightRef.current = false;
+      }
+    },
+    [busy, base, state.display.jobResponse, limits]
+  );
+
   // 用户明确点击"重新搜索"：整组绕过短缓存，获取平台新结果。
   const handleRefresh = useCallback(() => {
     const current = state.display.jobResponse;
@@ -275,6 +312,7 @@ export function useSearchExperience() {
     handleRefresh,
     handleNextBatch,
     handleRetry,
+    handleFetchPlatform,
     handleCancel,
     handleReset,
     // base 透传

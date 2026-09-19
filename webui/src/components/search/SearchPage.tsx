@@ -67,6 +67,7 @@ export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateA
     handleRefresh,
     handleNextBatch,
     handleRetry,
+    handleFetchPlatform,
     handleCancel,
     handleReset,
     isCancelling,
@@ -164,14 +165,20 @@ export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateA
     if (fresh.length === 0) return;
     fresh.forEach((platform) => handledFailureKeys.add(`${job.job_id}:${platform}`));
 
-    const remaining = Array.from(selectedPlatforms).filter((platform) => !fresh.includes(platform));
-    handlePlatformsChange(remaining);
+    // 只取消"确实勾着"的失败平台；单独获取一个本来就没勾选的平台失败时，
+    // 不该动搜索范围，提示也不该说"已自动取消勾选"。
+    const wasChecked = fresh.filter((platform) => selectedPlatforms.has(platform));
+    if (wasChecked.length > 0) {
+      handlePlatformsChange(Array.from(selectedPlatforms).filter((platform) => !fresh.includes(platform)));
+    }
 
     fresh.forEach((platform) => {
       const label = PLATFORM_LABELS[platform] || platform;
       const reason = t(FAILURE_REASON_KEYS[job.platforms[platform].status] ?? "search.reasonFailed");
       toast(t("search.platformFailedToast", { platform: label, reason }), {
-        description: t("search.autoUnchecked", { platform: label }),
+        description: wasChecked.includes(platform)
+          ? t("search.autoUnchecked", { platform: label })
+          : t("search.failedNotChecked", { platform: label }),
         position: "top-center",
         duration: 6000,
         className: "siye-toast-info",
@@ -222,9 +229,9 @@ export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateA
         onHistoryRemove={removeHistory}
         onHistoryClear={clearHistory}
         limits={limits}
-        // 单独获取某个平台：复用当前的"单平台重试"链路 —— 它用本轮关键词只重跑该平台，
-        // 结果合并进当前结果，其它平台不动；平台是否勾选都不影响。
-        onPlatformFetch={displayJobResponse ? handleRetry : undefined}
+        // 单独获取某个平台：只跑这一个平台并把结果并进现有结果（其它平台不动，
+        // 平台是否勾选都不影响）。实现见 handleFetchPlatform。
+        onPlatformFetch={displayJobResponse ? handleFetchPlatform : undefined}
         fetchingPlatform={retryingPlatform}
       />
 

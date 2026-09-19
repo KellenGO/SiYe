@@ -115,6 +115,7 @@
     "reasonRateLimited": "被平台限流",
     "platformFailedToast": "{{platform}}：{{reason}}，本次没有搜到内容",
     "autoUnchecked": "已自动取消「{{platform}}」的勾选",
+    "failedNotChecked": "「{{platform}}」这次没有取到内容",
     "noResults": "该平台暂无结果",
     "retrying": "正在重试",
     "placeholderHome": "搜点什么？",
