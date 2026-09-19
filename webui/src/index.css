@@ -577,13 +577,6 @@ html.dark .search-submit { color: #101525; }
 .words button { padding: 0; color: var(--siye-secondary); font-size: 13px; text-align: left; }
 .words button:hover { color: var(--siye-brand-ink); text-decoration: underline; text-underline-offset: 4px; }
 .panel-footnote { margin: 27px 0 0; color: var(--siye-muted); font-size: 11px; }
-.recent-results { display: grid; gap: 12px; }
-.recent-result { display: flex; align-items: center; min-width: 0; gap: 9px; }
-.recent-result > a, .recent-result-body { display: grid; min-width: 0; flex: 1; gap: 3px; color: var(--siye-secondary); }
-.recent-result > a:hover .recent-result-title { color: var(--siye-brand-ink); }
-.recent-result-title { overflow: hidden; color: var(--siye-ink); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.recent-result small { overflow: hidden; color: var(--siye-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-.recent-result > svg { width: 13px; height: 13px; color: var(--siye-muted); flex: 0 0 auto; }
 .home-note { margin: 27px 0 0; color: var(--siye-muted); font-size: 11px; letter-spacing: .2px; text-align: center; }
 
 .search-shell > .search-area { max-width: 800px; margin: 0 0 28px; }
@@ -1646,3 +1639,22 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
 .accent-swatch:focus-visible { outline: 2px solid var(--siye-brand); outline-offset: 3px; }
 .accent-name { margin-top: 8px; font-size: 12px; color: var(--siye-secondary); }
 @media (max-width: 700px) { .accent-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+/* 热搜卡片：按平台分列，每列一小组词。右栏（热搜）比左栏（最近搜索）更大，
+   因为"各平台在热什么"需要横向空间，而关键词列表窄一点没关系。 */
+.home-panels { grid-template-columns: 1fr 1.9fr; }
+.home-shell > .home-panels { max-width: 1080px; }
+.trending-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin-top: 12px; }
+.trending-column { min-width: 0; }
+.trending-platform { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; color: rgb(var(--cyber-text-secondary)); font-size: 12px; }
+.trending-list { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.trending-list button {
+  display: flex; align-items: center; gap: 7px; width: 100%; min-width: 0;
+  padding: 3px 4px; border-radius: 6px; text-align: left;
+  color: rgb(var(--cyber-text-secondary)); font-size: 13px;
+}
+.trending-list button:hover { background: rgb(var(--cyber-bg-tertiary)); color: rgb(var(--brand-ink)); }
+.trending-rank { flex: none; width: 15px; text-align: center; color: rgb(var(--cyber-text-muted)); font-size: 11px; font-variant-numeric: tabular-nums; }
+.trending-rank.hot { color: rgb(var(--brand-ink)); font-weight: 600; }
+.trending-word { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trending-heat { flex: none; color: rgb(var(--cyber-text-muted)); font-size: 11px; font-variant-numeric: tabular-nums; }

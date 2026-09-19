@@ -124,6 +124,16 @@
     "historyPlatforms": "Last: {{platforms}}",
     "deleteHistory": "Delete history item \"{{keyword}}\""
   },
+  "trending": {
+    "title": "Trending",
+    "subtitle": "See what each platform is talking about",
+    "refresh": "Refresh",
+    "loading": "Loading trending topics…",
+    "empty": "No trending topics right now",
+    "failed": "Trending is unavailable, please retry",
+    "updatedAt": "Updated {{time}}",
+    "pickHint": "Click one to search"
+  },
   "footer": {
     "basedOn": "四野 · Local aggregate search built on MediaCrawler",
     "localFirst": "Local first · Open source",

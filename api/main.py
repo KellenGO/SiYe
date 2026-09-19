@@ -33,6 +33,7 @@ from base.runtime_paths import resource_path
 from .routers.search import search_router
 from .routers.library import library_router
 from .routers.history import history_router
+from .routers.trending import trending_router
 from .schemas.search import HealthResponse
 from .services.environment_health import build_health_response
 from .services.search_job_manager import search_job_manager
@@ -88,6 +89,7 @@ app.add_middleware(
 app.include_router(search_router)  # search router includes its own /api/search prefix
 app.include_router(library_router)  # local bookmark library, /api/library prefix
 app.include_router(history_router)  # watch history, /api/history prefix
+app.include_router(trending_router)  # platform trending words, /api/trending prefix
 
 
 @app.get("/api/health", response_model=HealthResponse)

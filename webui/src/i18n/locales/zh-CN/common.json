@@ -124,6 +124,16 @@
     "historyPlatforms": "上次：{{platforms}}",
     "deleteHistory": "删除历史「{{keyword}}」"
   },
+  "trending": {
+    "title": "热搜",
+    "subtitle": "看看各平台在热什么",
+    "refresh": "刷新",
+    "loading": "正在获取各平台热搜…",
+    "empty": "暂时没有取到热搜",
+    "failed": "热搜暂时取不到，稍后再试",
+    "updatedAt": "更新于 {{time}}",
+    "pickHint": "点一条直接搜"
+  },
   "footer": {
     "basedOn": "四野 · 基于 MediaCrawler 的本地聚合检索工作台",
     "localFirst": "Local first · Open source",

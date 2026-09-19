@@ -17,6 +17,7 @@
 | 许可与免责声明（首次启动接受门） | [features/license-disclaimer.md](features/license-disclaimer.md) | `webui/src/components/license/LicenseDisclaimer.tsx`、`webui/src/App.tsx` |
 | 观看历史（自动记录点开看过的内容） | [features/watch-history.md](features/watch-history.md) | `api/services/watch_history_store.py`、`webui/src/components/history/HistoryPage.tsx` |
 | 外观与主题色（8 种色 × 深浅） | [features/appearance-themes.md](features/appearance-themes.md) | `webui/src/store/themeStore.ts`、`webui/src/index.css` |
+| 热搜卡片（各平台热词 → 一键聚合搜索） | [features/trending-board.md](features/trending-board.md) | `api/services/trending.py`、`webui/src/components/trending/TrendingBoard.tsx` |
 
 ## 其他文档
 

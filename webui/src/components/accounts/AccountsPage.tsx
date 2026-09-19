@@ -1015,7 +1015,7 @@ export function AccountsPage({ activeSection, onSectionChange, onNavigateSearch,
           <button type="button" className="segment" aria-pressed={homePreferences.mode === "full"} onClick={() => homePreferences.setMode("full")}>实用</button>
         </div></div>
         <div className="setting-row"><div><div className="setting-label">最近搜索</div><p className="setting-desc">回到上一次搜索过的关键词</p></div><button type="button" className="switch" role="switch" aria-checked={homePreferences.history} aria-label="首页显示最近搜索" onClick={() => homePreferences.setSection("history", !homePreferences.history)} /></div>
-        <div className="setting-row"><div><div className="setting-label">最近搜到</div><p className="setting-desc">继续阅读上次获取的内容</p></div><button type="button" className="switch" role="switch" aria-checked={homePreferences.recent} aria-label="首页显示最近搜到" onClick={() => homePreferences.setSection("recent", !homePreferences.recent)} /></div>
+        <div className="setting-row"><div><div className="setting-label">热搜</div><p className="setting-desc">看看各平台在热什么，点一条直接搜</p></div><button type="button" className="switch" role="switch" aria-checked={homePreferences.trending} aria-label="首页显示热搜" onClick={() => homePreferences.setSection("trending", !homePreferences.trending)} /></div>
         <div className="setting-footer"><span>主题与首页偏好会保存在当前浏览器</span>{onNavigateSearch && <button type="button" className="text-link" onClick={onNavigateSearch}>回首页看看 →</button>}</div>
         <div className="info-box"><p>极简模式会暂时隐藏首页板块，不清除板块选择。开启任一板块会自动切回实用模式。</p></div>
       </section>}

@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowUpRight, Clock3, RotateCcw, Loader2, UserCog, RefreshCw, Search } from "lucide-react";
+import { AlertTriangle, Clock3, RotateCcw, Loader2, UserCog, RefreshCw } from "lucide-react";
 import { SearchBar } from "./SearchBar";
 import { PlatformStatus } from "./PlatformStatus";
 import { ResultTabs } from "./ResultTabs";
+import { TrendingBoard } from "@/components/trending/TrendingBoard";
 import { useSearchExperience } from "@/hooks/useSearchExperience";
 import { usePlatformLimits } from "@/hooks/usePlatformLimits";
 import type { PlatformSlug } from "@/types/search";
-import { PLATFORM_COLORS, PLATFORM_LABELS } from "@/types/search";
+import { PLATFORM_LABELS } from "@/types/search";
 import { useBookmarks } from "@/hooks/useBookmarks";
 import { TOOL_BUTTON } from "./ResultTools";
 import { useHomePreferencesStore } from "@/store/homePreferencesStore";
-import { safeContentUrl } from "@/lib/resultTools";
 import { useTranslation } from "react-i18next";
 
 interface SearchPageProps {
@@ -129,6 +129,19 @@ export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateA
     setKeywordPickRequest((current) => current + 1);
   }, []);
 
+  // 点一条热搜：直接用当前勾选的平台发起搜索 —— 这才是这个卡片的用法
+  // （"看各平台对同一条热搜的不同反应"）。
+  // 一个平台都没勾选时只填入关键词，交给搜索框的"先勾选至少一个平台"提示。
+  const handleTrendingPick = useCallback((word: string) => {
+    const platforms = Array.from(selectedPlatforms);
+    if (platforms.length === 0) {
+      handleKeywordPick(word);
+      return;
+    }
+    setKeyword(word);
+    handleFullSearchLocal(word, platforms);
+  }, [selectedPlatforms, handleKeywordPick, handleFullSearchLocal]);
+
   const isCancellingState = isCancelling;
   const hasError = !!createError || !!pollError;
   const isTerminal =
@@ -187,7 +200,6 @@ export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateA
   // 「首页」只在还没有本轮结果时显示大搜索框；切到别的页面再回来时，
   // 保留切走前的搜索状态，而不是重置成初始首页（任务响应会自动恢复）。
   const isHome = homeRequested && !displayJobResponse && !busy;
-  const recentResults = latestJobResponse?.results.slice(0, 3) ?? [];
 
   return (
     <div className={isHome ? `home ${homePreferences.mode === "min" ? "minimal" : ""}` : "preview-container search-shell"}>
@@ -212,8 +224,8 @@ export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateA
         limits={limits}
       />
 
-      {isHome && homePreferences.mode === "full" && (homePreferences.history || homePreferences.recent) && (
-        <div className="home-panels" style={!homePreferences.history || !homePreferences.recent ? { gridTemplateColumns: "1fr" } : undefined} aria-label="首页快捷内容">
+      {isHome && homePreferences.mode === "full" && (homePreferences.history || homePreferences.trending) && (
+        <div className="home-panels" style={!homePreferences.history || !homePreferences.trending ? { gridTemplateColumns: "1fr" } : undefined} aria-label="首页快捷内容">
           {homePreferences.history && <section className="panel">
             <div className="panel-heading"><h2>最近搜索</h2>{history.length ? <button type="button" className="text-link" onClick={clearHistory}>清空</button> : <Clock3 />}</div>
             {history.length > 0 ? (
@@ -229,23 +241,9 @@ export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateA
             )}
             <p className="panel-footnote">{history.length ? "从上次的好奇，继续探索。" : "搜索过的关键词会出现在这里。"}</p>
           </section>}
-          {homePreferences.recent && <section className="panel">
-            <div className="panel-heading"><h2>最近搜到</h2>{recentResults.length ? <button type="button" className="text-link" onClick={onSearchStarted}>查看结果</button> : <Search />}</div>
-            {recentResults.length ? (
-              <div className="recent-results">
-                {recentResults.map((result) => {
-                  const url = safeContentUrl(result.url);
-                  const content = <><span className="recent-result-title">{result.title}</span><small>{PLATFORM_LABELS[result.platform]}{result.author ? ` · ${result.author}` : ""}</small></>;
-                  return <div className="recent-result" key={`${result.platform}-${result.content_id}`}>
-                    <i className="pd" style={{ backgroundColor: PLATFORM_COLORS[result.platform] }} />
-                    {url ? <a href={url} target="_blank" rel="noreferrer">{content}</a> : <span className="recent-result-body">{content}</span>}
-                    {url && <ArrowUpRight aria-hidden="true" />}
-                  </div>;
-                })}
-              </div>
-            ) : <p className="secondary text-[13px]">还没有搜到的内容。</p>}
-            <p className="panel-footnote">{recentResults.length ? "上次搜索获取的内容，可直接继续阅读。" : "完成搜索后，在这里继续阅读。"}</p>
-          </section>}
+          {/* 热搜卡片取代了原来的「最近搜到」：那一块的内容在历史与搜索结果里都能看到，
+              而"各平台在热什么"是这里唯一能提供的新信息。 */}
+          {homePreferences.trending && <TrendingBoard onPick={handleTrendingPick} />}
         </div>
       )}
       {isHome && homePreferences.mode === "full" && <p className="home-note">小红书、抖音、B站、知乎 · 一次搜索，几种视角。</p>}
