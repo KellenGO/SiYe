@@ -618,7 +618,10 @@ class SearchJobManager:
                 current = job.platforms_state.get(platform)
                 if current and current.status in ("cancelled", "timed_out"):
                     return
-                if not done_received or proc.returncode != 0:
+                # 同上：报过终态（succeeded/empty）只是没读到 done 行的，保住结果不翻失败。
+                # 只有"读到 done 但退出码非 0"或"没报终态又没 done"才算 failed。
+                reported_ok = current is not None and current.status in ("succeeded", "empty")
+                if (not done_received and not reported_ok) or (done_received and proc.returncode != 0):
                     job.set_platform_status(
                         platform, "failed",
                         error_summary=(
@@ -638,7 +641,8 @@ class SearchJobManager:
                     job.set_platform_status(
                         platform,
                         "succeeded" if job.platform_results.get(platform) else "empty")
-            else:
+            elif not (current and current.status in ("succeeded", "empty")):
+                # 同前：报过终态的保住，只有"什么都没报又没 done"才算 failed。
                 job.set_platform_status(platform, "failed",
                                         error_summary="no done event from worker")
         except Exception as e:
@@ -728,8 +732,11 @@ class SearchJobManager:
                 job.set_platform_status(platform, "failed",
                                        error_summary=f"Worker exited with code {exit_code}")
             elif not done_received:
-                job.set_platform_status(platform, "failed",
-                                       error_summary=f"exit {exit_code}, no done event")
+                # worker 已经明确报过终态（succeeded/empty）、只是最后那行 done 没读到
+                # （进程退得太快、管道先关）—— 保留用户已经拿到的结果，绝不翻成 failed。
+                if not (current and current.status in ("succeeded", "empty")):
+                    job.set_platform_status(platform, "failed",
+                                           error_summary=f"exit {exit_code}, no done event")
             elif current and current.status == "running":
                 job.set_platform_status(
                     platform,

@@ -81,6 +81,9 @@ FAKE_WORKER = textwrap.dedent(
                         "title": "t", "url": "https://x.example/fake-1", "rank": 0})
         emit("status", {"status": "succeeded"})
         emit("done", {})
+        # 故意慢一点再退出：进程退得比父进程读完管道还快时，最后那行 done 会丢
+        # （Linux CI 上真出现过：状态被翻成 failed、exit 255 / no done event）。
+        time.sleep(0.4)
         sys.exit(0)
     time.sleep(60)
     """
@@ -401,3 +404,52 @@ async def test_terminal_job_cannot_be_cancelled():
     assert job.is_terminal()
     assert await mgr.cancel_job("job-t") is False  # 已正常完成 → 无可取消
     assert job.to_response().overall == "completed"
+
+
+# ── 12. 报过终态但 done 行丢失：保住结果，不翻成 failed ──────────────────
+
+NO_DONE_WORKER = textwrap.dedent(
+    """\
+    import json, sys
+    line = sys.stdin.readline()
+    req = json.loads(line)
+    job_id = req["job_id"]
+    platform = req["platform"]
+
+    def emit(event, data):
+        print("MC_AGG_EVENT\\t" + json.dumps(
+            {"event": event, "job_id": job_id, "platform": platform, "data": data}),
+            flush=True)
+
+    emit("status", {"status": "running", "message": "started"})
+    emit("result", {"platform": platform, "content_id": "fake-1",
+                    "title": "t", "url": "https://x.example/fake-1", "rank": 0})
+    emit("status", {"status": "succeeded"})
+    sys.exit(0)  # 少了 done 行（Linux CI 上进程退得比父进程读完管道还快时真会发生）
+    """
+)
+
+
+@pytest.mark.asyncio
+async def test_succeeded_without_done_event_keeps_results(monkeypatch, tmp_path):
+    """worker 已报 succeeded、只是 done 行没读到 → 保留结果与 succeeded，不翻 failed。
+
+    这是 CI（Ubuntu）上真实出现过的 flake 根因：以前会把已经成功的平台标成
+    "exit 255 / no done event" 的 failed —— 用户拿到了结果却看到"搜索失败"。
+    """
+    fake = tmp_path / "no_done_worker.py"
+    fake.write_text(NO_DONE_WORKER, encoding="utf-8")
+    monkeypatch.setattr("api.services.worker_process.WORKER_SCRIPT", str(fake))
+
+    mgr = SearchJobManager()
+    resp = await mgr.create_job(SearchJobRequestSchema(
+        keyword="no-done-词", platforms=["xhs"], limit_per_platform=5, bypass_cache=True))
+    try:
+        await asyncio.wait_for(mgr._active_job.task, timeout=30)
+        fetched = await mgr.get_job(resp.job_id)
+        assert fetched is not None
+        assert fetched.platforms["xhs"].status == "succeeded"
+        assert fetched.platforms["xhs"].result_count == 1
+        assert len(fetched.results) == 1
+    finally:
+        await mgr.cleanup()

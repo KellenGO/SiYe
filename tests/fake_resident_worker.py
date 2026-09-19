@@ -22,6 +22,8 @@ and honors behavior keywords carried in the request's ``keyword`` field:
                           (退出耗时超过旧 50ms 启发式的确定性退役场景)
 - ``__no_done_exit0__`` → status running only, then ``os._exit(0)``
                           (no done + exit0 → strict failed)
+- ``__succeeded_no_done_exit0__`` → result + status succeeded, then ``os._exit(0)``
+                          with **no done**（已报成功就必须保住成功）
 - ``__crash_7__``       → ``os._exit(7)`` immediately, no done (crash recovery)
 - ``__uncaught_boom__`` → raise RuntimeError inside request handling, caught
                           by the loop and converted to a safe stderr line +
@@ -108,6 +110,17 @@ def _handle_request(request) -> int:
         return 0
     elif keyword == "__no_done_exit0__":
         os._exit(0)  # 无 done + exit0：严格语义应判 failed
+        return 0  # pragma: no cover
+    elif keyword == "__succeeded_no_done_exit0__":
+        # 已报终态 succeeded 但**没发 done** 就退出：manager 必须保住成功，
+        # 不能把它翻成 "no done event" 的 failed（Linux CI 上真实出现过）。
+        item = dict(_RESULT_FIELDS)
+        item["platform"] = platform
+        item["content_id"] = "fake-no-done"
+        item["url"] = "https://example.com/fake-no-done"
+        emit_result(request.job_id, platform, item)
+        emit_status(request.job_id, platform, "succeeded")
+        os._exit(0)
         return 0  # pragma: no cover
     elif keyword == "__uncaught_boom__":
         raise RuntimeError("boom detail")  # 未捕获异常

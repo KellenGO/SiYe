@@ -453,6 +453,17 @@ async def test_empty_status_error_summary_reaches_response(manager):
     assert info.error_summary == "平台返回 0 条（测试原因）"
 
 
+@pytest.mark.asyncio
+async def test_succeeded_status_without_done_keeps_success(manager):
+    """worker 报过 succeeded 但没发 done 就退出 → 保住 succeeded，不翻 failed。
+
+    这是 Ubuntu CI 上出现过的假失败：进程退得比父进程读完管道快，最后那行 done 丢了。
+    """
+    resp = await _run_to_completion(manager, _req("__succeeded_no_done_exit0__"))
+    assert resp.platforms["xhs"].status == "succeeded"
+    assert resp.platforms["xhs"].result_count == 1
+
+
 def test_worker_log_tail_not_logged_when_platform_succeeded(caplog):
     """有结果时不该刷日志（正常路径保持安静）。"""
     manager = sjm.SearchJobManager()
