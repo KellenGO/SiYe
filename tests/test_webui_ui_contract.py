@@ -190,13 +190,18 @@ def test_platform_status_exposes_full_status_text():
 # ── 结果页「返回首页」+ 0 结果算失败（2026-09-19）────────────────────────
 
 def test_back_home_button_sits_left_of_search_box_with_brand_fill():
-    """返回首页按钮在搜索框左侧（.search-zone 内、SearchBar 之前）且用主题色底。"""
+    """返回首页按钮在搜索框左侧（.search-zone 内、SearchBar 之前）且用主题色底。
+
+    而且**不能占搜索框宽度**：按钮用绝对定位挂在搜索框左边外面，
+    所以 `.search-zone` 不能用 flex（flex 会把搜索框挤窄，用户明确否掉了）。
+    """
     assert '"btn primary home-back"' in _SEARCH_PAGE
     zone = _SEARCH_PAGE.index('className="search-zone"')
     assert zone < _SEARCH_PAGE.index("<SearchBar", zone), "按钮必须在搜索框之前（左侧）"
     css = (_ROOT / "index.css").read_text(encoding="utf-8")
     assert ".search-zone .home-back" in css
     assert ".search-zone > .search-area" in css
+    assert "right: calc(100% + 12px)" in css, "按钮要挂在搜索框左边外面，不挤压搜索框"
 
 
 def test_back_home_does_not_clear_results():
@@ -219,11 +224,11 @@ def test_empty_result_counts_as_failure_and_surfaces_reason():
 
 
 def test_webui_i18n_back_home_keys_exist():
-    """返回首页 / 查看上次结果 两个键在两种语言里都要有。"""
+    """返回首页 / 查看上次搜索 两个键在两种语言里都要有。"""
     for locale in ("zh-CN", "en-US"):
         data = json.loads((_LOCALES / locale / "common.json").read_text(encoding="utf-8"))
         assert data["search"]["backToHome"]
-        assert "{{count}}" in data["search"]["viewLastResults"]
+        assert "{{count}}" in data["search"]["viewLastSearch"]
 
 
 def test_app_root_mounts_autosync():

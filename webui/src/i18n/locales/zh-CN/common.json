@@ -122,7 +122,7 @@
     "placeholderHome": "搜点什么？",
     "clearKeyword": "清空关键词",
     "backToHome": "返回首页",
-    "viewLastResults": "查看上次结果（{{count}} 条）",
+    "viewLastSearch": "查看上次搜索（{{count}} 条）",
     "perPlatformHint": "每个平台本轮最多 {{count}} 条",
     "fetchPlatformTitle": "单独获取「{{platform}}」的结果（不影响其它平台）",
     "historyItemTitle": "填入「{{keyword}}」（上次搜索：{{platforms}}）",

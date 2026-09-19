@@ -271,7 +271,7 @@ export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateA
       {isHome && displayJobResponse && (
         <div className="home-back-row">
           <button type="button" className="btn ghost small" onClick={showLastResults}>
-            {t("search.viewLastResults", { count: displayJobResponse.results.length })}
+            {t("search.viewLastSearch", { count: displayJobResponse.results.length })}
           </button>
         </div>
       )}

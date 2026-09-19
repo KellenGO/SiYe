@@ -122,7 +122,7 @@
     "placeholderHome": "Search something?",
     "clearKeyword": "Clear keyword",
     "backToHome": "Back to home",
-    "viewLastResults": "View last results ({{count}})",
+    "viewLastSearch": "View last search ({{count}})",
     "perPlatformHint": "Up to {{count}} per platform this round",
     "fetchPlatformTitle": "Fetch only \"{{platform}}\" (other platforms untouched)",
     "historyItemTitle": "Fill \"{{keyword}}\" (previous search: {{platforms}})",

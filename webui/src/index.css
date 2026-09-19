@@ -543,11 +543,17 @@ html.dark .btn.primary { color: #101525; }
   padding: 61px 0 55px;
 }
 .home.minimal { min-height: calc(100vh - 208px); display: flex; flex-direction: column; justify-content: center; padding-bottom: 12vh; }
-/* 搜索区：结果页在搜索框左侧放「返回首页」按钮（主题色圆角矩形），首页只有搜索框。 */
-.search-zone { display: flex; align-items: flex-start; gap: 12px; }
+/* 搜索区：结果页在搜索框**左侧外面**挂一个主题色圆角「返回首页」按钮 —— 按钮浮在左边，
+   不占搜索框宽度（所以这里不用 flex：flex 会把搜索框挤窄）。 */
+.search-zone { position: relative; }
 .home > .search-zone { margin-top: 34px; }
-.search-zone > .search-area { flex: 1 1 auto; min-width: 0; margin-top: 0; }
-.search-zone .home-back { flex: 0 0 auto; margin-top: 7px; border-radius: 10px; }
+.search-zone > .search-area { margin-top: 0; }
+.search-zone .home-back { position: absolute; right: calc(100% + 12px); top: 7px; border-radius: 10px; }
+/* 窗口不够宽时左侧没地方挂 → 改放到搜索框上方（仍然不挤压搜索框）。 */
+@media (max-width: 1340px) {
+  .search-zone { display: flex; flex-direction: column; }
+  .search-zone .home-back { position: static; align-self: flex-start; margin-bottom: 10px; }
+}
 .hero { text-align: center; }
 .wordmark { display: inline-block; }
 .wordmark b { color: var(--siye-ink); font-size: 56px; letter-spacing: -2px; font-weight: 700; line-height: 1.15; }
