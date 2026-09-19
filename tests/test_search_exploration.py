@@ -338,6 +338,31 @@ async def test_replace_platforms_reruns_one_platform_without_a_new_batch(manager
 
 
 @pytest.mark.asyncio
+async def test_hydration_scope_covers_only_job_platforms(manager, monkeypatch):
+    """replace 任务的补全范围只含本任务平台。
+
+    response_results() 是整轮全量视图（含会话里其它平台的结果），而本任务的
+    platforms_state 只有自己跑过的平台 —— 不过滤会 KeyError 让整个补全失败
+    （用户日志里的 `result hydration failed: KeyError`）。
+    """
+    async def worker(job, platform):
+        for i in range(2):
+            job.add_result(platform, result(platform, f"{platform}-{i}"))
+        job.set_platform_status(platform, "succeeded")
+
+    monkeypatch.setattr(manager, "_run_worker", worker)
+    first = await search(manager, platforms=["xhs", "bilibili"], limit_per_platform=2)
+    await search(manager, platforms=["zhihu"], limit_per_platform=2,
+                 continue_from=first.job_id, replace_platforms=True)
+
+    job = manager._active_job
+    # 全量视图里有三个平台，但本任务只跑过知乎
+    assert {r.platform for r in job.response_results()} == {"xhs", "bilibili", "zhihu"}
+    scoped = manager._hydration_scope(job)
+    assert {r.platform for r in scoped} == {"zhihu"}
+
+
+@pytest.mark.asyncio
 async def test_replace_platforms_reruns_a_platform_that_collected_nothing(manager, monkeypatch):
     """上一轮一条没搜到、还被判定"取尽"的平台，也能重搜（不该报"没有更多可获取内容"）。
 

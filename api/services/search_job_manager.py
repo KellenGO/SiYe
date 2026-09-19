@@ -409,21 +409,29 @@ class SearchJobManager:
                     pagination=job.page_states[platform].model_dump() if platform in job.page_checkpoints else None,
                 )
 
+    def _hydration_scope(self, job: "_ActiveJob") -> List[UnifiedSearchResult]:
+        """详情补全的范围：**本任务跑过的平台**里、状态可补全、且不在冷却中的结果。
+
+        换批/单平台重搜任务的 `response_results()` 是整轮全量视图（含会话里
+        其它平台的结果），但本任务的 `platforms_state` 只有自己跑过的平台 ——
+        不加过滤会直接 KeyError，让整个补全（含状态流转）失败。
+        """
+        return [
+            result for result in job.response_results()
+            if result.platform in job.platforms_state
+            and job.platforms_state[result.platform].status in ("succeeded", "empty")
+            and not self.cooldowns.remaining(result.platform)
+        ]
+
     async def _run_hydration(self, job: "_ActiveJob") -> None:
         hydrator = ResultHydrator()
         metrics_results = []
         try:
-            metrics_results = metric_candidates(
-                [result for platform, rows in job.platform_results.items() for result in rows
-                 if job.platforms_state[platform].status in ("succeeded", "empty")
-                 and not self.cooldowns.remaining(platform)])
+            scoped = self._hydration_scope(job)
+            metrics_results = metric_candidates(scoped)
             if metrics_results:
                 await hydrator.hydrate_metrics(metrics_results, job.hydration_cancel_event, job.update_metrics)
-            updates = await hydrator.hydrate(
-                [result for result in job.response_results()
-                 if job.platforms_state[result.platform].status in ("succeeded", "empty")
-                 and not self.cooldowns.remaining(result.platform)],
-                job.hydration_cancel_event)
+            updates = await hydrator.hydrate(scoped, job.hydration_cancel_event)
             if not job.hydration_cancel_event.is_set():
                 for update in updates:
                     job.update_snippet(update.result, update.snippet)

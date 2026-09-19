@@ -47,7 +47,7 @@ import {
   type SearchSortMode,
   type StorageLike,
 } from "../src/lib/searchExperience.js";
-import type { PlatformSlug, SearchJobResponse, UnifiedSearchResult } from "../src/types/search.js";
+import type { PlatformSlug, SearchExploration, SearchJobResponse, UnifiedSearchResult } from "../src/types/search.js";
 
 // ── Test helpers（仅测试构造数据用，不包含生产逻辑） ──────────────────
 
@@ -847,6 +847,71 @@ test("⑭ 单平台重搜不写历史、不改平台偏好", () => {
   );
   assert.deepEqual(next.history.map((item) => `${item.keyword}|${item.platforms.join(",")}`), historyBefore);
   assert.deepEqual(next.platformPref, prefBefore);
+});
+
+// ── 连续重搜链（复现用户操作序列）────────────────────────────────────
+// 回归主因：重搜合并后的快照若丢掉 exploration，下一次重搜就不再续会话
+// （后端起独立单平台会话并整体替换），其它平台的结果从此清不回来。
+
+function explorationInfo(platforms: PlatformSlug[]): SearchJobResponse["exploration"] {
+  return {
+    id: "sess-1",
+    round: 1,
+    max_per_platform: 100,
+    new_sources: 0,
+    new_contents: 0,
+    page_requests: 0,
+    duplicates: 0,
+    platforms: Object.fromEntries(
+      platforms.map((p) => [p, { collected: 1, has_more: false }])
+    ) as SearchExploration["platforms"],
+    previous_batches: [],
+  };
+}
+
+test("⑮ 连续单平台重搜链：快照始终带回 exploration，平台计数不掉 0", () => {
+  const threePlatforms: Record<PlatformSlug, { status: string; count: number }> = {
+    xhs: { status: "empty", count: 0 },
+    douyin: { status: "succeeded", count: 1 },
+    bilibili: { status: "succeeded", count: 1 },
+    zhihu: { status: "succeeded", count: 1 },
+  };
+  const firstJob = makeJob("job-1", "completed", "词", threePlatforms, [
+    makeResult("douyin", "d1"),
+    makeResult("bilibili", "b1"),
+    makeResult("zhihu", "z1"),
+  ], { exploration: explorationInfo(["douyin", "bilibili", "zhihu"]) });
+  let state = step(startFull(initState(), "词", "job-1"), { type: "job_terminal", job: firstJob });
+
+  // 重搜小红书（本轮没搜它）
+  const jobF = makeJob("job-F", "completed", "词", {
+    ...threePlatforms, xhs: { status: "succeeded", count: 1 },
+  }, [makeResult("xhs", "x1")], { exploration: explorationInfo(["douyin", "bilibili", "zhihu", "xhs"]) });
+  state = step(startRetry(state, "xhs", "job-F"), { type: "job_terminal", job: jobF });
+
+  // 回归主因：合并后的快照必须带回 exploration
+  assert.ok(state.display.jobResponse!.exploration, "exploration 不能丢");
+  assert.equal(state.display.jobResponse!.exploration!.round, 1);
+  // 四个平台计数都在
+  assert.equal(state.display.jobResponse!.platforms.xhs?.result_count, 1);
+  assert.equal(state.display.jobResponse!.platforms.douyin?.result_count, 1);
+  assert.equal(state.display.jobResponse!.platforms.bilibili?.result_count, 1);
+  assert.equal(state.display.jobResponse!.platforms.zhihu?.result_count, 1);
+  assert.equal(state.display.jobResponse!.results.length, 4);
+
+  // 再重搜抖音：exploration 仍在，其它平台保留、抖音被替换
+  const jobG = makeJob("job-G", "completed", "词", {
+    ...threePlatforms, xhs: { status: "succeeded", count: 1 }, douyin: { status: "succeeded", count: 1 },
+  }, [makeResult("douyin", "d2")], { exploration: explorationInfo(["douyin", "bilibili", "zhihu", "xhs"]) });
+  state = step(startRetry(state, "douyin", "job-G"), { type: "job_terminal", job: jobG });
+
+  assert.ok(state.display.jobResponse!.exploration, "第二次重搜后 exploration 仍在");
+  assert.equal(state.display.jobResponse!.platforms.bilibili?.result_count, 1);
+  assert.equal(state.display.jobResponse!.platforms.zhihu?.result_count, 1);
+  assert.equal(state.display.jobResponse!.platforms.xhs?.result_count, 1);
+  assert.equal(state.display.jobResponse!.results.length, 4); // d2 替换 d1，其余保留
+  const douyinIds = state.display.jobResponse!.results.filter((r) => r.platform === "douyin");
+  assert.deepEqual(douyinIds.map((r) => r.content_id), ["d2"]);
 });
 
 test("⑥ 重试失败：保留旧结果 + 记录安全错误摘要", () => {

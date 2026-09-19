@@ -1144,6 +1144,12 @@ export function applySearchTransition(state: ExperienceState, event: ExperienceE
           completed_at: job.completed_at,
           platforms: platformsInfo,
           results: [],
+          // exploration 必须带回：后续单平台重搜靠它判断"能否续会话"
+          // （continue_from）。丢了它，下一次重搜会变成独立会话，
+          // 后端整体替换会话后其它平台的结果就再也回不来了。
+          exploration: job.exploration ?? prev?.exploration,
+          hydration_status: job.hydration_status,
+          total_ms: job.total_ms,
         };
         if (FAILURE_STATUSES.has(status)) {
           // 失败：保留目标平台旧结果与其他平台结果（不调用 merge），
