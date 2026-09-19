@@ -187,7 +187,8 @@ export function useAggregateSearch() {
       limitPerPlatform?: number,
       platformLimits?: Partial<Record<PlatformSlug, number>>,
       bypassCache = false,
-      continueFrom?: string
+      continueFrom?: string,
+      replacePlatforms = false
     ): Promise<SearchJobResponse> => {
       generationRef.current += 1; // invalidate in-flight recovery responses
       setJobId(null);
@@ -205,6 +206,8 @@ export function useAggregateSearch() {
           : {}),
         bypass_cache: bypassCache,
         ...(continueFrom ? { continue_from: continueFrom } : {}),
+        // 单平台重搜：结果替换当前批次里该平台的内容，不新增批次。
+        ...(replacePlatforms ? { replace_platforms: true } : {}),
       };
       return createMutation.mutateAsync(req);
     },

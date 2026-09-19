@@ -46,6 +46,43 @@ class Exploration:
         self.generations[platform] = job.account_generations[platform]
         return True
 
+    def reset_platform(self, job: "_ActiveJob", platform: str) -> None:
+        """把某个平台在这个会话里的进度与结果清空，准备重搜它。
+
+        单平台重搜（⟳）走这里：不动其它平台、不动 `batches`（不新增批次），
+        账号代数也更新为当前值 —— 用户可能正是因为补登了账号才来重搜的，
+        这时候拿"代数变了"把请求挡掉毫无道理（这个平台反正从零开始搜）。
+        """
+        self.add_platform(job, platform)
+        self.states[platform] = PageState()
+        for old in self.results[platform]:
+            self.owners.pop(make_dedup_key(platform, old.content_id), None)
+        self.results[platform] = []
+        self.generations[platform] = job.account_generations[platform]
+
+    def replace_platform_results(self, job: "_ActiveJob") -> int:
+        """单平台重搜的提交：原地替换该平台结果，**不新增批次**。
+
+        替换后的内容归属最新批次（`owners` 用它把结果分派到各批次的展示列表）。
+        """
+        replaced = 0
+        for platform in job.platforms:
+            new_results = [r.model_copy(deep=True) for r in job.platform_results[platform]]
+            self.results[platform] = new_results
+            if platform in job.page_states:
+                self.states[platform] = job.page_states[platform].model_copy(deep=True)
+            number = max(1, len(self.batches))
+            for item in new_results:
+                self.owners[make_dedup_key(platform, item.content_id)] = number
+            replaced += len(new_results)
+        self.platforms_state.update(deepcopy(job.platforms_state))
+        job._final_results = interleave_results(
+            {p: job.platform_results[p] for p in job.platforms},
+            platform_order=self.platforms,
+        )
+        job.exploration_info = self.info(job, replaced)
+        return replaced
+
     def remaining(self, platform):
         return max(0, self.MAX_RESULTS - len(self.results[platform]))
 
@@ -64,6 +101,10 @@ class Exploration:
         if job.job_id in self.committed:
             return
         self.committed.add(job.job_id)
+        if job.replaces_platforms:
+            # 单平台重搜：替换该平台结果，不新增批次（"换一批"才是往后叠加）。
+            self.replace_platform_results(job)
+            return
         number = len(self.batches) + 1
         added = 0
         for p in job.platforms:

@@ -270,11 +270,11 @@ async def test_account_change_rejects_old_progress(manager, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_continuation_can_add_a_new_platform(manager, monkeypatch):
-    """「单独获取某个平台」：换批时允许把新平台并进会话。
+async def test_replace_platforms_reruns_one_platform_without_a_new_batch(manager, monkeypatch):
+    """单平台重搜（⟳）：只重搜这一个平台、结果替换它在当前批次里的内容、不开新批次。
 
-    用户场景：这一轮只搜了小红书和B站，之后想补看知乎，且不想重搜前两个。
-    要求：知乎只跑它自己；结果显示三个平台；原会话继续有效（换批照常可用）。
+    用户场景：这一轮只搜了小红书和B站，之后想补看知乎（或把某个平台重搜一遍），
+    不想重搜全部、也不想多出一个"第 2 批"。
     """
     calls = []
 
@@ -292,28 +292,77 @@ async def test_continuation_can_add_a_new_platform(manager, monkeypatch):
 
     first = await search(manager, platforms=["xhs", "bilibili"], limit_per_platform=2)
     assert [c.platform for c in calls] == ["xhs", "bilibili"]
+    assert first.exploration["round"] == 1
 
+    # 重搜知乎（第一轮没有它）：从第 1 页搜
     second = await search(manager, platforms=["zhihu"], limit_per_platform=2,
-                          continue_from=first.job_id)
-
-    # 只跑了新平台，其它平台没有被重搜
+                          continue_from=first.job_id, replace_platforms=True)
     assert [c.platform for c in calls] == ["xhs", "bilibili", "zhihu"]
-    # 新平台的结果补进来了
-    assert {r.content_id for r in second.results if r.platform == "zhihu"} == {"zhihu-1", "zhihu-2"}
+    assert calls[-1].pagination["page"] == 1
+    assert second.results and {r.platform for r in second.results} == {"zhihu"}
+
+    # 不开新批次：round 不变
+    assert second.exploration["round"] == 1
+    session = manager._active_job.exploration
+    assert len(session.batches) == 1
+    # 新平台进了会话，原平台进度没被重置
+    assert session.platforms == ["xhs", "bilibili", "zhihu"]
+    assert session.states["xhs"].page == 3 and session.states["bilibili"].page == 3
     # 响应里三个平台的状态都在（状态条与各平台条数不能只剩一个）
     assert set(second.platforms) == {"xhs", "bilibili", "zhihu"}
     assert second.overall == "completed"
-    # 新平台进了会话，原平台进度没有被重置
-    session = manager._active_job.exploration
-    assert session.platforms == ["xhs", "bilibili", "zhihu"]
-    assert session.states["xhs"].page == 3 and session.states["bilibili"].page == 3
-    assert session.states["zhihu"].page == 3
 
-    # 原会话仍在 → 之后"换一批"照常可用（这正是不能改走独立任务的原因）
-    third = await search(manager, platforms=["xhs", "bilibili"], limit_per_platform=2,
-                         continue_from=second.job_id)
-    assert third.exploration["round"] == 3
-    assert manager._active_job.exploration.states["xhs"].page == 5
+    # 重搜一个已有结果的平台：换掉它在这个批次里的内容，其它平台不动
+    third = await search(manager, platforms=["xhs"], limit_per_platform=2,
+                         continue_from=second.job_id, replace_platforms=True)
+    session = manager._active_job.exploration
+    assert third.exploration["round"] == 1
+    assert {r.content_id for r in session.results["xhs"]} == {"xhs-1", "xhs-2"}
+    assert {r.content_id for r in session.results["bilibili"]} == {"bilibili-1", "bilibili-2"}
+
+    # 原会话仍在 → 之后"换一批"照常可用
+    fourth = await search(manager, platforms=["xhs", "bilibili"], limit_per_platform=2,
+                          continue_from=third.job_id)
+    assert fourth.exploration["round"] == 2
+
+
+@pytest.mark.asyncio
+async def test_replace_platforms_reruns_a_platform_that_collected_nothing(manager, monkeypatch):
+    """上一轮一条没搜到、还被判定"取尽"的平台，也能重搜（不该报"没有更多可获取内容"）。
+
+    这正是用户遇到的抖音场景：登录状态可用但 0 条结果，点重搜却提示达到上限。
+    """
+    calls = []
+
+    async def worker(job, platform):
+        req = WorkerRequest.model_validate_json(manager._build_request_json(job, platform))
+        calls.append((req.platform, req.pagination["page"]))
+        if platform == "douyin" and len(calls) == 1:
+            # 第一轮：抖音空结果 + 后端认为"没有下一页了"
+            job.apply_metrics(platform, {"pagination": PageState(page=1, exhausted=True).model_dump()})
+            job.set_platform_status(platform, "empty")
+            return
+        for i in range(req.limit):
+            job.add_result(platform, result(platform, f"{platform}-{req.pagination['page']}-{i}"))
+        job.apply_metrics(platform, {"pagination": PageState(page=req.pagination["page"] + req.limit).model_dump()})
+        job.set_platform_status(platform, "succeeded")
+
+    monkeypatch.setattr(manager, "_run_worker", worker)
+
+    first = await search(manager, platforms=["douyin", "xhs"], limit_per_platform=2)
+    assert first.platforms["douyin"].status == "empty"
+    assert not manager._active_job.exploration.more("douyin")
+
+    # 换批会被"没有更多"挡住（这是换批该有的语义）
+    with pytest.raises(sjm.InvalidPlatformsError, match="没有更多"):
+        await search(manager, platforms=["douyin"], continue_from=first.job_id)
+
+    # 而"重搜"必须能跑，并从第 1 页重来
+    second = await search(manager, platforms=["douyin"], limit_per_platform=2,
+                          continue_from=first.job_id, replace_platforms=True)
+    assert calls[-1] == ("douyin", 1)
+    assert {r.content_id for r in second.results} == {"douyin-1-0", "douyin-1-1"}
+    assert second.platforms["douyin"].status == "succeeded"
 
 
 @pytest.mark.asyncio

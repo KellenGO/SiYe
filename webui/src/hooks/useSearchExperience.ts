@@ -118,50 +118,16 @@ export function useSearchExperience() {
     [busy, base, limits]
   );
 
-  // ── 单平台重试（POST 接受后不写历史，与 Round 12 语义一致） ──────────
-  const handleRetry = useCallback(
-    async (platform: PlatformSlug) => {
-      if (busy || taskInFlightRef.current) return;
-      const current = state.display.jobResponse;
-      const keyword = current?.keyword;
-      if (!keyword) return;
-      if (current.exploration) {
-        void handleFullSearch(keyword, [platform], true, current.job_id);
-        return;
-      }
-      const seq = ++taskSeqRef.current;
-      taskInFlightRef.current = true;
-      userStartedRef.current = true;
-      dispatch({ type: "retry_start", platform });
-      try {
-        // 复用现有 POST /api/search/jobs：platforms 只含目标平台；数量用
-        // 该平台当前设置（Round 15，不再写死 10）。
-        const job = await base.startSearch(
-          keyword,
-          [platform],
-          20,
-          selectedPlatformLimits(limits, [platform]),
-          true
-        );
-        if (taskSeqRef.current !== seq) return;
-        // 重试被接受：登记身份（不写历史），终态经 job_terminal 提交。
-        dispatch({ type: "retry_accepted", jobId: job.job_id });
-      } catch (err) {
-        if (taskSeqRef.current !== seq) return;
-        dispatch({ type: "search_rejected", errorSummary: safeErrorSummary(err) });
-      } finally {
-        if (taskSeqRef.current === seq) taskInFlightRef.current = false;
-      }
-    },
-    [busy, base, state.display.jobResponse, limits, handleFullSearch]
-  );
-
-  // ── 单独获取某个平台（"搜索范围"里每颗胶囊右边的 ⟳）────────────────────
-  // 与 handleRetry 的区别：这是"只补/只更新这一个平台，结果并进现有结果"。
-  // - 属于本轮换批会话时带上 continue_from：后端会把该平台并进会话
-  //   （新平台允许加入，进度从零开始），只跑它一个，其它平台不重搜；
-  // - 走 retry_* 事件而不是 search_accepted：不写搜索历史、不改搜索范围勾选；
-  // - 合并用 append：该平台原有的内容不会因为补了一次就消失。
+  // ── 单平台重搜（"搜索范围"里每颗胶囊右边的 ⟳，以及平台卡片上的「重试」）──
+  // 三个刷新动作的分工（用户明确区分过）：
+  //   换一批（handleNextBatch）  → 不重合的新内容，往后叠加新批次；
+  //   刷新结果（handleRefresh）  → 整组重搜，可以重合，替换当前视图；
+  //   本函数                     → 单平台版的"重搜"：只搜这一个平台，
+  //                                **替换它在当前批次里的内容，不开新批次**。
+  // 因此后端带 replace_platforms：它会重置该平台的分页进度（从第 1 页重搜，
+  // 也顺带解决"上一轮它一条没搜到、还被判定取尽"时点不动的死结），
+  // 完成后原地替换；不属于换批，所以不会产生第 2 批。
+  // 走 retry_* 事件：不写搜索历史、不改搜索范围勾选。
   const handleFetchPlatform = useCallback(
     async (platform: PlatformSlug) => {
       if (busy || taskInFlightRef.current) return;
@@ -171,7 +137,7 @@ export function useSearchExperience() {
       const seq = ++taskSeqRef.current;
       taskInFlightRef.current = true;
       userStartedRef.current = true;
-      dispatch({ type: "retry_start", platform, mode: "append" });
+      dispatch({ type: "retry_start", platform });
       try {
         const job = await base.startSearch(
           keyword,
@@ -179,7 +145,8 @@ export function useSearchExperience() {
           20,
           selectedPlatformLimits(limits, [platform]),
           true,
-          current.exploration ? current.job_id : undefined
+          current.exploration ? current.job_id : undefined,
+          true
         );
         if (taskSeqRef.current !== seq) return;
         dispatch({ type: "retry_accepted", jobId: job.job_id });
@@ -311,7 +278,6 @@ export function useSearchExperience() {
     handleFullSearch,
     handleRefresh,
     handleNextBatch,
-    handleRetry,
     handleFetchPlatform,
     handleCancel,
     handleReset,

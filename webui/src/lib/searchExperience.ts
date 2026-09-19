@@ -771,8 +771,12 @@ export function groupByPlatform(
 }
 
 /**
- * 单平台重试合并：目标平台结果整体替换，其他平台保持；
+ * 单平台重搜合并：目标平台结果整体替换，其他平台保持；
  * 重新按 platformOrder 轮询交错生成综合顺序。
+ *
+ * "整体替换"对两种来源都成立：
+ * - 重试**失败**平台（它本来没结果，替换 == 补齐）；
+ * - 用户点 ⟳ 单平台重搜（后端已重置该平台的分页并重搜，这一批就是它的新内容）。
  */
 export function mergeSinglePlatformRetry(
   prevResults: UnifiedSearchResult[],
@@ -782,35 +786,6 @@ export function mergeSinglePlatformRetry(
 ): UnifiedSearchResult[] {
   const grouped = groupByPlatform(expandGroupedResults(prevResults));
   grouped.set(retryPlatform, newPlatformResults);
-  return interleaveByPlatform(grouped, platformOrder);
-}
-
-/**
- * 单平台"补结果"合并：把新拿到的结果**并进**该平台已有的结果里，其它平台不动。
- *
- * 与 `mergeSinglePlatformRetry` 的差别：那个是整体替换（用于重试**失败**平台 ——
- * 它本来就没结果，替换 == 补齐）；这里是追加/更新，用于用户"单独获取某个平台"：
- * 该平台原有的内容不能因为补了一次就消失。同一 content_id 拿新版本但保持原位置。
- */
-export function mergeSinglePlatformAppend(
-  prevResults: UnifiedSearchResult[],
-  targetPlatform: PlatformSlug,
-  addedResults: UnifiedSearchResult[],
-  platformOrder: PlatformSlug[]
-): UnifiedSearchResult[] {
-  const grouped = groupByPlatform(expandGroupedResults(prevResults));
-  const merged = [...(grouped.get(targetPlatform) ?? [])];
-  const position = new Map(merged.map((item, index) => [item.content_id, index]));
-  for (const item of addedResults) {
-    const at = position.get(item.content_id);
-    if (at === undefined) {
-      position.set(item.content_id, merged.length);
-      merged.push(item);
-    } else {
-      merged[at] = item; // 同一内容更新为新版本，位置不变
-    }
-  }
-  grouped.set(targetPlatform, merged);
   return interleaveByPlatform(grouped, platformOrder);
 }
 
@@ -871,14 +846,8 @@ export interface SearchDisplayState {
   liveResponse: SearchJobResponse | null;
   /** 新全量任务运行中、快照为旧结果时为 true（UI 显示"正在更新"）。 */
   refreshing: boolean;
-  /** 正在单平台重试的平台；null 表示无重试进行中。 */
+  /** 正在单平台重搜的平台；null 表示无重搜进行中。 */
   retryingPlatform: PlatformSlug | null;
-  /**
-   * 本次单平台动作的合并方式：
-   * - `replace`：整体替换该平台结果（重试失败平台，默认）；
-   * - `append`：把结果并进该平台已有结果（用户"单独获取某个平台"）。
-   */
-  retryingMode: "replace" | "append";
   /** 单平台重试失败的安全摘要，key 为平台 slug。 */
   retryErrors: Partial<Record<PlatformSlug, string>>;
   /** 仅当观察到真实 job 终态 overall === "cancelled" 时置 true。 */
@@ -918,8 +887,8 @@ export type ExperienceEvent =
   | { type: "retry_accepted"; jobId: string }
   /** POST 失败（被拒绝）：不写历史、快照保留；若正处于重试则记录失败摘要。 */
   | { type: "search_rejected"; errorSummary?: string }
-  /** 单平台动作开始（POST 尚未被接受）；mode 缺省为 replace（重试失败平台）。 */
-  | { type: "retry_start"; platform: PlatformSlug; mode?: "replace" | "append" }
+  /** 单平台重搜开始（POST 尚未被接受）。 */
+  | { type: "retry_start"; platform: PlatformSlug }
   /** 页面加载/刷新时恢复的后端现有任务：显式登记其身份。 */
   | { type: "job_recovered"; jobId: string }
   /** 任务终态到达（completed/partial/failed/cancelled）；需与 activeJobId 匹配。 */
@@ -949,7 +918,6 @@ export function createInitialExperienceState(
       liveResponse: null,
       refreshing: false,
       retryingPlatform: null,
-      retryingMode: "replace",
       retryErrors: {},
       cancelledNotice: false,
       cancelRequested: false,
@@ -1060,7 +1028,6 @@ export function applySearchTransition(state: ExperienceState, event: ExperienceE
         display: {
           ...d,
           retryingPlatform: event.platform,
-          retryingMode: event.mode ?? "replace",
           liveResponse: null, // 重试是新的身份，旧实时进度作废
           cancelledNotice: false,
           cancelRequested: false, // 新任务开始清除旧的取消失败提示（Round 13）
@@ -1194,14 +1161,16 @@ export function applySearchTransition(state: ExperienceState, event: ExperienceE
             },
           };
         }
-        // 成功 / empty：替换或追加目标平台结果与状态，重新轮询交错生成综合顺序，
+        // 成功 / empty：替换目标平台结果与状态，重新轮询交错生成综合顺序，
         // 清除该平台此前的失败提示。
-        // append 用于"单独获取某个平台"：该平台原有结果必须保留（不能因为补一次就消失）。
-        const platformResults = job.results.filter((r) => r.platform === retryTarget);
-        const order = prev ? (Object.keys(prev.platforms) as PlatformSlug[]) : PLATFORM_SLUGS;
-        const mergedResults = d.retryingMode === "append"
-          ? mergeSinglePlatformAppend(prev?.results ?? [], retryTarget, platformResults, order)
-          : mergeSinglePlatformRetry(prev?.results ?? [], retryTarget, platformResults, order);
+        // 单平台重搜（⟳）走这里：后端已把该平台的分页重置并重搜，
+        // 所以只替换它在当前批次里的内容，其它平台与批次结构都不动。
+        const mergedResults = mergeSinglePlatformRetry(
+          prev?.results ?? [],
+          retryTarget,
+          job.results.filter((r) => r.platform === retryTarget),
+          prev ? (Object.keys(prev.platforms) as PlatformSlug[]) : PLATFORM_SLUGS
+        );
         return {
           ...state,
           display: {
@@ -1210,7 +1179,6 @@ export function applySearchTransition(state: ExperienceState, event: ExperienceE
             liveResponse: null,
             retryErrors: omitKey(d.retryErrors, retryTarget),
             retryingPlatform: null,
-            retryingMode: "replace",
             refreshing: false,
             cancelRequested: false, // 正常终态清除取消失败提示（Round 13）
             cancelError: null,
@@ -1269,7 +1237,6 @@ export function applySearchTransition(state: ExperienceState, event: ExperienceE
           liveResponse: null,
           refreshing: false,
           retryingPlatform: null,
-          retryingMode: "replace",
           retryErrors: {},
           cancelledNotice: false,
           cancelRequested: false,

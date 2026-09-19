@@ -307,22 +307,33 @@ class SearchJobManager:
                         or previous.keyword != job.keyword or previous.exploration is None):
                     raise InvalidPlatformsError("上一轮已失效，请从当前搜索继续或重新搜索")
                 session = previous.exploration
-                # 单独获取某个平台：允许在换批里把一个**新平台**并进会话
-                # （它的进度从零开始），而不是拒绝。这样它的结果能补进来，
-                # 而且原会话继续有效 —— 之后「换一批」照常可用。
-                for platform in [p for p in platforms if p not in session.platforms]:
-                    session.add_platform(job, platform)
-                if not any(session.more(p) for p in platforms):
-                    raise InvalidPlatformsError("当前主题没有更多可获取内容，或已达到累计上限")
                 job.exploration = session
                 job.continuation = True
                 job.bypass_cache = True
-                for p in platforms:
-                    if session.generations[p] != job.account_generations[p]:
-                        raise InvalidPlatformsError("账号状态已变化，请重新搜索后继续")
-                    job.page_states[p] = session.states[p].model_copy(deep=True)
-                    job.prior_ids[p] = [r.content_id for r in session.results[p]]
-                    job.platform_limits[p] = min(job.limit_for(p), session.remaining(p))
+                if req.replace_platforms:
+                    # 单平台重搜（⟳）：把这个平台的进度清空重搜，完成后**原地替换**它的结果，
+                    # 不新增批次 —— 用户要的是"补进当前这一批"，不是"往后叠一批"。
+                    # 因此这里不检查"还有没有更多"：正是因为上一轮它一条没搜到
+                    # （或用户想重新搜），才点这个按钮。
+                    job.replaces_platforms = True
+                    for p in platforms:
+                        session.reset_platform(job, p)
+                        job.page_states[p] = PageState()
+                        job.prior_ids[p] = []
+                        job.platform_limits[p] = min(job.limit_for(p), session.MAX_RESULTS)
+                else:
+                    # 换批（换一批）：往后叠加新的批次，平台集合必须已经在会话里 ——
+                    # "补一个没搜过的平台"走 replace_platforms，不要混进换批语义。
+                    if any(p not in session.platforms for p in platforms):
+                        raise InvalidPlatformsError("换批不能新增平台，请重新搜索")
+                    if not any(session.more(p) for p in platforms):
+                        raise InvalidPlatformsError("当前主题没有更多可获取内容，或已达到累计上限")
+                    for p in platforms:
+                        if session.generations[p] != job.account_generations[p]:
+                            raise InvalidPlatformsError("账号状态已变化，请重新搜索后继续")
+                        job.page_states[p] = session.states[p].model_copy(deep=True)
+                        job.prior_ids[p] = [r.content_id for r in session.results[p]]
+                        job.platform_limits[p] = min(job.limit_for(p), session.remaining(p))
             else:
                 job.exploration = Exploration(job)
             self._active_job = job
@@ -996,6 +1007,8 @@ class _ActiveJob:
         self.exploration = None
         self.exploration_info = None
         self.continuation = False
+        # 单平台重搜：结果替换当前批次里该平台的内容，而不是新增一批。
+        self.replaces_platforms = False
         self.page_states = {p: PageState() for p in platforms}
         self.page_checkpoints = set()
         self.prior_ids = {p: [] for p in platforms}

@@ -53,6 +53,10 @@ class SearchJobRequestSchema(BaseModel):
     # Explicit refreshes bypass the in-memory result cache (default: False).
     bypass_cache: bool = Field(default=False)
     continue_from: Optional[str] = Field(default=None, max_length=64)
+    # 单平台重搜（搜索结果页"搜索范围"里的 ⟳）：
+    # 把本次结果作为**当前批次里这些平台的替换**，而不是新增一批。
+    # 语义差别很重要 —— 换批（continue_from 且不带本字段）是往后叠加新的批次。
+    replace_platforms: bool = Field(default=False)
 
     @field_validator("platforms")
     @classmethod

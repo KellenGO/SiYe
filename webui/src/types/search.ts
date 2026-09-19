@@ -138,6 +138,11 @@ export interface SearchJobRequest {
   platform_limits?: Partial<Record<PlatformSlug, number>>;
   /** 普通搜索允许命中短缓存；显式重新搜索时设为 true。 */
   bypass_cache?: boolean;
+  /**
+   * 单平台重搜（搜索结果页「搜索范围」里的 ⟳）：把本次结果作为**当前批次里
+   * 这些平台的替换**，而不是新增一批。与「换一批」的区别就在这里。
+   */
+  replace_platforms?: boolean;
 }
 
 export const PLATFORM_LABELS: Record<PlatformSlug, string> = {

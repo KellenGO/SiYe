@@ -66,7 +66,6 @@ export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateA
     handleFullSearch,
     handleRefresh,
     handleNextBatch,
-    handleRetry,
     handleFetchPlatform,
     handleCancel,
     handleReset,
@@ -267,7 +266,7 @@ export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateA
       {/* 平台搜索状态（统一浅色状态卡） */}
       <PlatformStatus
         response={displayJobResponse ?? undefined}
-        onRetry={handleRetry}
+        onRetry={handleFetchPlatform}
         retryingPlatform={retryingPlatform}
         retryDisabled={busy || !!previousBatch}
       />

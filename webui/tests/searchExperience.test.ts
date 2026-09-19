@@ -25,7 +25,6 @@ import {
   isSearchBlocked,
   keywordRelevanceScore,
   makeDedupKey,
-  mergeSinglePlatformAppend,
   mergeSinglePlatformRetry,
   normalizeHistoryKeyword,
   normalizedPlatformSet,
@@ -788,75 +787,61 @@ test("⑤ 重试 empty：清空目标平台旧结果", () => {
   assert.deepEqual(next.display.retryErrors, {});
 });
 
-// ── 单独获取某个平台（append 合并）────────────────────────────────────
-// 场景：这一轮没搜小红书，用户点 ⟳ 只补它 —— 其它平台不动，且补进来的平台
-// 原有内容不会消失（append 而不是 replace）。
+// ── 单平台重搜（⟳）：替换当前批次里该平台的位置，不开新批次 ──────────────
+// 场景：这一轮没搜小红书，用户点 ⟳ 只重搜它 —— 其它平台不动、小红的旧内容
+// 被替换，且**不产生第 2 批**（"换一批"才是往后叠加批次的那个动作）。
 
-test("mergeSinglePlatformAppend: 追加新内容、保留旧内容、同一内容更新不重排位置", () => {
-  const prev = interleaveByPlatform(
-    new Map([
-      ["xhs", [makeResult("xhs", "x1"), makeResult("xhs", "x2")]],
-      ["douyin", [makeResult("douyin", "d1")]],
-    ]),
-    ["xhs", "douyin"]
-  );
-  const added = [
-    makeResult("xhs", "x2", { title: "新标题" }), // 已存在 → 更新，不新增
-    makeResult("xhs", "x3"),
-  ];
-  const merged = mergeSinglePlatformAppend(prev, "xhs", added, ["xhs", "douyin"]);
-  const xhs = merged.filter((r) => r.platform === "xhs");
-  assert.deepEqual(xhs.map((r) => r.content_id), ["x1", "x2", "x3"]); // 旧的都在，新的追加在后
-  assert.equal(xhs[1].title, "新标题"); // 同一内容取新版本
-  assert.equal(merged.filter((r) => r.platform === "douyin").length, 1); // 其它平台不动
-});
-
-test("mergeSinglePlatformAppend: 目标平台原本没有内容时等于补上", () => {
-  const prev = interleaveByPlatform(
-    new Map([["douyin", [makeResult("douyin", "d1")]]]),
-    ["douyin"]
-  );
-  const merged = mergeSinglePlatformAppend(prev, "zhihu", [makeResult("zhihu", "z1")], ["douyin", "zhihu"]);
-  assert.deepEqual(merged.map((r) => r.platform), ["douyin", "zhihu"]);
-});
-
-test("④b 单独获取某平台（append）：补上新平台结果，旧平台结果与状态都保留", () => {
+test("⑫ 单平台重搜：只替换该平台在当前批次里的位置，其它平台与批次结构不动", () => {
   const prevJob = makeJob("job-A", "completed", "词", STATUS_OK, [
     makeResult("xhs", "x1"),
     makeResult("douyin", "d1"),
   ]);
   const state = step(startFull(initState(), "词", "job-A"), { type: "job_terminal", job: prevJob });
-  // 只跑小红书的续跑任务：响应里它自己的结果 + 其它平台的既有状态
+  const batchesBefore = state.display.jobResponse?.exploration?.previous_batches.length ?? 0;
+  // 重搜小红书：响应是它自己的新结果 + 其它平台的既有状态
   const fetchJob = makeJob("job-F", "completed", "词", { ...STATUS_OK, xhs: { status: "succeeded", count: 2 } }, [
-    makeResult("xhs", "x2"),
-    makeResult("xhs", "x3"),
+    makeResult("xhs", "n1"),
+    makeResult("xhs", "n2"),
   ]);
-  const next = step(
-    step(state, { type: "retry_start", platform: "xhs", mode: "append" }, { type: "retry_accepted", jobId: "job-F" }),
-    { type: "job_terminal", job: fetchJob }
-  );
+  const next = step(startRetry(state, "xhs", "job-F"), { type: "job_terminal", job: fetchJob });
+
   const xhs = next.display.jobResponse!.results.filter((r) => r.platform === "xhs");
-  assert.deepEqual(xhs.map((r) => r.content_id), ["x1", "x2", "x3"]); // 旧 x1 没有被替换掉
+  assert.deepEqual(xhs.map((r) => r.content_id), ["n1", "n2"]); // 替换（不是追加）
   assert.deepEqual(
     next.display.jobResponse!.results.filter((r) => r.platform === "douyin").map((r) => r.content_id),
-    ["d1"]
+    ["d1"] // 其它平台原样保留，还能和重搜结果一起看
   );
+  assert.equal(next.display.jobResponse?.keyword, "词");
   assert.equal(next.display.retryingPlatform, null);
   assert.deepEqual(next.display.retryErrors, {});
-  assert.equal(next.display.jobResponse?.keyword, "词"); // 关键词不变
+  // 重搜不是换批：不该多出批次
+  assert.equal(next.display.jobResponse?.exploration?.previous_batches.length ?? 0, batchesBefore);
+  assert.equal(next.display.jobResponse?.exploration?.round, prevJob.exploration?.round);
 });
 
-test("④c 单独获取平台的 append 模式不写历史、不改平台偏好", () => {
-  const prevJob = makeJob("job-A", "completed", "词", STATUS_OK, [makeResult("xhs", "x1")]);
-  const state = step(
-    startFull(initState(), "词", "job-A"),
-    { type: "job_terminal", job: prevJob }
+test("⑬ 单平台重搜平台原本没有结果时：等于把它补进来", () => {
+  const prevJob = makeJob("job-A", "completed", "词", { ...STATUS_OK, zhihu: { status: "empty", count: 0 } }, [
+    makeResult("xhs", "x1"),
+  ]);
+  const state = step(startFull(initState(), "词", "job-A"), { type: "job_terminal", job: prevJob });
+  const fetchJob = makeJob("job-F", "completed", "词", { ...STATUS_OK, zhihu: { status: "succeeded", count: 1 } }, [
+    makeResult("zhihu", "z1"),
+  ]);
+  const next = step(startRetry(state, "zhihu", "job-F"), { type: "job_terminal", job: fetchJob });
+  assert.deepEqual(
+    next.display.jobResponse!.results.map((r) => `${r.platform}:${r.content_id}`).sort(),
+    ["xhs:x1", "zhihu:z1"]
   );
+});
+
+test("⑭ 单平台重搜不写历史、不改平台偏好", () => {
+  const prevJob = makeJob("job-A", "completed", "词", STATUS_OK, [makeResult("xhs", "x1")]);
+  const state = step(startFull(initState(), "词", "job-A"), { type: "job_terminal", job: prevJob });
   const historyBefore = state.history.map((item) => `${item.keyword}|${item.platforms.join(",")}`);
   const prefBefore = [...state.platformPref];
   const next = step(
     state,
-    { type: "retry_start", platform: "zhihu", mode: "append" },
+    { type: "retry_start", platform: "zhihu" },
     { type: "retry_accepted", jobId: "job-F" },
     { type: "job_terminal", job: makeJob("job-F", "completed", "词", STATUS_OK, [makeResult("zhihu", "z1")]) }
   );
