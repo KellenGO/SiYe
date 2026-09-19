@@ -127,6 +127,9 @@ class DouYinCrawler(AbstractCrawler):
             "https://live.douyin.com",
         ]
         self.cdp_manager = None
+        # 公开搜索（未登录也继续搜）的开关：见 start() —— 一旦走了这条路，
+        # 平台对匿名搜索常返回空列表，此时必须报"登录态失效"而不是"无结果"。
+        self.anonymous_public_search = False
 
     async def start(self) -> None:
         self._begin_phase_timing()
@@ -169,10 +172,11 @@ class DouYinCrawler(AbstractCrawler):
                 # pong 未确认登录：默认行为不变（fail_fast 抛错 / 交互式扫码），
                 # 但聚合搜索可开启 allow_public_search —— 跳过登录门禁直接
                 # 尝试公开搜索（搜索 API 不登录也可能返回结果）。
+                self.anonymous_public_search = bool(self._allow_public_search())
                 if self._login_fail_fast() and not self._allow_public_search():
                     from base.exceptions import LoginRequiredError
                     raise LoginRequiredError(platform="douyin", message="抖音登录状态已失效，请前往账号设置重新登录")
-                if not self._allow_public_search():
+                if not self._login_fail_fast() and not self._allow_public_search():
                     login_obj = DouYinLogin(
                         login_type=config.LOGIN_TYPE,
                         login_phone="",  # you phone number
@@ -213,6 +217,7 @@ class DouYinCrawler(AbstractCrawler):
             page = 0
             dy_search_id = ""
             remaining = max_notes
+            emitted = 0
             _search_api_reported = False
             while remaining > 0 and (page - start_page + 1) * dy_limit_count <= config.CRAWLER_MAX_NOTES_COUNT + dy_limit_count:
                 if page < start_page:
@@ -263,12 +268,20 @@ class DouYinCrawler(AbstractCrawler):
 
                 # ── aggregate-search hook: push native results to sink ──
                 self._result_sink_call(page_aweme_data)
+                emitted += len(page_aweme_data)
 
                 # Sleep after each page navigation（已达 limit 时无需再等下一页）
                 if remaining > 0:
                     await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
                     utils.logger.info(f"[DouYinCrawler.search] Sleeping for {config.CRAWLER_MAX_SLEEP_SEC} seconds after page {page-1}")
             utils.logger.info(f"[DouYinCrawler.search] keyword:{keyword}, aweme_list:{aweme_list}")
+            if emitted == 0 and self.anonymous_public_search:
+                # 不登录也继续搜（allow_public_search）时，匿名请求常常只拿回空列表。
+                # 这时报"无结果"是骗人的 —— 用户看到 0 条却不知道要去重新登录。
+                from base.exceptions import LoginRequiredError
+                raise LoginRequiredError(
+                    platform="douyin",
+                    message="抖音未登录或登录态失效，公开搜索没有返回内容，请前往账号设置重新登录")
 
     async def fetch_favorites(self) -> None:
         """Fetch a bounded slice of the logged-in account's collected videos."""

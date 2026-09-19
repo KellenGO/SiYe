@@ -323,18 +323,68 @@ async def test_replace_platforms_reruns_one_platform_without_a_new_batch(manager
     late = await manager.get_job(second.job_id)
     assert late is not None and len(late.results) == 6
 
-    # 重搜一个已有结果的平台：换掉它在这个批次里的内容，其它平台不动
+    # 重搜一个**已有结果**的平台：接着它的分页继续抓 → 拿到与上一轮不重复的新内容
     third = await search(manager, platforms=["xhs"], limit_per_platform=2,
                          continue_from=second.job_id, replace_platforms=True)
     session = manager._active_job.exploration
     assert third.exploration["round"] == 1
-    assert {r.content_id for r in session.results["xhs"]} == {"xhs-1", "xhs-2"}
+    assert {r.content_id for r in session.results["xhs"]} == {"xhs-3", "xhs-4"}
     assert {r.content_id for r in session.results["bilibili"]} == {"bilibili-1", "bilibili-2"}
+    # 响应仍是整轮视图（含其它平台）
+    assert len(third.results) == 6
 
     # 原会话仍在 → 之后"换一批"照常可用
     fourth = await search(manager, platforms=["xhs", "bilibili"], limit_per_platform=2,
                           continue_from=third.job_id)
     assert fourth.exploration["round"] == 2
+
+
+@pytest.mark.asyncio
+async def test_single_platform_research_continues_pagination_and_skips_seen(manager, monkeypatch):
+    """重搜 = 单平台版的"换一批"：接着分页继续，且把已见 id 交给 worker 去重。"""
+    calls = []
+
+    async def worker(job, platform):
+        req = WorkerRequest.model_validate_json(manager._build_request_json(job, platform))
+        calls.append(req)
+        start = req.pagination["page"]
+        for i in range(req.limit):
+            job.add_result(platform, result(platform, f"{platform}-{start + i}"))
+        job.apply_metrics(platform, {"pagination": PageState(page=start + req.limit).model_dump()})
+        job.set_platform_status(platform, "succeeded")
+
+    monkeypatch.setattr(manager, "_run_worker", worker)
+
+    first = await search(manager, platforms=["bilibili"], limit_per_platform=2)
+    assert {r.content_id for r in first.results} == {"bilibili-1", "bilibili-2"}
+
+    second = await search(manager, platforms=["bilibili"], limit_per_platform=2,
+                          continue_from=first.job_id, replace_platforms=True)
+    # worker 收到的是下一页 + 已见 id（不重复）
+    assert calls[-1].pagination["page"] == 3
+    assert calls[-1].seen_ids == ["bilibili-1", "bilibili-2"]
+    assert {r.content_id for r in second.results} == {"bilibili-3", "bilibili-4"}
+
+
+@pytest.mark.asyncio
+async def test_single_platform_research_rejects_exhausted_platform(manager, monkeypatch):
+    """已取尽的平台不静默返回重复内容，而是明确报错（0 结果平台走的是"从头搜"分支）。"""
+    async def worker(job, platform):
+        req = WorkerRequest.model_validate_json(manager._build_request_json(job, platform))
+        for i in range(req.limit):
+            job.add_result(platform, result(platform, f"{platform}-{req.pagination['page']}-{i}"))
+        # 明确声明没有下一页
+        job.apply_metrics(platform, {"pagination": PageState(page=99, exhausted=True).model_dump()})
+        job.set_platform_status(platform, "succeeded")
+
+    monkeypatch.setattr(manager, "_run_worker", worker)
+    first = await search(manager, platforms=["zhihu"], limit_per_platform=2)
+    assert first.results  # 有内容
+    assert not manager._active_job.exploration.more("zhihu")
+
+    with pytest.raises(sjm.InvalidPlatformsError, match="已经取完"):
+        await search(manager, platforms=["zhihu"], limit_per_platform=2,
+                     continue_from=first.job_id, replace_platforms=True)
 
 
 @pytest.mark.asyncio

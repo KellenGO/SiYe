@@ -33,10 +33,11 @@ from tests.fixtures.browser import (
 class _FakeDouYinClient:
     """pong=False（未确认登录）+ 公开搜索有结果。"""
 
-    def __init__(self):
+    def __init__(self, always_empty: bool = False):
         self.pong_calls = 0
         self.search_calls = []
         self.update_cookies_calls = 0
+        self.always_empty = always_empty
 
     async def pong(self, browser_context=None):
         self.pong_calls += 1
@@ -44,6 +45,9 @@ class _FakeDouYinClient:
 
     async def search_info_by_keyword(self, **kwargs):
         self.search_calls.append(kwargs)
+        if self.always_empty:
+            # 匿名搜索的典型返回：明确成功、但列表为空
+            return {"data": [], "status_code": 0, "extra": {}}
         if len(self.search_calls) > 1:
             return {"data": [], "status_code": 0}
         return {"data": [{"aweme_info": {"aweme_id": "fake-aweme-1"}}],
@@ -122,6 +126,25 @@ def test_public_search_proceeds_when_pong_fails(monkeypatch):
     assert client.update_cookies_calls == 0, "未确认登录时不得走扫码登录"
     assert sink[0]["aweme_id"] == "fake-aweme-1", (
         "sink 收到的是 aweme_info 本体（search() 的 _result_sink_call 语义）")
+
+
+def test_public_search_empty_without_login_reports_login_required(monkeypatch):
+    """匿名公开搜索 + 一条都没拿到 → 报"登录态失效"，而不是假装"无结果"。
+
+    平台对未登录的搜索请求常返回空列表；以前这种情况会被当成 empty（用户看到
+    "无结果"却不知道要重新登录）。有结果时不受影响。
+    """
+    _configure_config(monkeypatch)
+    sink = []
+    client = _FakeDouYinClient(always_empty=True)
+    crawler, client = _make_crawler(
+        monkeypatch, client, sink, allow_public_search=True)
+
+    with pytest.raises(LoginRequiredError) as exc:
+        asyncio.run(crawler.start())
+
+    assert "登录" in str(exc.value)
+    assert sink == [], "没有任何结果时才报登录态失效"
 
 
 def test_fail_fast_without_public_search_raises_login_required(monkeypatch):

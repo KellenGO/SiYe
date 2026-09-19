@@ -89,6 +89,15 @@ class Exploration:
         job.exploration_info = self.info(job, replaced)
         return replaced
 
+    def fresh_search_needed(self, platform: str) -> bool:
+        """这个平台要不要**从头搜**：没进过会话，或至今一条都没拿到。
+
+        单平台重搜用它区分两种场景：
+        - 补一个没搜过的平台 / 上一轮空结果的平台 → 从头搜（只有第 1 页可看）；
+        - 已经有内容的平台 → 接着分页继续抓，才能拿到不重复的新内容。
+        """
+        return not self.results.get(platform)
+
     def remaining(self, platform):
         return max(0, self.MAX_RESULTS - len(self.results[platform]))
 

@@ -26,6 +26,7 @@ autouse fixture 会把默认模式置回 oneshot，二者互不干扰。
 """
 
 import asyncio
+import logging
 import os
 import sys
 import time
@@ -399,3 +400,59 @@ def test_real_worker_bad_snapshot_stdin_exits_fast_no_secret():
     assert proc.returncode != 0
     assert b"LEAK-SNAPSHOT-STRING" not in proc.stderr
     assert b"ValueError" in proc.stderr
+
+
+# ── worker 日志尾部：脱敏 + 排障输出 ─────────────────────────────────
+
+def test_sanitize_worker_log_lines_drops_secret_lines_and_truncates():
+    """含敏感关键字的行整行丢弃；超长行截断。"""
+    text = "\n".join([
+        "INFO [DouYinCrawler.search] page: 0 is empty",
+        "  DEBUG cookie=abc123  ",
+        "msToken=xyz",
+        "X-S: signature-value",
+        "ERROR " + "x" * 500,
+        "",
+    ])
+    lines = worker_process.sanitize_worker_log_lines(text)
+    assert lines[0] == "INFO [DouYinCrawler.search] page: 0 is empty"
+    assert len(lines) == 2, "含 cookie/token/签名 的行必须整行丢弃"
+    assert len(lines[1]) == worker_process.LOG_LINE_LIMIT
+
+
+def test_worker_log_tail_is_logged_when_platform_ends_empty(caplog):
+    """平台 0 结果 / 失败时把 worker 日志尾部打到后端日志（这是唯一能排障的证据）。"""
+    manager = sjm.SearchJobManager()
+    job = sjm._ActiveJob(job_id="job-1", keyword="测试", platforms=["douyin"],
+                         limit_per_platform=3)
+    worker = sjm._ResidentWorker(platform="douyin", proc=None)
+    worker.log_tail.extend([
+        "[DouYinCrawler.search] Current keyword: 测试",
+        "[DouYinCrawler.search] page: 0 is empty",
+    ])
+    manager.supervisor._workers["douyin"] = worker
+
+    with caplog.at_level(logging.WARNING, logger=sjm.__name__):
+        manager._log_worker_tail(job, "douyin", "empty")
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("douyin" in m and "empty" in m for m in messages)
+    assert any("page: 0 is empty" in m for m in messages)
+
+
+def test_worker_log_tail_not_logged_when_platform_succeeded(caplog):
+    """有结果时不该刷日志（正常路径保持安静）。"""
+    manager = sjm.SearchJobManager()
+    job = sjm._ActiveJob(job_id="job-2", keyword="测试", platforms=["xhs"],
+                         limit_per_platform=3)
+    from aggregate_search.models import UnifiedSearchResult
+    job.platform_results["xhs"].append(UnifiedSearchResult(
+        platform="xhs", content_id="c1", title="t", url="https://example.com/c1"))
+    worker = sjm._ResidentWorker(platform="xhs", proc=None)
+    worker.log_tail.append("INFO 一切正常")
+    manager.supervisor._workers["xhs"] = worker
+
+    with caplog.at_level(logging.WARNING, logger=sjm.__name__):
+        manager._log_worker_tail(job, "xhs", "succeeded")
+
+    assert [r.getMessage() for r in caplog.records] == []

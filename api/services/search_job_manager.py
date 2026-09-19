@@ -14,6 +14,7 @@ import os
 import time
 import uuid
 from datetime import datetime, timezone
+from collections import deque
 from typing import Any, Dict, List, Optional
 
 from aggregate_search.models import (
@@ -41,6 +42,7 @@ from .search_exploration import Exploration
 from .worker_process import (
     cancel_task_quietly,
     drain_stderr_to_eof,
+    drain_stderr_to_logger,
     spawn_worker,
     terminate_worker,
 )
@@ -48,6 +50,8 @@ from aggregate_search.pagination import PageState
 
 WORKER_TIMEOUT_SECONDS = 100
 GRACE_PERIOD_SECONDS = 5.0
+#: worker 日志尾部保留行数（平台 0 结果/失败时打出来排障）。
+WORKER_LOG_TAIL_LINES = 30
 # Bound on waiting for an already in-flight cancel to finish (idempotent
 # repeat cancel). The cancel cleanup itself is bounded by GRACE_PERIOD.
 CANCEL_WAIT_TIMEOUT = 30.0
@@ -96,7 +100,7 @@ class PlatformWorkerSupervisor:
         )
         worker = _ResidentWorker(platform=platform, proc=proc)
         worker.stderr_task = asyncio.create_task(
-            self._drain_stderr(platform, proc))
+            self._drain_stderr(platform, proc, worker))
         return worker
 
     async def submit(self, platform: str, line: bytes) -> "_ResidentWorker":
@@ -224,18 +228,24 @@ class PlatformWorkerSupervisor:
         except asyncio.CancelledError:
             pass
 
-    async def _drain_stderr(self, platform: str, proc) -> None:
-        """常驻排空 worker stderr，防管道填满导致子进程卡死。
+    async def _drain_stderr(self, platform: str, proc, worker: "_ResidentWorker" = None) -> None:
+        """常驻排空 worker stderr（防管道填满导致子进程卡死），并留住尾部日志。
 
-        历史实现会把过滤后的行攒进 tail，但那个 tail 从未被读取（也不落日志）——
-        和 `_read_worker_stderr` 是同一个白算的毛病，已一并去掉。
+        排空是必须的；留住尾部则用于排障：worker 子进程的日志以前**完全看不到**
+        （抖音"搜不出来"时无从下手），现在平台 0 结果/失败时会把尾部打到后端日志。
+        落日志前统一脱敏（见 worker_process.sanitize_worker_log_lines）。
         """
-        await drain_stderr_to_eof(proc)
+        def emit(line: str) -> None:
+            logger.debug("[worker:%s] %s", platform, line)
+            if worker is not None:
+                worker.log_tail.append(line)
+
+        await drain_stderr_to_logger(proc, emit)
 
 
 class _ResidentWorker:
     __slots__ = ("platform", "proc", "stderr_task", "last_used_at",
-                 "request_count", "busy", "reused")
+                 "request_count", "busy", "reused", "log_tail")
 
     def __init__(self, platform: str, proc):
         self.platform = platform
@@ -246,6 +256,8 @@ class _ResidentWorker:
         self.busy: bool = False
         # Record whether this request reused an existing worker.
         self.reused: bool = False
+        # worker 日志尾部（已脱敏）：平台 0 结果/失败时打出来排障。
+        self.log_tail: deque = deque(maxlen=WORKER_LOG_TAIL_LINES)
 
 
 def _safe_error_summary(msg: str) -> str:
@@ -311,16 +323,25 @@ class SearchJobManager:
                 job.continuation = True
                 job.bypass_cache = True
                 if req.replace_platforms:
-                    # 单平台重搜（⟳）：把这个平台的进度清空重搜，完成后**原地替换**它的结果，
-                    # 不新增批次 —— 用户要的是"补进当前这一批"，不是"往后叠一批"。
-                    # 因此这里不检查"还有没有更多"：正是因为上一轮它一条没搜到
-                    # （或用户想重新搜），才点这个按钮。
+                    # 单平台重搜（⟳）= 单平台版的"换一批"：
+                    #   有内容且还有下一页 → 接着它的分页继续抓（带已见 id 去重），
+                    #     拿到的是与上一轮**不重复**的新内容；
+                    #   没搜过 / 一条都没有 → 从头搜（补一个平台的场景）；
+                    #   有内容但已取尽 → 明确报错，绝不静默返回重复内容。
+                    # 三种情况都不新增批次（"换一批"才是往后叠加）。
                     job.replaces_platforms = True
                     for p in platforms:
-                        session.reset_platform(job, p)
-                        job.page_states[p] = PageState()
-                        job.prior_ids[p] = []
-                        job.platform_limits[p] = min(job.limit_for(p), session.MAX_RESULTS)
+                        if session.fresh_search_needed(p):
+                            session.reset_platform(job, p)
+                            job.page_states[p] = PageState()
+                            job.prior_ids[p] = []
+                            job.platform_limits[p] = min(job.limit_for(p), session.MAX_RESULTS)
+                            continue
+                        if not session.more(p):
+                            raise InvalidPlatformsError("该平台已经取完，重搜没有新内容")
+                        job.page_states[p] = session.states[p].model_copy(deep=True)
+                        job.prior_ids[p] = [r.content_id for r in session.results[p]]
+                        job.platform_limits[p] = min(job.limit_for(p), session.remaining(p))
                 else:
                     # 换批（换一批）：往后叠加新的批次，平台集合必须已经在会话里 ——
                     # "补一个没搜过的平台"走 replace_platforms，不要混进换批语义。
@@ -496,6 +517,23 @@ class SearchJobManager:
         finally:
             self.cooldowns.record(platform, info.status)
             info.cooldown_until = self.cooldowns.until(platform)
+            self._log_worker_tail(job, platform, info.status)
+
+    def _log_worker_tail(self, job: "_ActiveJob", platform: str, status: str) -> None:
+        """平台 0 条结果或失败时，把 worker 日志尾部打到后端日志。
+
+        worker 子进程的日志以前完全看不到（抖音"搜不出来"时无从下手）。
+        "一条都没拿到"是所有异常里最需要证据的那种，所以这里兜住。
+        内容已在 drain 时脱敏。
+        """
+        if status == "succeeded" and job.platform_results.get(platform):
+            return
+        worker = self.supervisor._workers.get(platform)
+        if worker is None or not worker.log_tail:
+            return
+        logger.warning("[search] %s 终态 %s，worker 日志尾部（已脱敏）:", platform, status)
+        for line in worker.log_tail:
+            logger.warning("[worker:%s] %s", platform, line)
 
     def _build_request_json(self, job: "_ActiveJob", platform: str) -> bytes:
         request = WorkerRequest(

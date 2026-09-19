@@ -143,3 +143,53 @@ async def drain_stderr_to_eof(proc: asyncio.subprocess.Process) -> None:
             pass
     except Exception:
         pass
+
+
+#: worker 日志里出现这些关键字的行**整行丢弃**（可能带 cookie / 签名 / token）。
+_LOG_SECRET_MARKERS = (
+    "cookie", "token", "mstoken", "a_bogus", "x-s", "x_s", "x-bogus",
+    "signature", "sec_", "verifyfp", "s_v_web_id", "authorization",
+    "password", "phone", "webid", "odin_tt",
+)
+
+#: 单行保留长度（worker 日志可能超长）。
+LOG_LINE_LIMIT = 300
+
+
+def sanitize_worker_log_lines(chunk: str) -> List[str]:
+    """把一段 worker stderr 变成可以落后端日志的安全行。
+
+    - 按行切分、去空白、截断长度；
+    - 命中敏感关键字的**整行丢弃**（不做部分脱敏，避免半截泄漏）；
+    - 行数上限由调用方裁（deque maxlen）。
+    """
+    lines: List[str] = []
+    for raw in (chunk or "").splitlines():
+        text = raw.strip()
+        if not text:
+            continue
+        lowered = text.lower()
+        if any(marker in lowered for marker in _LOG_SECRET_MARKERS):
+            continue
+        lines.append(text[:LOG_LINE_LIMIT])
+    return lines
+
+
+async def drain_stderr_to_logger(proc: asyncio.subprocess.Process, emit) -> None:
+    """把 stderr 一直读到 EOF，并把脱敏后的行交给 `emit(line)`。
+
+    `emit` 必须不抛异常（内部自己兜住）—— 这里不再额外保护，避免把真实错误吞成静默。
+    """
+    stderr = proc.stderr
+    if stderr is None:
+        return
+    try:
+        while True:
+            chunk = await stderr.read(65536)
+            if not chunk:
+                return
+            text = chunk.decode("utf-8", errors="replace")
+            for line in sanitize_worker_log_lines(text):
+                emit(line)
+    except Exception:
+        pass
