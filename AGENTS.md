@@ -101,6 +101,12 @@
 - **pytest 写不进系统 Temp**，必须带项目内临时目录：`--basetemp=.tmp_pytest_xxx`。
   **而且每次都要换新的子目录**（`--basetemp=.tmp_pytest_run/r<时间戳>`，父目录先建好）——
   复用同一目录会触发沙箱的 safe-delete 批量保护，报成上百个 setup ERROR 的**假回归**。
+- **全量 pytest 会超过命令的默认超时（120 秒）**：套件已经涨到 1000+ 个用例，
+  实测一批就要 107 秒，**整跑会在跑到 80% 左右被掐断，而且看不到任何失败信息**
+  （表现为 exit 1 + 输出停在半路，很容易误判成"某个测试崩了"）。
+  两个办法：跑的时候显式给更长的 timeout，或者**按文件分两批跑**
+  （用 `--ignore=<后半批文件>` 跑前半，再单独跑后半），合起来覆盖全部用例。
+  `.tmp_*` 已在 `.git/info/exclude` 里，临时脚本不会被误提交。
 - **shell 会 mangle 带斜杠的参数**：`git branch feat/x` 会静默失败并报 `fatal: invalid reference`。
   **可靠做法：用 Python `subprocess.run(['git', ...])` 调 git**（这一轮全程这么做，稳定），
   分支名用连字符。
