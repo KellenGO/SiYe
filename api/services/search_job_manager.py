@@ -1150,6 +1150,20 @@ class _ActiveJob:
                 info.status = "succeeded" if results else "empty"
                 info.result_count = len(results)
                 self.mark_platform_total(p)
+                if info.status == "empty":
+                    # 空结果不留原因就没法区分"真没结果"和"被风控"（worker 日志
+                    # 不打在后端控制台）。记一条安全摘要：平台 / 关键词 / 耗时数值。
+                    timing = self.timings.get(p)
+                    logger.warning(
+                        "[search] %s returned 0 results (keyword=%r, worker_ready_ms=%s, "
+                        "navigation_ms=%s, search_api_ms=%s, total_ms=%s) — "
+                        "可能是平台返回空列表或被风控，需结合 worker 日志确认",
+                        p, self.keyword,
+                        getattr(timing, "worker_ready_ms", None),
+                        getattr(timing, "navigation_ms", None),
+                        getattr(timing, "search_api_ms", None),
+                        self.total_ms,
+                    )
             if info:
                 if info.status in ("succeeded", "empty") and info.fetched_at is None:
                     info.fetched_at = self.completed_at

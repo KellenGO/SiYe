@@ -299,18 +299,29 @@ async def test_replace_platforms_reruns_one_platform_without_a_new_batch(manager
                           continue_from=first.job_id, replace_platforms=True)
     assert [c.platform for c in calls] == ["xhs", "bilibili", "zhihu"]
     assert calls[-1].pagination["page"] == 1
-    assert second.results and {r.platform for r in second.results} == {"zhihu"}
+
+    # 响应是**整轮完整视图**：小红书的 2 条 + 其它平台的 4 条都在
+    # （曾因响应只装被重搜平台，前端把其它平台的结果整批覆盖掉）
+    assert len(second.results) == 6
+    assert {r.platform for r in second.results} == {"xhs", "bilibili", "zhihu"}
 
     # 不开新批次：round 不变
     assert second.exploration["round"] == 1
     session = manager._active_job.exploration
     assert len(session.batches) == 1
+    # 批次内容与当前视图一致
+    assert len(session.batches[-1]["results"]) == 6
+    assert second.exploration["new_contents"] == 6
     # 新平台进了会话，原平台进度没被重置
     assert session.platforms == ["xhs", "bilibili", "zhihu"]
     assert session.states["xhs"].page == 3 and session.states["bilibili"].page == 3
     # 响应里三个平台的状态都在（状态条与各平台条数不能只剩一个）
     assert set(second.platforms) == {"xhs", "bilibili", "zhihu"}
     assert second.overall == "completed"
+
+    # hydration 迟到轮询（同一 job 再取）：结果仍是全量，不会缩水
+    late = await manager.get_job(second.job_id)
+    assert late is not None and len(late.results) == 6
 
     # 重搜一个已有结果的平台：换掉它在这个批次里的内容，其它平台不动
     third = await search(manager, platforms=["xhs"], limit_per_platform=2,
@@ -357,11 +368,12 @@ async def test_replace_platforms_reruns_a_platform_that_collected_nothing(manage
     with pytest.raises(sjm.InvalidPlatformsError, match="没有更多"):
         await search(manager, platforms=["douyin"], continue_from=first.job_id)
 
-    # 而"重搜"必须能跑，并从第 1 页重来
+    # 而"重搜"必须能跑，并从第 1 页重来；响应仍是整轮视图（小红书的结果保留）
     second = await search(manager, platforms=["douyin"], limit_per_platform=2,
                           continue_from=first.job_id, replace_platforms=True)
     assert calls[-1] == ("douyin", 1)
-    assert {r.content_id for r in second.results} == {"douyin-1-0", "douyin-1-1"}
+    assert {r.content_id for r in second.results if r.platform == "douyin"} == {"douyin-1-0", "douyin-1-1"}
+    assert {r.content_id for r in second.results if r.platform == "xhs"} == {"xhs-1-0", "xhs-1-1"}
     assert second.platforms["douyin"].status == "succeeded"
 
 

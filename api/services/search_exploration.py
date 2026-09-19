@@ -63,7 +63,9 @@ class Exploration:
     def replace_platform_results(self, job: "_ActiveJob") -> int:
         """单平台重搜的提交：原地替换该平台结果，**不新增批次**。
 
-        替换后的内容归属最新批次（`owners` 用它把结果分派到各批次的展示列表）。
+        `_final_results` 必须是**整轮完整视图**（全部平台的累计结果交错），
+        与 `commit()` 同构 —— 响应里只装被重搜平台的话，前端的快照/补全轮询
+        会拿它整体覆盖展示，其它平台的结果就会从页面上消失。
         """
         replaced = 0
         for platform in job.platforms:
@@ -71,15 +73,19 @@ class Exploration:
             self.results[platform] = new_results
             if platform in job.page_states:
                 self.states[platform] = job.page_states[platform].model_copy(deep=True)
-            number = max(1, len(self.batches))
-            for item in new_results:
-                self.owners[make_dedup_key(platform, item.content_id)] = number
             replaced += len(new_results)
+        # 新结果归属最新批次（reset_platform 已清掉该平台的旧归属）。
+        number = max(1, len(self.batches))
+        for platform in job.platforms:
+            for item in self.results[platform]:
+                self.owners[make_dedup_key(platform, item.content_id)] = number
         self.platforms_state.update(deepcopy(job.platforms_state))
-        job._final_results = interleave_results(
-            {p: job.platform_results[p] for p in job.platforms},
-            platform_order=self.platforms,
-        )
+        # 整轮完整视图：所有平台的累计结果交错。
+        grouped = interleave_results(self.results, platform_order=self.platforms)
+        if self.batches:
+            # 最新批次的内容与当前视图保持一致（"第 N 批"回看与 new_contents 都以它为准）。
+            self.batches[-1]["results"] = grouped
+        job._final_results = grouped
         job.exploration_info = self.info(job, replaced)
         return replaced
 

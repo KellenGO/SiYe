@@ -1086,11 +1086,16 @@ export function applySearchTransition(state: ExperienceState, event: ExperienceE
       if (d.appliedJobIds.has(job.job_id)) {
         if (d.jobResponse && (job.hydration_status === "running" ||
             job.hydration_status === "completed")) {
+          // 同一个 job 的补全轮询：只应该多信息（摘要/指标），不应该少结果。
+          // 结果变少 = 后端回归（曾因此把单平台重搜后的其它平台结果清掉），保住当前结果。
+          const results = job.results.length >= (d.jobResponse.results.length ?? 0)
+            ? job.results
+            : d.jobResponse.results;
           return {
             ...state,
             display: {
               ...d,
-              jobResponse: job,
+              jobResponse: { ...job, results },
             },
           };
         }

@@ -959,6 +959,34 @@ test("⑨ 同一 job_id 终态重复到达只应用一次（幂等，原引用�
   assert.ok(again.display.appliedJobIds.has("job-A"));
 });
 
+// ── hydration 迟到轮询（终态提交后同一 job 的补全响应）─────────────────
+// 这条路径会整体替换 jobResponse —— 曾因后端响应只装被重搜平台的结果，
+// 把单平台重搜后其它平台的内容清掉。护栏：同一个 job 的结果不应变少。
+
+test("⑨b hydration 迟到响应结果变少时：保留当前结果，只更新补全状态", () => {
+  const job = makeJob("job-A", "completed", "词", STATUS_OK, [
+    makeResult("xhs", "x1"),
+    makeResult("douyin", "d1"),
+  ]);
+  const state = step(startFull(initState(), "词", "job-A"), { type: "job_terminal", job });
+  // 补全轮询回来的响应结果变少了（后端回归场景）
+  const shrunk = makeJob("job-A", "completed", "词", STATUS_OK, [makeResult("xhs", "x1")],
+    { hydration_status: "completed" });
+  const next = applySearchTransition(state, { type: "job_terminal", job: shrunk });
+  assert.deepEqual(next.display.jobResponse!.results.map((r) => r.content_id), ["x1", "d1"]);
+  assert.equal(next.display.jobResponse!.hydration_status, "completed"); // 补全状态照常更新
+});
+
+test("⑨c hydration 迟到响应结果一致时：照常整体更新（不破坏补全）", () => {
+  const job = makeJob("job-A", "completed", "词", STATUS_OK, [makeResult("xhs", "x1")]);
+  const state = step(startFull(initState(), "词", "job-A"), { type: "job_terminal", job });
+  const enriched = makeJob("job-A", "completed", "词", STATUS_OK, [
+    makeResult("xhs", "x1", { snippet: "补全后的摘要" }),
+  ], { hydration_status: "completed" });
+  const next = applySearchTransition(state, { type: "job_terminal", job: enriched });
+  assert.equal(next.display.jobResponse!.results[0].snippet, "补全后的摘要");
+});
+
 test("⑩ 身份保护完整序列：A 从未提交 → 接受 B → A 迟到被拒 → B 提交 → A 再迟到仍被拒", () => {
   const jobA = makeJob("job-A", "completed", "旧词", STATUS_OK, [makeResult("xhs", "x1")]);
   const jobB = makeJob("job-B", "completed", "新词", STATUS_OK, [makeResult("xhs", "x2")]);
