@@ -24,11 +24,8 @@ interface ResultTabsProps {
   fetchedAt?: Partial<Record<PlatformSlug, string | null>>;
   /** 关闭内置排序、严格按传入顺序渲染（历史页按最近浏览倒序时需要）。 */
   disableSort?: boolean;
-  /**
-   * 隐藏平台页签。传入的数据本身只是"服务端分页的一页"时（收藏归档页）必须隐藏：
-   * 页签只过滤当前页，会让人误以为翻页是按平台分的。
-   */
-  hidePlatformTabs?: boolean;
+  /** 一次渲染多少条；其余在列表底部点「显示更多」逐步展开（收藏页传 100）。 */
+  pageSize?: number;
   /** 每条结果的可删除回调（历史页用来删除单条记录）。 */
   onDeleteItem?: (result: UnifiedSearchResult) => void;
   /** 勾选状态变化时回调（收藏夹页用同一套勾选做批量加入 / 移出）。 */
@@ -70,7 +67,7 @@ export function ResultTabs({
   selectionToolLabel,
   selectionResetKey,
   disableSort = false,
-  hidePlatformTabs = false,
+  pageSize,
   onDeleteItem,
 }: ResultTabsProps) {
   const [activeTab, setActiveTab] = useState<TabKey>("all");
@@ -149,6 +146,15 @@ export function ResultTabs({
     return c;
   }, [results, filters, nowMs]);
 
+  // 一次只渲染前 N 条：收藏攒到几百上千条时，一次性铺完会卡。其余点「显示更多」逐步展开，
+  // 勾选/导出仍然作用于筛选后的全部结果（不只是已渲染的那些）。
+  const [shown, setShown] = useState(pageSize ?? 0);
+  useEffect(() => {
+    setShown(pageSize ?? 0);
+  }, [pageSize, jobId, effectiveTab, filters, keyword, selectionResetKey]);
+  const renderedResults = pageSize ? filteredResults.slice(0, Math.max(shown, pageSize)) : filteredResults;
+  const hiddenCount = pageSize ? filteredResults.length - renderedResults.length : 0;
+
   const selectedResults = filteredResults.filter((result) => selected.has(groupKey(result)));
   const bookmarks = new Map((library?.items || []).map((item) => [resultKey(item.result), item]));
   const rows = exportRows(selectedResults.length ? selectedResults : filteredResults, (source) => {
@@ -161,7 +167,7 @@ export function ResultTabs({
 
   return (
     <div className="results-block">
-      {!hidePlatformTabs && <div className="tabs" role="tablist" aria-label="结果平台">
+      <div className="tabs" role="tablist" aria-label="结果平台">
           {visibleTabs.map((tab) => {
             const count = counts[tab.key] || 0;
             const active = effectiveTab === tab.key;
@@ -178,7 +184,7 @@ export function ResultTabs({
               </button>
             );
           })}
-      </div>}
+      </div>
 
       <div className="toolbar">
         <div className="toolbar-left">
@@ -199,7 +205,7 @@ export function ResultTabs({
         <ExportActions rows={rows} keyword={savedView ? "本地收藏" : keyword} />
       </div>}
       <div className="result-list flex flex-col">
-        {filteredResults.map((result, index) => {
+        {renderedResults.map((result, index) => {
           const key = groupKey(result);
           const bookmark = bookmarks.get(resultKey(result));
           // 刚收藏完的一次性小框：和收藏页用同一套，省得跑到收藏页去改归属
@@ -229,6 +235,13 @@ export function ResultTabs({
           );
         })}
       </div>
+
+      {hiddenCount > 0 && (
+        <div className="library-batch-bar">
+          <span>已显示 {renderedResults.length} / {filteredResults.length} 条</span>
+          <button type="button" className="btn" onClick={() => setShown((current) => current + (pageSize ?? 0))}>显示更多</button>
+        </div>
+      )}
 
       {filteredResults.length === 0 && (
         <p className="text-center py-10 text-sm text-cyber-text-muted">

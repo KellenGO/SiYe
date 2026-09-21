@@ -100,18 +100,29 @@ class RemoteSyncStateMixin:
             # Old memberships remain until an authoritative complete scan.
 
     def baseline_overlap(self, account, folder, identities):
+        """本页里「和本机基线完全对得上」的最长连续段，返回 (起, 止) 位置；没有则 None。
+
+        认出一条"早就在本机"的条目只有三个条件同时成立：内容 ID 在基线里、收藏时间一致、
+        位置也接得上。任意一条对不上就在那里断开——断点之后可能藏着新增，不能据此停止翻页。
+        调用方再按段长决定停不停（见 `INCREMENTAL_STOP_RUN`）。
+        """
         if not identities or any(stamp is None for _, stamp in identities):
             return None
+        best = None
+        run_start = run_end = None
         with self._conn() as conn:
-            positions = []
             for cid, stamp in identities:
                 row = conn.execute("SELECT position,favorite_time FROM remote_baseline WHERE account=? AND folder=? AND content_id=?", (account, folder, cid)).fetchone()
                 if not row or row["favorite_time"] != str(stamp):
-                    return None
-                positions.append(row["position"])
-        if positions != list(range(positions[0], positions[0] + len(positions))):
-            return None
-        return positions[0], positions[-1]
+                    run_start = run_end = None
+                    continue
+                position = row["position"]
+                run_end = position if (run_end is not None and position == run_end + 1) else None
+                if run_end is None:
+                    run_start = run_end = position
+                if best is None or run_end - run_start > best[1] - best[0]:
+                    best = (run_start, run_end)
+        return best
 
     def head_fingerprint(self, account, folder, scan):
         with self._conn() as conn:
@@ -148,9 +159,10 @@ class RemoteSyncStateMixin:
             finished = conn.execute("SELECT count(*) FROM remote_checkpoints WHERE account=? AND scan=? AND complete=1", (account, scan)).fetchone()[0]
             if finished != len(folders):
                 raise SyncStateError("Incomplete scan")
+            # 「完整重扫」扫到了整份列表，才有资格清理旧的收藏夹归属；
+            # 增量只走到头部就停，没看到的旧归属一律留着（未取到的旧内容不删）。
             if reconcile:
                 conn.execute("DELETE FROM remote_memberships WHERE account=? AND scan<>?", (account, scan))
-                conn.execute("UPDATE remote_presence SET state='pending',missing_batch=? WHERE account=? AND state='present' AND NOT EXISTS(SELECT 1 FROM remote_memberships m WHERE m.account=remote_presence.account AND m.content_id=remote_presence.content_id)", (scan, account))
                 conn.execute("UPDATE remote_accounts SET last_full=? WHERE account=?", (utc_now(), account))
             # Refresh the ordered baseline in SQLite, without loading the library
             # into Python. Keep the unvisited suffix after an incremental stop.
@@ -198,45 +210,6 @@ class RemoteSyncStateMixin:
                     result["collection_names"] = [r[0] for r in conn.execute("SELECT DISTINCT name FROM remote_memberships WHERE account=? AND content_id=?", (row["account_key"], row["content_id"]))]
                 items.append({"id": row["id"], "account": row["account_key"], "state": row["presence"], "missing_batch": row["missing_batch"], "result": result})
         return {"items": items, "total": total, "offset": offset, "limit": limit}
-
-    def resolve_missing(self, decisions):
-        applied, stale = 0, 0
-        with self._conn(write=True) as conn:
-            for decision in decisions:
-                # 按归档条目 id 定位（archive_page 给的就是它），状态与批次校验保证幂等
-                row = conn.execute("SELECT r.account_key,r.content_id,p.state,p.missing_batch FROM remote_favorites r JOIN remote_presence p ON p.account=r.account_key AND p.content_id=r.content_id WHERE r.id=?", (decision.id,)).fetchone()
-                if not row or row["state"] != "pending" or row["missing_batch"] != decision.missing_batch:
-                    stale += 1
-                    continue
-                account, cid = row["account_key"], row["content_id"]
-                if decision.action == "keep":
-                    conn.execute("UPDATE remote_presence SET state='archived' WHERE account=? AND content_id=?", (account, cid))
-                else:
-                    conn.execute("DELETE FROM remote_favorites WHERE id=?", (decision.id,))
-                    conn.execute("DELETE FROM remote_memberships WHERE account=? AND content_id=?", (account, cid))
-                    conn.execute("DELETE FROM remote_presence WHERE account=? AND content_id=?", (account, cid))
-                conn.execute("UPDATE remote_accounts SET version=version+1 WHERE account=?", (account,))
-                applied += 1
-        return {"applied": applied, "stale": stale}
-
-    def purge_legacy_archive(self):
-        """清掉「账号未确认」的历史归档。
-
-        只动同步镜像（remote_* 表），不碰本地收藏库、备注与收藏夹。历史上所有没带账号
-        的同步结果都落在 DEFAULT_ACCOUNT_KEY 下，一旦确认了账号，这批数据既不能再更新、
-        又会把归档列表铺满，所以给用户一个明确的清理入口。
-        """
-        with self._conn(write=True) as conn:
-            removed = conn.execute(
-                "SELECT count(*) FROM remote_favorites WHERE account_key=?", (DEFAULT_ACCOUNT_KEY,)
-            ).fetchone()[0]
-            for table, column in (("remote_favorites", "account_key"), ("remote_sync_runs", "account_key")):
-                conn.execute(f"DELETE FROM {table} WHERE {column}=?", (DEFAULT_ACCOUNT_KEY,))
-            for table in ("remote_memberships", "remote_presence", "remote_accounts", "remote_scans",
-                          "remote_checkpoints", "remote_page_observations", "remote_observed_items",
-                          "remote_baseline"):
-                conn.execute(f"DELETE FROM {table} WHERE account=?", (DEFAULT_ACCOUNT_KEY,))
-        return {"removed": int(removed)}
 
     def archive_summary(self):
         with self._conn() as conn:

@@ -1,4 +1,4 @@
-"""Exercise remote archive pagination and decisions against a temporary SQLite DB.
+"""跨平台收藏页（V0.3 形态）的浏览器验收：平台页签、一次 100 条 + 显示更多、增量/完整重扫。
 
 Run after building webui. All external requests are blocked; no real profile is used.
 """
@@ -38,20 +38,17 @@ def main():
         store = RemoteFavoritesStore(Path(temp) / "library.db")
         remote_module._store = store
         library = LibraryStore(store.db_path)
+        # 130 条 B站 + 10 条小红书：够验证"先渲染 100 条、点显示更多再展开"和平台页签过滤。
         rows = [{"platform": "bilibili", "content_id": f"BV{i}", "content_type": "video",
                  "title": f"同步条目 {i}", "author": "测试作者", "url": f"https://www.bilibili.com/video/BV{i}"}
-                for i in range(61)]
-        scan = store.begin_scan("bilibili", "bilibili:1", [{"id": "10"}], "full")
-        for offset in range(0, 61, 20):
-            store.save_sync_page("bilibili", "bilibili:1", scan, "10", "收藏夹", offset // 20 + 1,
-                                 str(offset), rows[offset:offset + 20], offset == 60, 20)
-        store.finish_scan("bilibili:1", scan, True)
-        scan = store.begin_scan("bilibili", "bilibili:1", [{"id": "10"}], "full")
-        for offset in range(0, 59, 20):
-            store.save_sync_page("bilibili", "bilibili:1", scan, "10", "收藏夹", offset // 20 + 1,
-                                 str(offset), rows[offset:min(offset + 20, 59)], offset == 40, 20)
-        store.finish_scan("bilibili:1", scan, True)
-        library.add_item(rows[60], note="本地备注必须保留")
+                for i in range(130)]
+        rows += [{"platform": "xhs", "content_id": f"note{i}", "content_type": "note",
+                  "title": f"小红书条目 {i}", "author": "测试作者", "url": f"https://www.xiaohongshu.com/explore/{i}"}
+                 for i in range(10)]
+        # 直接落库（不走平台）：页面读的就是这份本地缓存。
+        store.save_platform("bilibili", rows[:130], status="succeeded")
+        store.save_platform("xhs", rows[130:], status="succeeded")
+        library.add_item(rows[0], note="本地备注必须保留")
         app = FastAPI()
         app.include_router(search_router)
         app.include_router(library_router)
@@ -63,54 +60,77 @@ def main():
         errors, sync_requests = [], []
 
         def route_request(route):
-            url = urlparse(route.request.url)
-            if not route.request.url.startswith(origin + "/"):
-                route.abort()
-            elif url.path == "/api/search/favorites/jobs" and route.request.method == "POST":
-                sync_requests.append(route.request.post_data_json)
-                response = client.get("/api/search/favorites/jobs/latest?summary=true")
-                route.fulfill(status=201, json=response.json())
-            elif url.path.startswith(("/api/search/favorites/", "/api/library/")):
-                response = client.request(route.request.method, url.path + ("?" + url.query if url.query else ""),
-                                          content=route.request.post_data, headers={"content-type": "application/json"})
-                route.fulfill(status=response.status_code, body=response.content, content_type="application/json")
-            elif url.path.startswith("/api/"):
-                route.fulfill(json={"accounts": [], "status": "ok"})
+            request = route.request
+            url = urlparse(request.url)
+            if not request.url.startswith(origin + "/"):
+                return route.abort()
+            if not url.path.startswith("/api/"):
+                return route.continue_()
+            if url.path == "/api/search/favorites/jobs" and request.method == "POST":
+                sync_requests.append(request.post_data_json or {})
+                # 不真的跑同步：返回一份已完成的空任务，页面保留本地缓存即可。
+                return route.fulfill(status=201, json={
+                    "job_id": "smoke", "overall": "completed", "created_at": "2026-09-21T00:00:00Z",
+                    "completed_at": "2026-09-21T00:00:00Z", "platforms": {}, "results": []})
+            # 本机缓存相关一律交给真实后端（同一份临时 SQLite），页面读到的才是落地数据
+            if url.path.startswith("/api/library/") or url.path.startswith("/api/search/favorites/"):
+                response = client.request(request.method, url.path + ("?" + url.query if url.query else ""),
+                                          content=request.post_data, headers={"content-type": "application/json"})
+                return route.fulfill(status=response.status_code, body=response.content, content_type="application/json")
+            if url.path == "/api/health":
+                data = {"status": "ok", "environment_status": "ok", "version": "smoke", "version_match": True}
+            elif url.path == "/api/search/accounts":
+                data = {"accounts": []}
             else:
-                route.continue_()
+                data = {}
+            route.fulfill(json=data)
 
         try:
-            with sync_playwright() as playwright:
-                browser = playwright.chromium.launch(channel="msedge", headless=True)
-                context = browser.new_context(viewport={"width": 1440, "height": 960})
+            with sync_playwright() as p:
+                browser = p.chromium.launch(channel="msedge", headless=True)
+                context = browser.new_context(viewport={"width": 1440, "height": 960},
+                                              permissions=["clipboard-read", "clipboard-write"])
                 context.add_init_script("localStorage.setItem('mediacrawler_license_accepted','true')")
                 context.route("**/*", route_request)
                 page = context.new_page()
                 page.on("pageerror", lambda error: errors.append(str(error)))
                 page.goto(origin + "/#/favorites/remote")
-                # 默认只看「平台中已找到」：61 条里有 2 条第二次扫描没找到，进了待确认
-                expect(page.get_by_text("共 59 条 · 第 1 页 · 每页 50 条")).to_be_visible()
+                # 打开页面只读本机缓存，不发同步请求
+                expect(page.get_by_text("本机已保存 140 条", exact=False)).to_be_visible()
                 assert sync_requests == []
-                page.get_by_role("button", name="下一页", exact=True).click()
-                expect(page.get_by_text("共 59 条 · 第 2 页 · 每页 50 条")).to_be_visible()
-                page.get_by_role("button", name="待确认 2 条", exact=True).click()
-                expect(page.get_by_text("共 2 条 · 第 1 页 · 每页 50 条")).to_be_visible()
-                expect(page.get_by_label("选择本页待确认条目")).not_to_be_checked()
-                page.get_by_label("选择本页待确认条目").check()
-                page.get_by_role("button", name="移除选中条目", exact=True).click()
-                dialog = page.get_by_role("dialog")
-                expect(dialog.get_by_text("只移除同步归档及远端归属", exact=False)).to_be_visible()
-                dialog.get_by_role("button", name="取消", exact=True).click()
-                assert store.archive_page()["total"] == 61
-                page.get_by_role("button", name="移除选中条目", exact=True).click()
-                page.get_by_role("dialog").get_by_role("button", name="从跨平台收藏移除", exact=True).click()
-                expect(page.get_by_text("共 0 条 · 第 1 页 · 每页 50 条")).to_be_visible()
-                assert store.archive_page()["total"] == 59
-                assert library.get_item("bilibili", "BV60")["note"] == "本地备注必须保留"
-                page.get_by_role("button", name="完整核对 B站", exact=True).click()
-                expect(page.get_by_role("button", name="完整核对 B站", exact=True)).to_be_enabled()
-                assert sync_requests[-1]["platforms"] == ["bilibili"]
-                assert sync_requests[-1]["sync_mode"] == "full"
+
+                # 平台页签直接点着切（V0.3 的用法）
+                page.get_by_role("tab", name="B站").click()
+                expect(page.get_by_text("已显示 100 / 130 条")).to_be_visible()
+                assert page.locator("article.result-row").count() == 100
+                # 一次只渲染 100 条，点「显示更多」把剩下的铺开
+                page.get_by_role("button", name="显示更多", exact=True).click()
+                expect(page.get_by_role("button", name="显示更多", exact=True)).to_have_count(0)
+                assert page.locator("article.result-row").count() == 130
+                page.get_by_role("tab", name="小红书").click()
+                expect(page.get_by_text("小红书条目 3", exact=False).first).to_be_visible()
+                assert page.locator("article.result-row").count() == 10
+
+                # 一键同步 = 增量；完整重扫是另一个显式动作
+                page.get_by_role("tab", name="全部").click()
+                # 勾选后按钮的 accessible name 会变成「小红书 ✓」，所以按 class 定位
+                xhs_choice = page.locator(".platform-choice").filter(has_text="小红书")
+                if xhs_choice.get_attribute("aria-pressed") == "false":
+                    xhs_choice.click()
+                page.get_by_role("button", name="同步所选平台 / 继续", exact=True).click()
+                page.wait_for_timeout(400)
+                assert sync_requests[-1]["sync_mode"] == "auto", sync_requests[-1]
+                # 同步按钮会把勾选清掉，重新扫之前先确认还勾着
+                if page.locator(".platform-choice").filter(has_text="小红书").get_attribute("aria-pressed") == "false":
+                    page.locator(".platform-choice").filter(has_text="小红书").click()
+                page.get_by_role("button", name="完整重扫", exact=True).click()
+                page.wait_for_timeout(400)
+                assert sync_requests[-1]["sync_mode"] == "full", sync_requests[-1]
+
+                # 结果区仍是平台页签 + 排序下拉，不是归档筛选器
+                assert page.get_by_role("tablist", name="结果平台").count() == 1
+                assert page.get_by_label("归档平台").count() == 0
+                assert page.get_by_role("button", name="完整核对 B站", exact=True).count() == 0
                 assert errors == [], errors
                 page.screenshot(path=str(ROOT / "build/remote-favorites-smoke.png"), full_page=True)
                 browser.close()
@@ -118,9 +138,8 @@ def main():
             server.shutdown()
             server.server_close()
             client.close()
-            remote_module._store = None
-    print(json.dumps({"passed": ["pagination", "no-auto-sync", "pending-list", "default-unselected", "cancel-remove", "batch-remove", "local-note-preserved", "single-platform-full"], "page_errors": errors}))
+    print(json.dumps({"passed": ["local-cache-only", "platform-tabs", "show-more", "incremental-sync", "full-rescan", "no-archive-toolbar"]}))
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

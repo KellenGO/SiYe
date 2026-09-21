@@ -73,21 +73,6 @@ export interface FavoritesJobResponse {
   results: UnifiedSearchResult[];
 }
 
-export interface RemoteArchiveItem {
-  id: number;
-  account: string;
-  state: "present" | "pending" | "archived" | "legacy";
-  missing_batch: string | null;
-  result: UnifiedSearchResult;
-}
-
-export interface RemoteArchivePage {
-  items: RemoteArchiveItem[];
-  total: number;
-  offset: number;
-  limit: number;
-}
-
 export interface PlatformTimingInfo {
   page_requests?: number;
   duplicate_count?: number;

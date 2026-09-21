@@ -15,6 +15,11 @@ from aggregate_search.adapters.bilibili import BilibiliAdapter
 PAGE_SIZE = 20
 REQUEST_TIMEOUT = 30.0
 
+# 增量：本页里连续这么多条都能在本机基线里对上，就认定"后面都是旧的"，停止翻页。
+# 取 10 而不是"碰到第一条旧的"——重新收藏、移动收藏夹、同一秒批量收藏都会让顺序抖动，
+# 一条旧的出现在页首并不代表它后面没有新增。
+INCREMENTAL_STOP_RUN = 10
+
 
 @dataclass
 class FavoritePage:
@@ -43,8 +48,10 @@ class FavoritesSyncError(ValueError):
 
 class BilibiliFavoritesSource:
     platform = "bilibili"
-    # No verified live-account evidence of stable incremental boundaries yet.
-    incremental_verified = False
+    # 增量默认启用（用户明确要"不用每次重拉全部"）。
+    # 代价：只看头部，感知不到旧内容的深处变化 —— 那属于预期行为（未取到的旧内容一律保留），
+    # 需要彻底对齐时用一次「完整重扫」。真实账号的排序稳定性仍待探测脚本确认。
+    incremental_verified = True
 
     def __init__(self, client, interval=2.0):
         self.client = client
@@ -134,7 +141,6 @@ async def synchronize_favorites(source: FavoritesSource, store, mode, progress):
             checkpoint = store.checkpoint(account, fid)
             number = 1
             page = first
-            previous_overlap = None
             if checkpoint and checkpoint["scan"] == scan:
                 # Verify both head and last committed page before resuming.
                 head = store.head_fingerprint(account, fid, scan)
@@ -149,7 +155,7 @@ async def synchronize_favorites(source: FavoritesSource, store, mode, progress):
                     store.restart_folder(account, fid)
             while True:
                 overlap = store.baseline_overlap(account, fid, page.identities) if incremental else None
-                stop = bool(overlap and previous_overlap and overlap[0] == previous_overlap[1] + 1)
+                stop = bool(overlap and overlap[1] - overlap[0] + 1 >= INCREMENTAL_STOP_RUN)
                 store.save_sync_page(source.platform, account, scan, fid, folder["name"], number,
                                      page.fingerprint, page.results, page.complete or stop, PAGE_SIZE,
                                      page.identities)
@@ -157,7 +163,6 @@ async def synchronize_favorites(source: FavoritesSource, store, mode, progress):
                 progress(account, saved, f"正在保存 {folder['name']} · 第 {number} 页" + ("（检查新增）" if incremental else "（完整列表读取）"))
                 if page.complete or stop:
                     break
-                previous_overlap = overlap
                 number += 1
                 page = await source.page(folder, number)
         if await source.folders(account) != folders:

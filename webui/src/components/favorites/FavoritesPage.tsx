@@ -6,7 +6,6 @@ import { ResultTabs } from "@/components/search/ResultTabs";
 import { BookmarkBackup } from "@/components/search/BookmarkBackup";
 import { useBookmarks } from "@/hooks/useBookmarks";
 import { useFavorites } from "@/hooks/useFavorites";
-import { RemoteArchiveControls } from "./RemoteArchiveControls";
 import { parseGroupKey, resultSources } from "@/lib/resultTools";
 import type { PlatformSlug } from "@/types/search";
 import { PLATFORM_COLORS, PLATFORM_LABELS, STATUS_LABELS } from "@/types/search";
@@ -240,7 +239,11 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
                 <i className="pd" style={{ backgroundColor: PLATFORM_COLORS[platform] }} />{PLATFORM_LABELS[platform]}<span className="check">{selected.has(platform) ? "✓" : ""}</span>
               </button>)}
             </div>
-            <p className="collection-count">同步只读取，不会修改平台收藏；取不到的部分会显示原因。</p>
+            <p className="collection-count">
+              B站读取完整收藏列表（不限条数），其余平台每次最多 100 条 · 同步只读取，不会修改平台收藏。
+              <button type="button" className="text-link" disabled={!selected.size || remote.busy}
+                onClick={() => void remote.sync([...selected], "full")}>完整重扫</button>
+            </p>
           </>
         )}
       </div>
@@ -256,7 +259,6 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
       )}
       {tab === "remote" && remote.error && <div className="status-line" role="alert"><AlertTriangle />{errorMessage(remote.error)}<button type="button" className="text-link" onClick={onNavigateAccounts}>检查账号状态</button></div>}
       {tab === "remote" && data?.persistence_error && <div className="status-line" role="alert"><AlertTriangle />{data.persistence_error}</div>}
-      {tab === "remote" && <RemoteArchiveControls remote={remote} />}
 
       {tab === "local" && library.migration && (
         <div className="status-line" role="alert">
@@ -437,11 +439,11 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
             )}
           </div>
         </div>
-      ) : remote.loadingArchive ? (
+      ) : remote.busy && !data?.results.length ? (
         <div className="empty" role="status"><div className="empty-symbol"><Loader2 className="spinner" /></div><h2>正在整理你的收藏</h2><p>先获取列表，再补充内容信息。</p></div>
       ) : data ? (
         <>
-          <p className="collection-count">当前页 {data.results.length} 条 · 未找到的旧内容在完整核对后由你决定是否保留</p>
+          <p className="collection-count">本机已保存 {data.results.length} 条 · 同步只拉新增，未取到的旧内容保留；要彻底对齐可用「完整重扫」</p>
           <div className="progress-strip" aria-live="polite">
             {Object.entries(data.platforms).map(([platform, info]) => info && <span key={platform} className="progress-item">
               {PLATFORM_LABELS[platform as PlatformSlug]}：{info.status === "running" ? "同步中" : STATUS_LABELS[info.status]} · 本次获取 {info.result_count} 条 · 本机保留 {retainedCounts[platform as PlatformSlug]} 条
@@ -451,9 +453,8 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
           </div>
           {!remote.busy && Object.values(data.platforms).some(info => info?.status === "cancelled") && <p className="collection-count" role="status">同步已取消，已获取的内容和历史收藏仍会保留。</p>}
           {Object.entries(data.platforms).some(([, info]) => info && !["succeeded", "empty", "running", "pending", "cancelled"].includes(info.status)) && <div className="status-line"><span className="status-message"><AlertTriangle />部分平台没有完成：{Object.entries(data.platforms).filter(([, info]) => info && !["succeeded", "empty", "running", "pending", "cancelled"].includes(info.status)).map(([platform, info]) => `${PLATFORM_LABELS[platform as PlatformSlug]} ${info?.error_summary || STATUS_LABELS[info!.status]}`).join("；")}</span><button type="button" className="text-link" onClick={onNavigateAccounts}>检查账号</button></div>}
-          {/* 归档页的数据是"服务端分页的一页"：不能再让前端重排（disableSort），
-              也不能显示只过滤当前页的平台页签（hidePlatformTabs）——平台用上面的筛选器选。 */}
-          <ResultTabs key={`${remote.page}:${remote.platform}:${remote.state}:${remote.account}`} results={data.results} overall={data.overall} jobId={data.job_id} platforms={Object.keys(data.platforms) as PlatformSlug[]} library={library} fetchedAt={fetchedAt} disableSort hidePlatformTabs />
+          {/* 和 V0.3 一样：平台页签直接点着切，结果一次拿全；只是先渲染 100 条，其余点「显示更多」 */}
+          <ResultTabs results={data.results} overall={data.overall} jobId={data.job_id} platforms={Object.keys(data.platforms) as PlatformSlug[]} library={library} fetchedAt={fetchedAt} pageSize={100} />
         </>
       ) : (
         <div className="empty"><div className="empty-symbol"><FolderHeart /></div><h2>把喜欢的内容，放到一起</h2><p>选择平台后点击同步，四处散落的收藏会汇到这里。</p><button type="button" className="btn" onClick={() => void remote.sync([...selected])}>同步收藏</button></div>

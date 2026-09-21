@@ -49,11 +49,3 @@ class FavoritesJobResponse(BaseModel):
     data_version: str = ""
 
 
-class MissingDecision(BaseModel):
-    id: int = Field(gt=0)
-    missing_batch: str = Field(min_length=1, max_length=64)
-    action: Literal["keep", "remove"]
-
-
-class MissingDecisions(BaseModel):
-    decisions: List[MissingDecision] = Field(min_length=1, max_length=100)

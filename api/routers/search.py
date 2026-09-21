@@ -14,15 +14,14 @@ import json
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import Dict, Optional, Literal
+from typing import Dict, Optional
 
-from fastapi import APIRouter, HTTPException, Header, Request, Query
+from fastapi import APIRouter, HTTPException, Header, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from ..schemas.search import SearchJobRequestSchema, SearchJobResponse
-from ..schemas.favorites import FavoritesJobRequest, FavoritesJobResponse, MissingDecisions
-from ..services.remote_favorites_store import get_remote_favorites_store
+from ..schemas.favorites import FavoritesJobRequest, FavoritesJobResponse
 from ..services.favorites_job_manager import favorites_job_manager
 from ..services.search_job_manager import (
     search_job_manager, JobConflictError, InvalidPlatformsError,
@@ -402,28 +401,6 @@ async def create_favorites_job(req: FavoritesJobRequest, summary: bool = False):
     except Exception:
         await _operation_coordinator.release_exclusive("favorites")
         raise
-
-
-@search_router.get("/favorites/archive")
-async def get_favorites_archive(
-    platform: Optional[Literal["bilibili", "xhs", "douyin", "zhihu"]] = None,
-    state: Optional[Literal["present", "pending", "archived", "legacy"]] = None,
-    account: Optional[str] = Query(default=None, max_length=128),
-    offset: int = Query(default=0, ge=0), limit: int = Query(default=50, ge=1, le=100),
-):
-    return await asyncio.to_thread(get_remote_favorites_store().archive_page,
-        platform=platform, state=state, account=account, offset=offset, limit=limit)
-
-
-@search_router.post("/favorites/missing/resolve")
-async def resolve_missing_favorites(request: MissingDecisions):
-    return await asyncio.to_thread(get_remote_favorites_store().resolve_missing, request.decisions)
-
-
-@search_router.post("/favorites/archive/purge-legacy")
-async def purge_legacy_favorites_archive():
-    """清掉「账号未确认」的历史归档。只动同步镜像，不碰本地收藏、备注与收藏夹。"""
-    return await asyncio.to_thread(get_remote_favorites_store().purge_legacy_archive)
 
 
 @search_router.get("/favorites/jobs/latest", response_model=FavoritesJobResponse)

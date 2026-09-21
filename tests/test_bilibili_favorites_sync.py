@@ -1,11 +1,11 @@
-"""Unbounded sync and reconciliation use isolated databases and fake platform I/O."""
+"""B站收藏的分页全量导入与增量更新：隔离数据库 + 假平台 I/O。"""
 import asyncio
 import json
 
 import pytest
 
 from aggregate_search.favorites_sync import BilibiliFavoritesSource, synchronize_favorites
-from api.schemas.favorites import MissingDecision, FavoritesJobRequest
+from api.schemas.favorites import FavoritesJobRequest
 from api.services.remote_favorites_store import RemoteFavoritesStore
 from api.services.favorites_job_manager import FavoritesJobManager
 
@@ -40,15 +40,11 @@ def store(tmp_path):
     return RemoteFavoritesStore(tmp_path / "library.db")
 
 
-async def sync(store, client, mode="auto", verified=False):
+async def sync(store, client, mode="auto", verified=True):
+    """`full` = 完整重扫；`auto` = 一键同步（增量）。verified=False 用于只导入、不提前停。"""
     source = BilibiliFavoritesSource(client, interval=0)
     source.incremental_verified = verified
     await synchronize_favorites(source, store, mode, lambda *_: None)
-
-
-def decisions(store, action):
-    return [MissingDecision(id=item["id"], missing_batch=item["missing_batch"], action=action)
-            for item in store.archive_page(state="pending")["items"]]
 
 
 @pytest.mark.asyncio
@@ -64,38 +60,8 @@ async def test_full_import_over_100_and_duplicate_folders(store):
 
 
 @pytest.mark.asyncio
-async def test_missing_keep_remove_reappearance_and_stale_decision(store):
-    client = FavoriteClient({10: [1, 2, 3]})
-    await sync(store, client, "full")
-    # Use a sentinel unrelated table to prove decisions do not mutate library data.
-    with store._conn() as conn:
-        conn.execute("CREATE TABLE local_notes(note TEXT)")
-        conn.execute("INSERT INTO local_notes VALUES('keep me')")
-    client.contents = {10: [3]}
-    await sync(store, client, "auto")
-    assert store.archive_summary()["pending_count"] == 0
-    await sync(store, client, "full")
-    old = decisions(store, "remove")
-    assert len(old) == 2
-    keep = old[0].model_copy(update={"action": "keep"})
-    assert store.resolve_missing([keep])["applied"] == 1
-    assert store.resolve_missing([keep])["applied"] == 0
-    await sync(store, client, "full")
-    assert store.archive_page(state="archived")["total"] == 1
-    assert store.resolve_missing([old[1]])["applied"] == 1
-    client.contents = {10: [1, 2, 3]}
-    await sync(store, client)
-    assert store.archive_page(state="present")["total"] == 3
-    assert store.resolve_missing(old)["applied"] == 0
-    with store._conn() as conn:
-        assert conn.execute("SELECT note FROM local_notes").fetchone()[0] == "keep me"
-    client.contents = {10: []}
-    await sync(store, client, "full")
-    assert all(d.missing_batch != old[0].missing_batch for d in decisions(store, "keep"))
-
-
-@pytest.mark.asyncio
-async def test_move_rename_deleted_folder_and_account_isolation(store):
+async def test_move_rename_deleted_folder_and_account_isolation(store, monkeypatch):
+    monkeypatch.setattr("api.services.remote_favorites_store.DEFAULT_ACCOUNT_KEY", "default")
     client = FavoriteClient({10: [1], 11: []})
     await sync(store, client, "full")
     client.contents = {12: [1]}
@@ -103,11 +69,13 @@ async def test_move_rename_deleted_folder_and_account_isolation(store):
     item = store.archive_page()["items"][0]
     assert item["result"]["collection_names"] == ["folder-12"]
     assert item["state"] == "present"
+    # 另一个账号的归档互不影响
     await sync(store, FavoriteClient({10: [1]}, mid=2), "full")
+    assert store.archive_page(account="bilibili:2")["total"] == 1
+    # 收藏夹在平台上没了，旧内容仍然留着（未取到不等于被删除）
     client.contents = {}
     await sync(store, client, "full")
-    store.resolve_missing(decisions(store, "remove"))
-    assert store.archive_page(account="bilibili:2")["total"] == 1
+    assert store.archive_page(account="bilibili:1")["total"] == 1
 
 
 @pytest.mark.asyncio
@@ -117,7 +85,6 @@ async def test_interruption_resume_and_full_restart(store):
     with pytest.raises(OSError):
         await sync(store, client)
     assert store.archive_page()["total"] == 60
-    assert store.archive_summary()["pending_count"] == 0
     client.fail_page = None
     client.calls.clear()
     await sync(store, client)
@@ -139,24 +106,31 @@ async def test_resume_drift_restarts_folder(store):
     client.calls.clear()
     await sync(store, client)
     assert (10, 2) in client.calls
-    assert store.archive_page()["total"] == 126  # old item retained until full check
+    assert store.archive_page()["total"] == 126  # 旧条目保留，直到完整重扫
 
 
 @pytest.mark.asyncio
-async def test_verified_incremental_and_conservative_fallback(store):
-    client = FavoriteClient({10: list(range(400))})
+async def test_incremental_stops_after_a_run_of_known_items(store):
+    """一键同步只拉新增：页内出现一段连续的本机已有内容，就认定后面都是旧的。"""
+    client = FavoriteClient({10: list(range(200))})
     await sync(store, client, "full")
+    client.contents[10] = [900, 901, 902, *range(200)]  # 新增 3 条
     client.calls.clear()
-    await sync(store, client, verified=True)
-    assert len(client.calls) == 3  # two overlap pages, head verification
-    client.contents[10] = [999, 998, *client.contents[10]]
-    client.calls.clear()
-    await sync(store, client, verified=True)
-    assert max(page for _, page in client.calls) == 3
-    assert store.archive_page()["total"] == 402
+    await sync(store, client)  # auto = 增量
+    assert max(page for _, page in client.calls) == 1  # 第 1 页就停
+    assert store.archive_page()["total"] == 203
+
+
+@pytest.mark.asyncio
+async def test_incremental_keeps_paging_when_known_run_is_too_short(store):
+    """命中必须"连续"且够长：页内只撞见 9 条旧内容时不能停，否则会漏掉后面的新增。"""
+    client = FavoriteClient({10: list(range(200))})
+    await sync(store, client, "full")
+    client.contents[10] = [*range(900, 911), *range(200)]  # 11 条新的顶在最前
     client.calls.clear()
     await sync(store, client)
-    assert max(page for _, page in client.calls) == 21
+    assert max(page for _, page in client.calls) == 2  # 第 1 页只命中 9 条，继续翻
+    assert store.archive_page()["total"] == 211
 
 
 @pytest.mark.asyncio
@@ -165,35 +139,39 @@ async def test_incremental_boundary_is_folder_scoped(store):
     await sync(store, client, "full")
     client.contents[11] = list(range(100))
     client.calls.clear()
-    await sync(store, client, verified=True)
+    await sync(store, client)
     assert (11, 5) in client.calls
 
 
 @pytest.mark.asyncio
 async def test_same_time_and_recollection_do_not_stop_at_first_known_item(store):
+    """同一时间批量收藏、重新收藏都会让顺序抖动：撞到一条旧的不能立刻停。"""
     client = FavoriteClient({10: list(range(160))})
     original = client.get_favorite_folder_contents
+
     async def same_time(*args):
         response = await original(*args)
         for row in response["medias"]:
             row["fav_time"] = 12345
         return response
+
     client.get_favorite_folder_contents = same_time
     await sync(store, client, "full")
-    client.contents[10] = [159, 999, *range(159)]
+    client.contents[10] = [159, 999, *range(159)]  # 旧内容被重新收藏顶到最前
     client.calls.clear()
-    await sync(store, client, verified=True)
+    await sync(store, client)
     assert store.archive_page()["total"] == 161
-    assert max(page for _, page in client.calls) == 3
+    assert max(page for _, page in client.calls) == 1
 
 
 @pytest.mark.asyncio
-async def test_changed_head_during_full_scan_does_not_mark_missing(store):
+async def test_changed_head_during_scan_keeps_saved_pages(store):
     client = FavoriteClient({10: list(range(50))})
     await sync(store, client, "full")
     client.contents[10] = list(range(1, 50))
     original = client.get_favorite_folder_contents
     heads = 0
+
     async def drift(fid, page, size):
         nonlocal heads
         if page == 1:
@@ -201,18 +179,21 @@ async def test_changed_head_during_full_scan_does_not_mark_missing(store):
             if heads == 2:
                 client.contents[10][0] = 999
         return await original(fid, page, size)
+
     client.get_favorite_folder_contents = drift
     with pytest.raises(ValueError):
         await sync(store, client, "full")
-    assert store.archive_summary()["pending_count"] == 0
+    assert store.archive_page()["total"] == 50  # 报错也不丢已保存的页
 
 
 @pytest.mark.asyncio
 async def test_disk_failure_rolls_back_page_and_checkpoint(store, monkeypatch):
     original = store.save_platform
+
     def fail(*args, **kwargs):
         original(*args, **kwargs)
         raise OSError("disk failed")
+
     monkeypatch.setattr(store, "save_platform", fail)
     with pytest.raises(OSError):
         await sync(store, FavoriteClient())
@@ -221,43 +202,27 @@ async def test_disk_failure_rolls_back_page_and_checkpoint(store, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_duplicate_page_rejected_without_missing_judgment(store):
+async def test_duplicate_page_rejected(store):
     client = FavoriteClient({10: list(range(20)) * 2})
     with pytest.raises(ValueError):
         await sync(store, client, "full")
-    assert store.archive_summary()["pending_count"] == 0
     assert store.archive_page()["total"] == 20
 
 
 @pytest.mark.asyncio
-async def test_pending_survives_restart_and_legacy_unclaimed(store, tmp_path):
-    store.save_platform("bilibili", [{"content_id": "legacy"}], status="succeeded")
-    client = FavoriteClient({10: [1]})
-    await sync(store, client, "full")
-    client.contents = {}
-    await sync(store, client, "full")
-    reopened = RemoteFavoritesStore(store.db_path)
-    assert reopened.archive_page(state="pending")["total"] == 1
-    assert reopened.archive_page(state="legacy")["total"] == 1
-
-
-@pytest.mark.asyncio
 async def test_archive_page_groups_by_platform(store):
-    """归档分页按平台分组、组内最近入库在前：翻页时同一平台是连续的，不会跨平台乱跳。"""
+    """归档取全量结果时按平台分组、组内最近入库在前，界面按平台页签切过去看到的顺序是稳定的。"""
     store.save_platform("xhs", [{"platform": "xhs", "content_id": f"x{i}"} for i in range(3)], status="succeeded")
     store.save_platform("bilibili", [{"platform": "bilibili", "content_id": f"b{i}"} for i in range(2)], status="succeeded")
 
     items = store.archive_page(limit=10)["items"]
     assert [item["result"]["platform"] for item in items] == ["bilibili", "bilibili", "xhs", "xhs", "xhs"]
-    # 组内：后入库的排在前面
     assert [item["result"]["content_id"] for item in items] == ["b1", "b0", "x2", "x1", "x0"]
-    # 收窄到某一个平台时，分页范围也跟着变
     assert store.archive_page(platform="xhs", limit=10)["total"] == 3
 
 
 @pytest.mark.asyncio
-async def test_summary_counts_states_so_legacy_need_not_be_listed(store):
-    """摘要给出各类状态的条数：界面靠它做汇总，不必把「账号未确认」逐条铺出来。"""
+async def test_summary_counts_states(store):
     store.save_platform("bilibili", [{"content_id": "legacy"}], status="succeeded")
     client = FavoriteClient({10: list(range(25))})
     await sync(store, client, "full")
@@ -265,26 +230,6 @@ async def test_summary_counts_states_so_legacy_need_not_be_listed(store):
     summary = store.archive_summary()
     assert summary["states"]["present"] == 25
     assert summary["states"]["legacy"] == 1
-    assert summary["states"]["pending"] == 0
-    # save_platform 不建账号行；老版本用默认账号开过扫描时，账号行要能被标成 legacy
-    store.begin_scan("bilibili", "default", [{"id": "10"}], "full")
-    legacy_accounts = [a for a in store.archive_summary()["accounts"] if a["account"] == "default"]
-    assert legacy_accounts and legacy_accounts[0]["legacy"] is True
-
-
-@pytest.mark.asyncio
-async def test_purge_legacy_archive_keeps_confirmed_accounts(store):
-    """清理历史归档只删「账号未确认」那一份，已确认账号的归档不受影响。"""
-    store.save_platform("bilibili", [{"content_id": "legacy-1"}, {"content_id": "legacy-2"}], status="succeeded")
-    client = FavoriteClient({10: [1]})
-    await sync(store, client, "full")
-
-    assert store.purge_legacy_archive() == {"removed": 2}
-    assert store.archive_page(state="legacy")["total"] == 0
-    assert store.archive_page(state="present")["total"] == 1
-    # 再清一次是幂等的，且不会连已确认账号一起删
-    assert store.purge_legacy_archive() == {"removed": 0}
-    assert store.archive_page()["total"] == 1
 
 
 @pytest.mark.asyncio
@@ -318,33 +263,16 @@ async def test_large_archive_summary_does_not_load_results(store, monkeypatch):
 async def test_request_timeout_and_cancel_preserve_pages(store, monkeypatch):
     client = FavoriteClient()
     original = client.get_favorite_folder_contents
+
     async def cancelled(fid, page, size):
         if page == 2:
             raise asyncio.CancelledError()
         return await original(fid, page, size)
+
     client.get_favorite_folder_contents = cancelled
     with pytest.raises(asyncio.CancelledError):
         await sync(store, client, "full")
     assert store.archive_page()["total"] == 20
-    assert store.archive_summary()["pending_count"] == 0
-
-
-def test_archive_api_validation_and_idempotent_decisions(store, monkeypatch):
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-    from api.routers.search import search_router
-    monkeypatch.setattr("api.routers.search.get_remote_favorites_store", lambda: store)
-    app = FastAPI()
-    app.include_router(search_router)
-    with TestClient(app) as client:
-        assert client.get("/api/search/favorites/archive?limit=1000").status_code == 422
-        assert client.get("/api/search/favorites/archive?offset=-1").status_code == 422
-        assert client.get("/api/search/favorites/archive?state=invalid").status_code == 422
-        response = client.get("/api/search/favorites/archive?state=pending")
-        assert response.json()["items"] == []
-        decision = {"decisions": [{"id": 99, "missing_batch": "old", "action": "remove"}]}
-        assert client.post("/api/search/favorites/missing/resolve", json=decision).json() == {"applied": 0, "stale": 1}
-        assert client.post("/api/search/favorites/missing/resolve", json=decision).json() == {"applied": 0, "stale": 1}
 
 
 @pytest.mark.asyncio
