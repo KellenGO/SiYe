@@ -98,6 +98,9 @@ class BilibiliCrawler(AbstractCrawler):
 
             # Create a client to interact with the xiaohongshu website.
             self.bili_client = await self.create_bilibili_client(None)
+            if self.runtime_options and self.runtime_options.extra.get("favorites_sync"):
+                self.bili_client.favorites_sync = True
+                self.bili_client.timeout = 30
             if not await self.bili_client.pong():
                 if self._login_fail_fast():
                     from base.exceptions import LoginRequiredError
@@ -133,6 +136,10 @@ class BilibiliCrawler(AbstractCrawler):
 
     async def fetch_favorites(self) -> None:
         """Fetch recent items across the current user's created folders."""
+        sync = (getattr(self, "runtime_options", None) and self.runtime_options.extra.get("favorites_sync"))
+        if sync:
+            await sync(self.bili_client)
+            return
         nav = await self.bili_client.get("/x/web-interface/nav", enable_params_sign=False)
         mid = nav.get("mid") if isinstance(nav, dict) else None
         if not mid:

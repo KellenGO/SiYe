@@ -22,6 +22,7 @@ import threading
 from typing import Any, Dict, Iterator, List, Optional, Sequence
 
 from .favorite_snapshot import decode_metrics, encode_metrics, merge_into_result
+from .remote_sync_state import RemoteSyncStateMixin, SYNC_SCHEMA
 from .sqlite_base import (
     RESULT_FIELDS as _RESULT_FIELDS,
     SqliteStoreBase,
@@ -68,16 +69,19 @@ CREATE INDEX IF NOT EXISTS idx_remote_sync_runs_platform
 """
 
 
-class RemoteFavoritesStore(SqliteStoreBase):
+class RemoteFavoritesStore(RemoteSyncStateMixin, SqliteStoreBase):
     """Persist synced favourites so they survive a backend restart.
 
     连接、事务与时间戳见 `api/services/sqlite_base.py`（与本地收藏库共用一个库文件）。
     """
 
-    _SCHEMA = _REMOTE_SCHEMA
+    _SCHEMA = _REMOTE_SCHEMA + SYNC_SCHEMA
 
     def _bootstrap(self, conn: sqlite3.Connection) -> None:
         super()._bootstrap(conn)
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(remote_accounts)")}
+        if "result_count" not in columns:
+            conn.execute("ALTER TABLE remote_accounts ADD COLUMN result_count INTEGER NOT NULL DEFAULT 0")
         self._enable_wal(conn)
 
     # ------------------------------------------------------------------ 写入
@@ -91,6 +95,7 @@ class RemoteFavoritesStore(SqliteStoreBase):
         error_summary: Optional[str] = None,
         requested_limit: int = 0,
         account_key: str = DEFAULT_ACCOUNT_KEY,
+        record_run: bool = True,
     ) -> int:
         """保存某个平台本次同步到的条目 + 本次运行状态。返回写入条数。"""
         now = utc_now()
@@ -98,14 +103,20 @@ class RemoteFavoritesStore(SqliteStoreBase):
         with self._conn() as conn:
             # 本次没拿到的指标要沿用本机已有的值（见 favorite_snapshot.merge_counts）：
             # 一次超时或只拿到列表字段的同步，不能把以前完整的指标覆盖成残缺版本。
-            previous_metrics = {
-                row["content_id"]: row["metrics"]
-                for row in conn.execute(
-                    "SELECT content_id, metrics FROM remote_favorites "
-                    "WHERE account_key = ? AND platform = ?",
-                    (account_key, platform),
-                ).fetchall()
-            }
+            ids = [str(row.get("content_id", "")) for row in results]
+            previous_metrics = {}
+            for offset in range(0, len(ids), 500):
+                batch = ids[offset:offset + 500]
+                placeholders = ",".join("?" for _ in batch)
+                previous_metrics.update({
+                    row["content_id"]: row["metrics"]
+                    for row in conn.execute(
+                        "SELECT content_id, metrics FROM remote_favorites "
+                        "WHERE account_key = ? AND platform = ? "
+                        f"AND content_id IN ({placeholders})",
+                        (account_key, platform, *batch),
+                    ).fetchall()
+                })
             for raw in results:
                 row = self._split(raw)
                 if not row["content_id"]:
@@ -138,6 +149,8 @@ class RemoteFavoritesStore(SqliteStoreBase):
                 )
                 written += 1
 
+            if not record_run:
+                return written
             conn.execute(
                 """
                 INSERT INTO remote_sync_runs (

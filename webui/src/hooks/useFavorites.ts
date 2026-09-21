@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
-import type { FavoritesJobResponse, PlatformSlug } from "@/types/search";
+import type { FavoritesJobResponse, PlatformSlug, RemoteArchivePage } from "@/types/search";
 
 function isNotFound(error: unknown): boolean {
   return (error as { response?: { status?: number } })?.response?.status === 404;
@@ -11,6 +11,10 @@ export function useFavorites() {
   const queryClient = useQueryClient();
   const [jobId, setJobId] = useState<string | null>(null);
   const adopted = useRef(false);
+  const [page, setPage] = useState(0);
+  const [platform, setPlatform] = useState<PlatformSlug | "">("");
+  const [state, setState] = useState("");
+  const [account, setAccount] = useState("");
 
   // Re-entering the page restores the last snapshot from the backend. This is a
   // local, in-memory read: it never contacts a platform. Only an explicit sync
@@ -22,7 +26,7 @@ export function useFavorites() {
     queryFn: async () => {
       try {
         const { data } = await axios.get<FavoritesJobResponse>(
-          "/api/search/favorites/jobs/latest");
+          "/api/search/favorites/jobs/latest?summary=true");
         return data;
       } catch (error) {
         if (isNotFound(error)) return null;
@@ -33,11 +37,9 @@ export function useFavorites() {
   });
 
   const create = useMutation({
-    mutationFn: async (platforms: PlatformSlug[]) => {
-      // 100 是每个平台的目标总量，worker 会按平台分页逐页读取；
-      // 实际能取多少取决于平台的分页接口、账号状态与限流情况。
-      const { data } = await axios.post<FavoritesJobResponse>("/api/search/favorites/jobs", {
-        platforms, limit_per_platform: 100,
+    mutationFn: async ({ platforms, mode }: { platforms: PlatformSlug[]; mode: "auto" | "full" }) => {
+      const { data } = await axios.post<FavoritesJobResponse>("/api/search/favorites/jobs?summary=true", {
+        platforms, limit_per_platform: 100, sync_mode: mode,
       });
       return data;
     },
@@ -51,9 +53,9 @@ export function useFavorites() {
   const poll = useQuery({
     queryKey: ["favorites-job", jobId],
     queryFn: async () => (await axios.get<FavoritesJobResponse>(
-      `/api/search/favorites/jobs/${jobId}`)).data,
+      `/api/search/favorites/jobs/${jobId}?summary=true`)).data,
     enabled: !!jobId,
-    refetchInterval: (query) => query.state.data?.overall === "running" ? 800 : false,
+    refetchInterval: (query) => query.state.data?.overall === "running" ? 1500 : false,
     retry: 1,
   });
 
@@ -70,7 +72,7 @@ export function useFavorites() {
 
   const cancel = useMutation({
     mutationFn: async (id: string) => (await axios.post<FavoritesJobResponse>(
-      `/api/search/favorites/jobs/${id}/cancel`)).data,
+      `/api/search/favorites/jobs/${id}/cancel?summary=true`)).data,
     onSuccess: async (snapshot) => {
       await queryClient.cancelQueries({ queryKey: ["favorites-job", snapshot.job_id] });
       queryClient.setQueryData(["favorites-job", snapshot.job_id], snapshot);
@@ -78,20 +80,50 @@ export function useFavorites() {
     },
   });
 
-  const refresh = useCallback(async (platforms: PlatformSlug[]) => {
+  const refresh = useCallback(async (platforms: PlatformSlug[], mode: "auto" | "full" = "auto") => {
     cancel.reset();
     create.reset();
     // 创建失败时保留上一批内容；错误由页面展示，避免未处理 Promise rejection。
     try {
-      return await create.mutateAsync(platforms);
+      return await create.mutateAsync({ platforms, mode });
     } catch {
       return null;
     }
   }, [create, cancel]);
 
-  const data = poll.data ?? create.data ?? latest.data ?? null;
+  const summary = poll.data ?? create.data ?? latest.data ?? null;
+  const archive = useQuery({
+    queryKey: ["favorites-archive", page, platform, state, account],
+    queryFn: async () => (await axios.get<RemoteArchivePage>("/api/search/favorites/archive", {
+      params: { offset: page * 50, limit: 50, platform: platform || undefined, state: state || undefined, account: account || undefined },
+    })).data,
+  });
+  useEffect(() => {
+    void queryClient.invalidateQueries({ queryKey: ["favorites-archive"] });
+  }, [summary?.data_version, queryClient]);
+  useEffect(() => {
+    if (archive.data && page > 0 && page * 50 >= archive.data.total) setPage(Math.max(0, Math.ceil(archive.data.total / 50) - 1));
+  }, [archive.data, page]);
+  const data = summary ? { ...summary, results: archive.data?.items.map(item => item.result) ?? [] } : null;
+  const resolve = useMutation({
+    mutationFn: async (decisions: { id: number; missing_batch: string; action: "keep" | "remove" }[]) =>
+      (await axios.post<{ applied: number; stale: number }>("/api/search/favorites/missing/resolve", { decisions })).data,
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["favorites-archive"] }),
+        queryClient.invalidateQueries({ queryKey: ["favorites-latest"] }),
+        queryClient.invalidateQueries({ queryKey: ["favorites-job"] }),
+      ]);
+    },
+  });
 
   return {
+    archive: archive.data, loadingArchive: archive.isLoading,
+    page, setPage, platform, state, account,
+    setPlatform: (value: PlatformSlug | "") => { setPlatform(value); setPage(0); },
+    setState: (value: string) => { setState(value); setPage(0); },
+    setAccount: (value: string) => { setAccount(value); setPage(0); },
+    resolve,
     sync: refresh,
     cancel: async () => {
       if (!data || cancel.isPending) return;
@@ -101,6 +133,6 @@ export function useFavorites() {
     cancelling: cancel.isPending,
     data,
     busy: create.isPending || cancel.isPending || (data?.overall === "running" && !poll.error),
-    error: cancel.error || create.error || (jobId ? poll.error : null) || latest.error,
+    error: resolve.error || archive.error || cancel.error || create.error || (jobId ? poll.error : null) || latest.error,
   };
 }

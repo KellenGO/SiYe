@@ -14,14 +14,15 @@ import json
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import Dict, Optional
+from typing import Dict, Optional, Literal
 
-from fastapi import APIRouter, HTTPException, Header, Request
+from fastapi import APIRouter, HTTPException, Header, Request, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from ..schemas.search import SearchJobRequestSchema, SearchJobResponse
-from ..schemas.favorites import FavoritesJobRequest, FavoritesJobResponse
+from ..schemas.favorites import FavoritesJobRequest, FavoritesJobResponse, MissingDecisions
+from ..services.remote_favorites_store import get_remote_favorites_store
 from ..services.favorites_job_manager import favorites_job_manager
 from ..services.search_job_manager import (
     search_job_manager, JobConflictError, InvalidPlatformsError,
@@ -380,13 +381,13 @@ async def get_search_statistics():
 
 
 @search_router.post("/favorites/jobs", response_model=FavoritesJobResponse, status_code=201)
-async def create_favorites_job(req: FavoritesJobRequest):
+async def create_favorites_job(req: FavoritesJobRequest, summary: bool = False):
     if search_job_manager.is_search_active():
         raise HTTPException(status_code=409, detail="搜索进行中，请等待完成后再同步收藏夹。")
     if not await _operation_coordinator.acquire_exclusive("favorites"):
         raise HTTPException(status_code=409, detail="账号或收藏夹操作进行中，请稍后再试。")
     try:
-        response = await favorites_job_manager.create(req)
+        response = await favorites_job_manager.create(req, summary=True) if summary else await favorites_job_manager.create(req)
         task = favorites_job_manager.active_task()
         if task:
             task.add_done_callback(
@@ -403,15 +404,31 @@ async def create_favorites_job(req: FavoritesJobRequest):
         raise
 
 
+@search_router.get("/favorites/archive")
+async def get_favorites_archive(
+    platform: Optional[Literal["bilibili", "xhs", "douyin", "zhihu"]] = None,
+    state: Optional[Literal["present", "pending", "archived", "legacy"]] = None,
+    account: Optional[str] = Query(default=None, max_length=128),
+    offset: int = Query(default=0, ge=0), limit: int = Query(default=50, ge=1, le=100),
+):
+    return await asyncio.to_thread(get_remote_favorites_store().archive_page,
+        platform=platform, state=state, account=account, offset=offset, limit=limit)
+
+
+@search_router.post("/favorites/missing/resolve")
+async def resolve_missing_favorites(request: MissingDecisions):
+    return await asyncio.to_thread(get_remote_favorites_store().resolve_missing, request.decisions)
+
+
 @search_router.get("/favorites/jobs/latest", response_model=FavoritesJobResponse)
-async def get_latest_favorites_job():
+async def get_latest_favorites_job(summary: bool = False):
     """Restore the last favourites result so entering the page needs no sync.
 
     Declared before ``/favorites/jobs/{job_id}`` so ``latest`` is not captured
     as a job id.
     """
     try:
-        response = await favorites_job_manager.latest()
+        response = await favorites_job_manager.latest(summary=True) if summary else await favorites_job_manager.latest()
     except RuntimeError:
         raise HTTPException(status_code=503, detail="本机同步收藏读取失败，请检查磁盘与数据库") from None
     if response is None:
@@ -420,16 +437,16 @@ async def get_latest_favorites_job():
 
 
 @search_router.post("/favorites/jobs/{job_id}/cancel", response_model=FavoritesJobResponse)
-async def cancel_favorites_job(job_id: str):
-    response = await favorites_job_manager.cancel(job_id)
+async def cancel_favorites_job(job_id: str, summary: bool = False):
+    response = await favorites_job_manager.cancel(job_id, summary=True) if summary else await favorites_job_manager.cancel(job_id)
     if response is None:
         raise HTTPException(status_code=404, detail="收藏同步任务不存在")
     return response
 
 
 @search_router.get("/favorites/jobs/{job_id}", response_model=FavoritesJobResponse)
-async def get_favorites_job(job_id: str):
-    response = await favorites_job_manager.get(job_id)
+async def get_favorites_job(job_id: str, summary: bool = False):
+    response = await favorites_job_manager.get(job_id, summary=True) if summary else await favorites_job_manager.get(job_id)
     if response is None:
         raise HTTPException(status_code=404, detail="收藏夹同步任务不存在。")
     return response

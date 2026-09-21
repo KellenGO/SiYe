@@ -112,8 +112,15 @@ class BilibiliClient(ReusableHttpClientMixin, AbstractApiClient):
         # safe "temporarily unavailable" error — never unlimited retries,
         # never fast retry loops that bypass platform limits.
         from aggregate_search.pagination import allow_client_retry, check_search_http_status
+        if getattr(self, "favorites_sync", False) and response.status_code in (403, 429, 461, 471):
+            from base.exceptions import RateLimitError
+            raise RateLimitError("bilibili", "B站请求受限，请稍后重试")
+        if getattr(self, "favorites_sync", False) and response.status_code >= 500:
+            raise DataFetchError("Bilibili unavailable", stage=stage,
+                http_status=response.status_code,
+                safe_message=_safe_bili_error_message(None, None, response.status_code, stage))
         check_search_http_status(response.status_code)
-        if response.status_code >= 500 and allow_client_retry():
+        if response.status_code >= 500 and allow_client_retry() and not getattr(self, "favorites_sync", False):
             utils.logger.warning(
                 f"[BilibiliClient.request] HTTP {response.status_code} for "
                 f"{url} (stage={stage}), retrying once after 1.5s")

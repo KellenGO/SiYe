@@ -374,7 +374,7 @@ async def _run_standard_search(
 
 # ── Fast path (no-browser) ──────────────────────────────────────────────
 
-async def _run_favorites(job_id: str, platform: str, limit: int) -> None:
+async def _run_favorites(job_id: str, platform: str, limit: int, sync_mode=None) -> None:
     """Read a bounded slice of a logged-in account's remote favourites."""
     from main import CrawlerFactory
     from aggregate_search.favorite_metrics import list_approximations
@@ -439,12 +439,35 @@ async def _run_favorites(job_id: str, platform: str, limit: int) -> None:
             result_limit=limit, strict_errors=True, headless=True,
             reuse_http_client=True, light_page=True,
         )
-        await asyncio.wait_for(crawler.start(), timeout=270)
-        emit_status(job_id, platform, "succeeded" if pending else "empty")
+        if platform == "bilibili" and sync_mode:
+            from aggregate_search.favorites_sync import BilibiliFavoritesSource, synchronize_favorites
+            from api.services.remote_favorites_store import get_remote_favorites_store
+            from aggregate_search.protocol import emit_event
+            from aggregate_search.models import WorkerEvent
+
+            def progress(account, count, phase):
+                emit_event(WorkerEvent(event="status", job_id=job_id, platform=platform,
+                    data={"status": "running", "account": account, "result_count": count, "phase": phase}))
+
+            async def sync(client):
+                await synchronize_favorites(BilibiliFavoritesSource(client), get_remote_favorites_store(), sync_mode, progress)
+
+            crawler.runtime_options.extra["favorites_sync"] = sync
+            await crawler.start()
+            emit_status(job_id, platform, "succeeded")
+        else:
+            await asyncio.wait_for(crawler.start(), timeout=270)
+            emit_status(job_id, platform, "succeeded" if pending else "empty")
     except asyncio.TimeoutError:
         emit_error(job_id, platform, "timed_out", "收藏夹同步超时")
     except Exception as exc:
-        emit_error(job_id, platform, _classify_error(exc), _safe_error_message(exc))
+        import sqlite3
+        if isinstance(exc, sqlite3.Error):
+            emit_error(job_id, platform, "failed", "本机收藏保存失败，请检查磁盘空间后继续同步")
+        elif isinstance(exc, ValueError) and platform == "bilibili" and sync_mode:
+            emit_error(job_id, platform, "failed", "收藏列表变化或返回异常，已保留进度，请稍后重新同步")
+        else:
+            emit_error(job_id, platform, _classify_error(exc), _safe_error_message(exc))
     finally:
         for result in pending.values():
             if result.metrics_status == "pending":
@@ -1040,13 +1063,14 @@ async def _dispatch_worker(
     job_id: str, mode: str, platform: str, keyword: str, limit: int,
     session_snapshot: Optional[Dict[str, str]] = None,
     fast_path: bool = False,
+    sync_mode=None,
 ) -> None:
     if mode == "login":
         await _run_login(job_id, platform)
         return
 
     if mode == "favorites":
-        await _run_favorites(job_id, platform, limit)
+        await _run_favorites(job_id, platform, limit, sync_mode)
         return
 
     if mode != "search":
@@ -1064,7 +1088,7 @@ async def _dispatch_worker(
 
 
 async def run_worker(job_id, mode, platform, keyword, limit, session_snapshot=None,
-                     fast_path=False, pagination=None, seen_ids=None):
+                     fast_path=False, pagination=None, seen_ids=None, sync_mode=None):
     from aggregate_search.pagination import PageState, PaginationRun, current_pagination
     run = None if pagination is None else PaginationRun(
         platform, keyword, limit, PageState.model_validate(pagination), seen_ids or [],
@@ -1072,7 +1096,7 @@ async def run_worker(job_id, mode, platform, keyword, limit, session_snapshot=No
         lambda metrics: emit_metrics(job_id, platform, metrics))
     token = current_pagination.set(run)
     try:
-        await _dispatch_worker(job_id, mode, platform, keyword, limit, session_snapshot, fast_path)
+        await _dispatch_worker(job_id, mode, platform, keyword, limit, session_snapshot, fast_path, sync_mode)
     finally:
         current_pagination.reset(token)
 
@@ -1139,6 +1163,7 @@ def main() -> None:
                         fast_path=request.fast_path,
                         pagination=request.pagination,
                         seen_ids=request.seen_ids,
+                        sync_mode=request.sync_mode,
                     )
                 )
             except _WorkerExit:

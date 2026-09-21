@@ -42,6 +42,7 @@ class _Job:
         self.created_at = datetime.now(timezone.utc)
         self.completed_at: Optional[datetime] = None
         self.limit = request.limit_per_platform
+        self.sync_mode = request.sync_mode
         self.order = list(request.platforms)
         self.evidence_tokens = {p: evidence_token(p) for p in self.order}
         self.platforms = {p: FavoritePlatformInfo() for p in self.order}
@@ -90,22 +91,62 @@ class FavoritesJobManager:
     def active_task(self) -> Optional[asyncio.Task]:
         return self._active.task if self._active else None
 
-    async def create(self, request: FavoritesJobRequest) -> FavoritesJobResponse:
+    async def create(self, request: FavoritesJobRequest, summary: bool = False) -> FavoritesJobResponse:
         if self.is_active():
             raise RuntimeError("favorites_in_progress")
         job = _Job(request)
         self._active = self._recent = job
         job.task = asyncio.create_task(self._run(job), name=f"favorites-{job.job_id}")
-        return await self._snapshot(job)
+        return await self._snapshot(job, summary)
 
-    async def get(self, job_id: str) -> Optional[FavoritesJobResponse]:
+    async def get(self, job_id: str, summary: bool = False) -> Optional[FavoritesJobResponse]:
         job = self._active if self._active and self._active.job_id == job_id else self._recent
-        return await self._snapshot(job) if job and job.job_id == job_id else None
+        return await self._snapshot(job, summary) if job and job.job_id == job_id else None
 
-    async def _snapshot(self, job: Optional[_Job] = None) -> Optional[FavoritesJobResponse]:
+    async def _snapshot(self, job: Optional[_Job] = None, summary: bool = False) -> Optional[FavoritesJobResponse]:
+        if summary:
+            try:
+                saved_summary = await asyncio.to_thread(get_remote_favorites_store().archive_summary)
+            except Exception:
+                raise RuntimeError("本机同步收藏读取失败，请检查磁盘与数据库") from None
+            response = job.response() if job else FavoritesJobResponse(
+                job_id="saved", overall="completed", created_at=datetime.now(timezone.utc),
+                platforms={}, results=[])
+            response.results = []
+            persisted = {platform: FavoritePlatformInfo(**info)
+                         for platform, info in saved_summary.pop("platforms").items()}
+            response.platforms = {**persisted, **response.platforms}
+            if job is None and persisted:
+                statuses = [info.status for info in persisted.values()]
+                success = sum(status in ("succeeded", "empty") for status in statuses)
+                response.overall = "completed" if success == len(statuses) else (
+                    "partial" if success or any(saved_summary["counts"].values()) else "failed")
+            for name, value in saved_summary.items():
+                setattr(response, name, value)
+            return response
         # 始终合并持久化内容；局部同步/失败不能让其他平台或旧条目消失。
         try:
             saved = await asyncio.to_thread(lambda: get_remote_favorites_store().load())
+            # Legacy full-snapshot clients can still read the new account archives.
+            def include_accounts(snapshot):
+                store = get_remote_favorites_store()
+                metadata = store.archive_summary()
+                if not metadata["accounts"]:
+                    return snapshot
+                if snapshot is None:
+                    snapshot = {"job_id": "saved", "overall": "completed",
+                                "created_at": datetime.now(timezone.utc), "platforms": {}, "results": []}
+                snapshot["platforms"].update(metadata["platforms"])
+                for account in metadata["accounts"]:
+                    offset = 0
+                    while True:
+                        page = store.archive_page(account=account["account"], offset=offset, limit=100)
+                        snapshot["results"].extend(item["result"] for item in page["items"])
+                        offset += 100
+                        if offset >= page["total"]:
+                            break
+                return snapshot
+            saved = await asyncio.to_thread(include_accounts, saved)
         except Exception:
             if job is None:
                 raise RuntimeError("本机同步收藏读取失败，请检查磁盘与数据库") from None
@@ -124,7 +165,7 @@ class FavoritesJobManager:
             response.platforms = {**previous.platforms, **response.platforms}
         return response
 
-    async def latest(self) -> Optional[FavoritesJobResponse]:
+    async def latest(self, summary: bool = False) -> Optional[FavoritesJobResponse]:
         """Return the most recent favourites snapshot for the page to restore.
 
         Prefers the in-memory job (freshest), and falls back to the copy persisted
@@ -133,7 +174,7 @@ class FavoritesJobManager:
         platform. ``completed_at`` is the original sync time, which the page shows
         as the snapshot's age.
         """
-        return await self._snapshot(self._recent)
+        return await self._snapshot(self._recent, summary)
 
     async def _run(self, job: _Job) -> None:
         tasks = [asyncio.create_task(self._run_platform(job, platform)) for platform in job.order]
@@ -144,7 +185,7 @@ class FavoritesJobManager:
             await asyncio.gather(*tasks, return_exceptions=True)
             job.completed_at = datetime.now(timezone.utc)
 
-    async def cancel(self, job_id: str) -> Optional[FavoritesJobResponse]:
+    async def cancel(self, job_id: str, summary: bool = False) -> Optional[FavoritesJobResponse]:
         job = self._active if self._active and self._active.job_id == job_id else self._recent
         if not job or job.job_id != job_id:
             return None
@@ -164,17 +205,18 @@ class FavoritesJobManager:
                 except Exception:
                     job.persistence_error = "同步结果未能保存到本机，请检查磁盘空间后重试"
         job.completed_at = job.completed_at or datetime.now(timezone.utc)
-        return await self._snapshot(job)
+        return await self._snapshot(job, summary)
 
     async def _run_platform(self, job: _Job, platform: str) -> None:
         info = job.platforms[platform]
         info.status = "running"
+        paged = platform == "bilibili" and bool(job.sync_mode)
         proc = None
         try:
             proc = await spawn_worker()
             job.procs.append(proc)
             payload = WorkerRequest(job_id=job.job_id, mode="favorites", platform=platform,
-                                    limit=job.limit).model_dump_json().encode("utf-8") + b"\n"
+                                    limit=job.limit, sync_mode=job.sync_mode).model_dump_json().encode("utf-8") + b"\n"
             assert proc.stdin and proc.stdout
             proc.stdin.write(payload)
             await proc.stdin.drain()
@@ -183,7 +225,7 @@ class FavoritesJobManager:
             async def read() -> bool:
                 done = False
                 while True:
-                    raw = await proc.stdout.readline()
+                    raw = await asyncio.wait_for(proc.stdout.readline(), timeout=90 if paged else _TIMEOUT)
                     if not raw:
                         break
                     event = parse_event_line(raw.decode("utf-8", errors="replace").strip())
@@ -197,6 +239,16 @@ class FavoritesJobManager:
                             pass
                     elif event.event == "status":
                         status = (event.data or {}).get("status")
+                        if paged and isinstance(event.data, dict):
+                            account = event.data.get("account")
+                            if isinstance(account, str) and account.startswith("bilibili:"):
+                                info.account = account
+                            phase = event.data.get("phase")
+                            if isinstance(phase, str):
+                                info.phase = phase[:160]
+                            count = event.data.get("result_count")
+                            if isinstance(count, int) and count >= 0:
+                                info.result_count = count
                         if status in ("running", "succeeded", "empty"):
                             info.status = status
                     elif event.event == "error":
@@ -213,7 +265,7 @@ class FavoritesJobManager:
             # 持续排空 stderr，避免大量日志填满管道后 worker 卡死。
             stderr_task = asyncio.create_task(drain_stderr_to_eof(proc))
             try:
-                done = await asyncio.wait_for(read(), timeout=_TIMEOUT)
+                done = await read() if paged else await asyncio.wait_for(read(), timeout=_TIMEOUT)
             finally:
                 stderr_task.cancel()
                 await asyncio.gather(stderr_task, return_exceptions=True)
@@ -244,13 +296,17 @@ class FavoritesJobManager:
             info.error_summary = effective_error
             info.synced_at = datetime.now(timezone.utc)
             try:
-                await asyncio.to_thread(lambda: get_remote_favorites_store().save_platform(
-                    platform,
-                    [item.model_dump(mode="json") for item in job.items[platform]],
-                    status=effective_status,
-                    error_summary=effective_error,
-                    requested_limit=job.limit,
-                ))
+                if paged:
+                    if info.account:
+                        await asyncio.to_thread(get_remote_favorites_store().sync_status, info.account, effective_status, effective_error)
+                else:
+                    await asyncio.to_thread(lambda: get_remote_favorites_store().save_platform(
+                        platform,
+                        [item.model_dump(mode="json") for item in job.items[platform]],
+                        status=effective_status,
+                        error_summary=effective_error,
+                        requested_limit=job.limit,
+                    ))
                 record_usage(platform, "favorites", effective_status, job.evidence_tokens[platform])
             except Exception:
                 record_usage(platform, "favorites", "failed", job.evidence_tokens[platform])

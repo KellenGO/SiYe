@@ -49,6 +49,8 @@ export interface UnifiedSearchResult {
 }
 
 export interface FavoritePlatformInfo {
+  phase?: string | null;
+  account?: string | null;
   synced_at?: string | null;
   status: PlatformStatus;
   result_count: number;
@@ -56,6 +58,10 @@ export interface FavoritePlatformInfo {
 }
 
 export interface FavoritesJobResponse {
+  counts?: Partial<Record<PlatformSlug, number>>;
+  accounts?: { account: string; platform: PlatformSlug; last_full: string | null; full_due: boolean; status: string }[];
+  pending_count?: number;
+  data_version?: string;
   persistence_error?: string | null;
   job_id: string;
   overall: "running" | "completed" | "partial" | "failed";
@@ -63,6 +69,21 @@ export interface FavoritesJobResponse {
   completed_at: string | null;
   platforms: Partial<Record<PlatformSlug, FavoritePlatformInfo>>;
   results: UnifiedSearchResult[];
+}
+
+export interface RemoteArchiveItem {
+  id: number;
+  account: string;
+  state: "present" | "pending" | "archived" | "legacy";
+  missing_batch: string | null;
+  result: UnifiedSearchResult;
+}
+
+export interface RemoteArchivePage {
+  items: RemoteArchiveItem[];
+  total: number;
+  offset: number;
+  limit: number;
 }
 
 export interface PlatformTimingInfo {
