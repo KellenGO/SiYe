@@ -72,12 +72,19 @@ export function filterResultGroups(
   results: readonly UnifiedSearchResult[], filters: ResultFilters, nowMs: number,
   platform: "all" | PlatformSlug = "all"
 ): UnifiedSearchResult[] {
+  const seen = new Set<string>();
   return results.flatMap((result) => {
     const sources = resultSources(result).filter((source) =>
       (platform === "all" || source.platform === platform) && matchesFilters(source, filters, nowMs));
     if (!sources.length) return [];
     const representative = sources.find((source) => resultKey(source) === resultKey(result)) || sources[0];
-    return [{ ...representative, grouped_sources: sources.length >= 2 ? sources : null }];
+    const visible = { ...representative, grouped_sources: sources.length >= 2 ? sources : null };
+    // 后端会合并旧 default 归档与已识别账号归档；这里仍守住边界，
+    // 不能把同一 identity 交给 React，否则切换页签时会复用错误的卡片节点。
+    const key = groupKey(visible);
+    if (seen.has(key)) return [];
+    seen.add(key);
+    return [visible];
   });
 }
 

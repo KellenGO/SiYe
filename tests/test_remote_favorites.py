@@ -199,6 +199,28 @@ async def test_latest_favorites_snapshot_can_be_restored(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_latest_snapshot_deduplicates_legacy_and_account_archives(tmp_path, monkeypatch):
+    """同一内容在旧 default 与账号归档中各有一份时，页面只能收到一条。"""
+    from api.services.favorites_job_manager import FavoritesJobManager
+    from api.services.remote_favorites_store import RemoteFavoritesStore
+
+    store = RemoteFavoritesStore(tmp_path / "library.db")
+    monkeypatch.setattr("api.services.favorites_job_manager.get_remote_favorites_store", lambda: store)
+    legacy = {"platform": "bilibili", "content_id": "BV1", "content_type": "video",
+              "title": "历史快照", "author": "UP", "url": "https://example.test/BV1"}
+    current = {**legacy, "title": "账号快照"}
+    store.save_platform("bilibili", [legacy], status="succeeded")
+    store.begin_scan("bilibili", "uid:1", [{"id": "f", "name": "收藏夹"}], "full")
+    store.save_sync_page("bilibili", "uid:1", 1, "f", "收藏夹", 1, "page-1", [current], True, 20)
+
+    restored = await FavoritesJobManager().latest()
+
+    assert restored is not None
+    assert [(item.platform, item.content_id) for item in restored.results] == [("bilibili", "BV1")]
+    assert restored.results[0].title == "账号快照"
+
+
+@pytest.mark.asyncio
 async def test_folder_fetchers_flatten_and_report_duplicate_membership(monkeypatch):
     from unittest.mock import AsyncMock
     monkeypatch.setattr("aggregate_search.favorite_metrics.enrich_favorites", AsyncMock())

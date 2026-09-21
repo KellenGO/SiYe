@@ -36,6 +36,20 @@ def _merge_result(previous: UnifiedSearchResult, current: UnifiedSearchResult) -
     ))
 
 
+def _deduplicate_results(results: List[UnifiedSearchResult]) -> List[UnifiedSearchResult]:
+    """合并跨账号归档中的同一远端内容，避免把重复 identity 交给列表组件。
+
+    ``default`` 是旧版没有确认账号时留下的历史归档；它和已识别账号的归档可以
+    合法地同时存在于 SQLite。读取全量快照时只展示一张卡片，后出现的账号归档
+    作为当前快照，并从旧记录补齐未返回的指标。
+    """
+    rows: Dict[tuple[str, str], UnifiedSearchResult] = {}
+    for result in results:
+        key = (result.platform, result.content_id)
+        rows[key] = _merge_result(rows[key], result) if key in rows else result
+    return list(rows.values())
+
+
 class _Job:
     def __init__(self, request: FavoritesJobRequest):
         self.job_id = uuid.uuid4().hex[:12]
@@ -153,15 +167,15 @@ class FavoritesJobManager:
             saved = None
             job.persistence_error = "本机收藏读取失败，当前仅显示本次同步结果"
         if job is None:
-            return FavoritesJobResponse(**saved) if saved else None
+            if not saved:
+                return None
+            snapshot = FavoritesJobResponse(**saved)
+            snapshot.results = _deduplicate_results(snapshot.results)
+            return snapshot
         response = job.response()
         if saved:
             previous = FavoritesJobResponse(**saved)
-            rows = {(r.platform, r.content_id): r for r in previous.results}
-            for result in response.results:
-                key = (result.platform, result.content_id)
-                rows[key] = _merge_result(rows[key], result) if key in rows else result
-            response.results = list(rows.values())
+            response.results = _deduplicate_results(previous.results + response.results)
             response.platforms = {**previous.platforms, **response.platforms}
         return response
 
