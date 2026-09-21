@@ -1,14 +1,24 @@
 """Exercise exploration UI against isolated mocked APIs; no platform traffic."""
 import json
+import sys
 import threading
+import time
 from copy import deepcopy
 from datetime import datetime, timezone
 from functools import partial
 from http.server import ThreadingHTTPServer
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from urllib.parse import urlparse
 
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from playwright.sync_api import expect, sync_playwright
-from result_library_smoke import ROOT, QuietHandler, BOOKMARKS_KEY
+from result_library_smoke import ROOT, QuietHandler
+
+sys.path.insert(0, str(ROOT))
+from api.routers.library import library_router  # noqa: E402
+from api.services.library_store import LibraryStore, get_library_store  # noqa: E402
 
 
 def main():
@@ -41,9 +51,25 @@ def main():
         platforms={"xhs": dict(collected=2, has_more=False), "bilibili": dict(collected=1, has_more=False)})
     current = deepcopy(first)
     posts, errors = [], []
+    # 收藏走的是后端 SQLite（不再是 localStorage），所以 /api/library 要转发给真实的 store
+    store = None
+    client = None
     server = ThreadingHTTPServer(("127.0.0.1", 0), partial(QuietHandler, directory=str(ROOT / "webui/dist")))
     threading.Thread(target=server.serve_forever, daemon=True).start()
     origin = f"http://127.0.0.1:{server.server_port}"
+
+    def wait_for_posts(count: int, timeout: float = 5.0) -> None:
+        """等 mock 真的收到第 count 个搜索请求。
+
+        「换一批」按钮变 disabled 早于请求抵达 mock，点完立刻读 posts[-1] 会读到上一条，
+        断言就会拿错请求（曾经因此误判成行为变更）。
+        """
+        deadline = time.time() + timeout
+        while len(posts) < count and time.time() < deadline:
+            # 必须用 Playwright 的等待：time.sleep 会阻塞同步 API 的事件循环，
+            # 期间到达的请求不会被 route 回调处理，posts 永远涨不上去。
+            page.wait_for_timeout(50)
+        assert len(posts) >= count, f"只等到 {len(posts)} 个搜索请求，期望第 {count} 个"
 
     def route_request(route):
         nonlocal current
@@ -53,6 +79,15 @@ def main():
             return route.abort()
         if not path.startswith("/api/"):
             return route.continue_()
+        if path.startswith("/api/library/"):
+            parsed = urlparse(request.url)
+            response = client.request(
+                request.method,
+                path + ("?" + parsed.query if parsed.query else ""),
+                content=request.post_data,
+                headers={"content-type": "application/json"},
+            )
+            return route.fulfill(status=response.status_code, body=response.content, content_type="application/json")
         if path == "/api/search/jobs" and request.method == "POST":
             req = request.post_data_json
             posts.append(req)
@@ -75,7 +110,13 @@ def main():
         route.fulfill(json=data)
 
     try:
-        with sync_playwright() as p:
+        (ROOT / "build").mkdir(exist_ok=True)
+        with TemporaryDirectory(prefix="search-exploration-", dir=ROOT / "build") as temp, sync_playwright() as p:
+            store = LibraryStore(Path(temp) / "library.db")
+            app = FastAPI()
+            app.include_router(library_router)
+            app.dependency_overrides[get_library_store] = lambda: store
+            client = TestClient(app)
             browser = p.chromium.launch(channel="msedge")
             context = browser.new_context(viewport={"width": 1280, "height": 900})
             context.add_init_script("localStorage.setItem('mediacrawler_license_accepted', 'true')")
@@ -87,6 +128,7 @@ def main():
             expect(page.get_by_role("button", name="刷新结果", exact=True)).to_have_count(0)
             page.get_by_role("button", name="收藏 第一批收藏素材", exact=True).click()
             page.get_by_role("button", name="换一批", exact=True).click()
+            wait_for_posts(1)
             expect(page.get_by_role("button", name="收藏 第二批新素材", exact=True)).to_be_visible()
             assert len(posts) == 1 and posts[0]["continue_from"] == "round-1"
             assert posts[0]["bypass_cache"] is True and posts[0]["limit_per_platform"] == 20
@@ -95,7 +137,9 @@ def main():
             page.get_by_label("查看轮次", exact=True).select_option("1")
             expect(page.get_by_role("button", name="选择收藏平台 第一批收藏素材", exact=True)).to_be_visible()
             expect(page.get_by_role("button", name="收藏 第二批新素材", exact=True)).to_have_count(0)
-            assert page.evaluate(f"JSON.parse(localStorage.getItem('{BOOKMARKS_KEY}')).items.length") == 1
+            # 收藏落库（SQLite），不再是 localStorage：直接查 store
+            assert store.stats()["total"] == 1
+            assert store.get_item("xhs", "old") is not None
             page.reload()
             expect(page.get_by_role("button", name="收藏 第二批新素材", exact=True)).to_be_visible()
             page.locator("summary").filter(has_text="更多").click()
@@ -103,13 +147,17 @@ def main():
             expect(page.get_by_role("button", name="选择收藏平台 第一批收藏素材", exact=True)).to_be_visible()
             page.get_by_label("查看轮次", exact=True).select_option("2")
             page.locator("summary").filter(has_text="更多").click()
+            # 切回轮次 2 后视图应该是第二轮的内容，再从这里继续换一批
+            expect(page.get_by_role("button", name="收藏 第二批新素材", exact=True)).to_be_visible()
             page.get_by_role("button", name="换一批", exact=True).click()
+            wait_for_posts(2)
             expect(page.get_by_role("button", name="换一批", exact=True)).to_be_disabled()
-            assert posts[-1]["continue_from"] == "round-2" and posts[-1]["platforms"] == ["xhs"]
+            assert posts[-1]["continue_from"] == "round-2" and posts[-1]["platforms"] == ["xhs"], posts[-1]
             page.locator("summary").filter(has_text="更多").click()
             page.get_by_label("查看轮次", exact=True).select_option("2")
             expect(page.get_by_role("button", name="收藏 第二批新素材", exact=True)).to_be_visible()
             page.get_by_role("button", name="刷新结果", exact=True).click()
+            wait_for_posts(3)
             expect(page.get_by_role("button", name="取消收藏 第一批收藏素材", exact=True)).to_be_visible()
             assert "continue_from" not in posts[-1] and posts[-1]["bypass_cache"] is True
             assert set(posts[-1]["platforms"]) == {"xhs", "bilibili"}

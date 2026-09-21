@@ -149,12 +149,13 @@ def main():
                 douyin_button = page.get_by_role("button", name="抖音", exact=True)
                 bilibili_button = page.get_by_role("button", name="B站", exact=True)
                 zhihu_button = page.get_by_role("button", name="知乎", exact=True)
-                # 默认不预选任何平台（首次进入允许零勾选）：按钮初始都是未勾选。
-                # 这里只勾选小红书，其余保持未勾选，作为"只搜已连接平台"的样例。
-                xhs_button.click()
+                # 向导的"连接平台"那步会把已连接平台**预先勾上**（"带 ✓ 的平台会参与搜索"），
+                # 所以进来时是四平台全选。这里只留小红书，作为"只搜一个平台"的样例。
                 expect(xhs_button).to_have_attribute("aria-pressed", "true")
                 for button in (douyin_button, bilibili_button, zhihu_button):
+                    button.click()
                     expect(button).to_have_attribute("aria-pressed", "false")
+                assert json.loads(page.evaluate("localStorage.getItem('aggregate_search_platform_pref')")) == ["xhs"]
 
                 before_search = len([item for item in mutations if item[1] == "/api/search/jobs"])
                 search.focus()
