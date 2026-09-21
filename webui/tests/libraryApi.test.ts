@@ -186,6 +186,13 @@ test("describeImport：分别覆盖新增、更新、跳过与空结果", () => 
 
 // ── 收藏后编辑归属：一批条目的勾选三态 ────────────────────────────────
 
+test("toLibraryItem：saved 是独立状态，后端没给时按收藏夹归属兜底推断", () => {
+  assert.equal(expectItem(apiItem({ saved: true, in_default: false, collections: [] })).saved, true);
+  assert.equal(expectItem(apiItem({ saved: false, watch_later: true })).saved, false);
+  assert.equal(expectItem(apiItem()).saved, true);
+  assert.equal(expectItem(apiItem({ in_default: false, collections: [] })).saved, false);
+});
+
 test("collectionMembership：单条条目按自身归属给出勾选状态", () => {
   const state = collectionMembership([expectItem(apiItem())]);
   assert.equal(state.inDefault, true);

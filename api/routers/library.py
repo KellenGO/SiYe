@@ -140,6 +140,15 @@ def remove_items(
     return {"removed": removed}
 
 
+@library_router.post("/items/unsave")
+def unsave_items(
+    payload: LibraryKeysInput,
+    store: LibraryStore = Depends(get_library_store),
+) -> Dict[str, Any]:
+    """取消收藏：清掉所有收藏夹归属并把条目移出「全部」，稍后再看不受影响。"""
+    return store.unsave_items([(key.platform, key.content_id) for key in payload.keys])
+
+
 @library_router.put("/system-collections/{collection}/items")
 def add_items_to_system_collection(
     collection: str,

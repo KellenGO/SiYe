@@ -148,7 +148,7 @@ def test_import_legacy_backup_and_export(client: TestClient) -> None:
     assert imported.json()["added"] == 1
 
     exported = client.get("/api/library/export").json()
-    assert exported["version"] == 3
+    assert exported["version"] == 4
     assert len(exported["items"]) == 1
     assert exported["items"][0]["note"] == "旧备注"
 

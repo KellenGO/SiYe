@@ -3,6 +3,7 @@
 覆盖产品方案里明确的几条规则：
 - 内容本体只存一份，唯一键 (platform, content_id)；
 - 一条内容可以同时属于多个收藏夹；
+- 「已收藏」是独立状态：挪出默认收藏夹不影响它在「全部」里，只挂稍后再看的不进「全部」；
 - 「默认收藏夹」与「稍后再看」彼此独立，移出后内容仍留在「全部」；
 - 删除收藏夹保留内容，取消收藏是独立操作；
 - 重复收藏保留首次收藏时间与已有备注；
@@ -17,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from api.services.library_store import MAX_NOTE_LENGTH, LibraryStore
+from api.services.library_store import MAX_NOTE_LENGTH, LibraryStore, _LIBRARY_SCHEMA
 
 
 @pytest.fixture()
@@ -178,7 +179,7 @@ def test_export_then_import_roundtrip(store: LibraryStore) -> None:
     store.add_item(_result(content_id="b"), note="备注 B")
 
     payload = store.export_payload()
-    assert payload["version"] == 3
+    assert payload["version"] == 4
     assert len(payload["items"]) == 2
 
     fresh = LibraryStore(store.db_path.parent / "restored.db")
@@ -191,6 +192,72 @@ def test_export_then_import_roundtrip(store: LibraryStore) -> None:
     assert restored is not None
     assert restored["note"] == "备注 A"
     assert [c["name"] for c in restored["collections"]] == ["我的夹"]
+
+
+def test_saved_outlives_leaving_the_default_folder(store: LibraryStore) -> None:
+    """「已收藏」与「放在默认收藏夹里」是两件事：挪出默认夹，它仍在「全部」里。"""
+    entry = {"result": _result(content_id="a")}
+    store.add_items_to_system_collection([entry], "default")
+    item = store.get_item("xhs", "a")
+    assert item is not None and item["saved"] is True and item["in_default"] is True
+
+    store.remove_items_from_system_collection([("xhs", "a")], "default")
+    item = store.get_item("xhs", "a")
+    assert item is not None and item["saved"] is True and item["in_default"] is False
+    assert store.stats()["saved_count"] == 1
+
+
+def test_watch_later_only_item_is_not_saved_and_dies_with_watch_later(store: LibraryStore) -> None:
+    entry = {"result": _result(content_id="later")}
+    store.add_items_to_system_collection([entry], "watch_later")
+    item = store.get_item("xhs", "later")
+    assert item is not None and item["saved"] is False and item["watch_later"] is True
+    assert store.stats()["saved_count"] == 0
+
+    # 既没收藏也不稍后再看 = 没有任何入口能看到它，直接清掉
+    store.remove_items_from_system_collection([("xhs", "later")], "watch_later")
+    assert store.get_item("xhs", "later") is None
+    assert store.stats()["total"] == 0
+
+
+def test_cancelling_watch_later_keeps_a_saved_item(store: LibraryStore) -> None:
+    entry = {"result": _result(content_id="both")}
+    store.add_items_to_system_collection([entry], "default")
+    store.add_items_to_system_collection([entry], "watch_later")
+    store.remove_items_from_system_collection([("xhs", "both")], "watch_later")
+
+    item = store.get_item("xhs", "both")
+    assert item is not None and item["saved"] is True and item["watch_later"] is False
+
+
+def test_legacy_database_gets_saved_backfilled(tmp_path: Path) -> None:
+    """旧库没有 saved 列：属于某个收藏夹的算已收藏，只挂稍后再看的算未收藏。"""
+    legacy_schema = _LIBRARY_SCHEMA.replace(
+        "    saved         INTEGER NOT NULL DEFAULT 0,\n", ""
+    )
+    path = tmp_path / "legacy.db"
+    conn = sqlite3.connect(path)
+    try:
+        conn.executescript(legacy_schema)
+        conn.execute(
+            "INSERT INTO items (platform, content_id, content_type, title, author, url, metrics,"
+            " note, saved_at, in_default, watch_later) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            ("xhs", "kept", "note", "已收藏", "", "https://example.com/kept", "{}", "", "2026-09-01T00:00:00", 1, 0),
+        )
+        conn.execute(
+            "INSERT INTO items (platform, content_id, content_type, title, author, url, metrics,"
+            " note, saved_at, in_default, watch_later) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            ("xhs", "later-only", "note", "只看", "", "https://example.com/later", "{}", "", "2026-09-01T00:00:00", 0, 1),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    store = LibraryStore(path)
+    assert store.get_item("xhs", "kept") is not None
+    assert store.get_item("xhs", "kept")["saved"] is True
+    assert store.get_item("xhs", "later-only")["saved"] is False
+    assert store.stats()["saved_count"] == 1
 
 
 def test_system_collections_are_independent_and_removal_keeps_item(store: LibraryStore) -> None:

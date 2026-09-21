@@ -38,6 +38,12 @@ export interface LibraryItem {
   collections: LibraryTag[];
   inDefault: boolean;
   watchLater: boolean;
+  /**
+   * 是否「已收藏」：决定这条内容出现在不在「全部」里。
+   * 与 inDefault（是否放在默认收藏夹）是两件独立的事——一条内容可以
+   * 既不在默认收藏夹也不在任何自建夹，只要收藏过就仍在「全部」里。
+   */
+  saved: boolean;
 }
 
 export interface LibraryCollection extends LibraryTag {
@@ -46,6 +52,8 @@ export interface LibraryCollection extends LibraryTag {
 
 export interface LibraryStats {
   total: number;
+  /** 已收藏条数（「全部」视图的口径，不含只挂在稍后再看的内容）。 */
+  saved_count: number;
   unclassified: number;
   default_count: number;
   watch_later_count: number;
@@ -92,6 +100,10 @@ export function toLibraryItem(raw: unknown): LibraryItem | null {
     collections: tags,
     inDefault: typeof raw.in_default === "boolean" ? raw.in_default : tags.length === 0,
     watchLater: raw.watch_later === true,
+    // 后端没给就按旧规则推断：在默认收藏夹或有自建归属的算已收藏。
+    saved: typeof raw.saved === "boolean"
+      ? raw.saved
+      : (typeof raw.in_default === "boolean" ? raw.in_default : tags.length === 0) || tags.length > 0,
   };
 }
 
@@ -287,6 +299,13 @@ export async function removeItems(keys: string[]): Promise<void> {
   const parsed = keys.map(splitKey).filter((key): key is { platform: string; content_id: string } => key !== null);
   if (!parsed.length) return;
   await axios.delete(`${LIBRARY_API_BASE}/items`, { data: { keys: parsed } });
+}
+
+/** 取消收藏：清掉收藏夹归属并移出「全部」；稍后再看保留（后端自行清理孤儿）。 */
+export async function unsaveItems(keys: string[]): Promise<void> {
+  const parsed = keys.map(splitKey).filter((entry): entry is { platform: string; content_id: string } => entry !== null);
+  if (!parsed.length) return;
+  await axios.post(`${LIBRARY_API_BASE}/items/unsave`, { keys: parsed });
 }
 
 export async function updateNote(key: string, note: string): Promise<void> {

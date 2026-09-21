@@ -34,6 +34,7 @@ import {
   removeItems,
   removeItemsFromSystemCollection as apiRemoveFromSystemCollection,
   removeItemsFromCollection as apiRemoveFromCollection,
+  unsaveItems as apiUnsaveItems,
   renameCollection as apiRenameCollection,
   toAddPayload,
   updateNote,
@@ -115,14 +116,18 @@ export function useBookmarks() {
       const existing = new Map(state.items.map((item) => [item.key, item]));
       const allSaved = keys.every((key) => {
         const item = existing.get(key);
-        return item && (collection === "default" ? item.inDefault : item.watchLater);
+        return item && (collection === "default" ? item.saved : item.watchLater);
       });
 
       // 服务端是唯一真源：不 optimistic 更新。这样快速连点只会产生幂等的
       // 重复请求（后端按 platform|content_id 去重），不会出现"想取消却变成收藏"。
       try {
-        if (allSaved) await apiRemoveFromSystemCollection(collection, keys);
-        else {
+        if (allSaved) {
+          // 取消收藏 = 从「全部」消失：清掉收藏夹归属（稍后再看保留，它是独立的一条线）。
+          // 取消稍后再看只解绑稍后再看；两头都不沾的条目由后端顺手清掉。
+          if (collection === "default") await apiUnsaveItems(keys);
+          else await apiRemoveFromSystemCollection(collection, keys);
+        } else {
           const stats = await apiAddToSystemCollection(collection, entries);
           if (stats.skipped) toast.warning(describeImport(stats));
         }
@@ -130,7 +135,7 @@ export function useBookmarks() {
         return true;
       } catch (error) {
         const label = collection === "default" ? "收藏" : "稍后再看";
-        toast.error(errorText(error, allSaved ? `移出${label}失败` : `加入${label}失败，请稍后重试`));
+        toast.error(errorText(error, allSaved ? `取消${label}失败` : `加入${label}失败，请稍后重试`));
         return false;
       } finally {
         keys.forEach((key) => pending.current.delete(key));

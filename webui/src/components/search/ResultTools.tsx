@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { Bookmark as BookmarkIcon, Check, Clock3, Copy, Download, FolderCog } from "lucide-react";
+import { Bookmark as BookmarkIcon, Check, Clock3, Copy, Download, FolderCog, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { BookmarkLibrary } from "@/hooks/useBookmarks";
 import type { PlatformSlug, UnifiedSearchResult } from "@/types/search";
 import { PLATFORM_LABELS } from "@/types/search";
@@ -58,11 +59,13 @@ function SystemCollectionButton({ result, library, fetchedAt, collection, compac
   compact?: boolean;
   onToggled?: (added: boolean, keys: string[]) => void;
 }) {
-  const membership = new Map(library.items.map((item) => [item.key, collection === "default" ? item.inDefault : item.watchLater]));
+  // 收藏按钮看的是「已收藏」（saved），不是「是否在默认收藏夹」——
+  // 一条内容可以不在任何收藏夹里，只要收藏过就仍算收藏着。
+  const membership = new Map(library.items.map((item) => [item.key, collection === "default" ? item.saved : item.watchLater]));
   const sources = resultSources(result);
   const saved = sources.every((source) => membership.get(resultKey(source)) === true);
   const baseLabel = collection === "default" ? "收藏" : "稍后再看";
-  const label = saved ? `移出${baseLabel}` : sources.length > 1 ? `全部加入${baseLabel}` : baseLabel;
+  const label = saved ? `取消${baseLabel}` : sources.length > 1 ? `全部加入${baseLabel}` : baseLabel;
   const Icon = collection === "default" ? BookmarkIcon : Clock3;
   return (
     <button type="button" aria-label={`${label} ${result.title}`} aria-pressed={saved}
@@ -75,7 +78,7 @@ function SystemCollectionButton({ result, library, fetchedAt, collection, compac
         })();
       }}>
       {saved ? <Check className="w-3.5 h-3.5 text-brand-strong" /> : <Icon className="w-3.5 h-3.5" />}
-      {!compact && (saved ? `已加入${baseLabel}` : label)}
+      {!compact && (saved ? `已${baseLabel}` : label)}
     </button>
   );
 }
@@ -193,9 +196,9 @@ export function MembershipEditor({ keys, library, subject, label = "编辑归属
     <button type="button" className="text-link" aria-expanded={open} onClick={() => setOpen(!open)}><FolderCog />{label}</button>
     {open && <div className="membership-card" role="group" aria-label={subject ? `编辑收藏夹归属 ${subject}` : "编辑收藏夹归属"}>
       <div className="membership-card-head"><p>收藏夹归属</p><button type="button" className="text-link" onClick={close}>完成</button></div>
+      {/* 「稍后再看」不在这里：它由卡片上独立的稍后再看按钮控制，和收藏体系分开 */}
       <label><input type="checkbox" checked disabled /><span className="membership-folder-name" title="全部">全部</span></label>
       <MembershipCheckbox state={membership.inDefault} disabled={busy} onChange={(enabled) => void updateSystem("default", enabled)} label="默认收藏夹" />
-      <MembershipCheckbox state={membership.watchLater} disabled={busy} onChange={(enabled) => void updateSystem("watch_later", enabled)} label="稍后再看" />
       {library.collections.map((collection) => {
         const name = customCollectionLabel(collection.name);
         return <MembershipCheckbox key={collection.id} state={membership.custom[collection.id] ?? false} disabled={busy} onChange={(enabled) => void updateCustom(collection.id, enabled)} label={name} />;
@@ -204,18 +207,22 @@ export function MembershipEditor({ keys, library, subject, label = "编辑归属
   </div>;
 }
 
-export function BookmarkNote({ bookmark, onSave, library }: {
-  bookmark: Bookmark & { key: string; inDefault: boolean; watchLater: boolean; collections: { id: number; name: string }[] };
+export function BookmarkNote({ bookmark, onSave, library, onDelete }: {
+  bookmark: Bookmark & { key: string; inDefault: boolean; saved: boolean; watchLater: boolean; collections: { id: number; name: string }[] };
   onSave: (key: string, note: string) => boolean | Promise<boolean>;
   library: BookmarkLibrary;
+  /** 传了就在最右边显示红色垃圾桶（彻底删除）。 */
+  onDelete?: () => void;
 }) {
   const [draft, setDraft] = useState(bookmark.note);
   const [editing, setEditing] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
   const id = useId();
   useEffect(() => setDraft(bookmark.note), [bookmark.note]);
   return (
     <div className="bookmark-note px-3 py-2">
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-cyber-text-muted mb-2">
+      <div className="bookmark-note-row">
         <span>收藏于 {new Date(bookmark.savedAt).toLocaleString("zh-CN")}</span>
         <span className="bookmark-meta-actions">
           <MembershipEditor keys={[bookmark.key]} library={library} subject={bookmark.result.title} />
@@ -223,7 +230,13 @@ export function BookmarkNote({ bookmark, onSave, library }: {
             className="rounded px-1 py-1 text-xs text-cyber-text-muted hover:text-brand-strong focus-visible:ring-2 focus-visible:ring-brand/50"
             onClick={() => { setDraft(bookmark.note); setEditing(true); }}>{bookmark.note ? "编辑备注" : "添加备注"}</button>}
         </span>
+        {onDelete && <button type="button" className="bookmark-delete" aria-label={`彻底删除 ${bookmark.result.title}`} title="彻底删除"
+          onClick={() => setConfirming(true)}><Trash2 /></button>}
       </div>
+      <ConfirmDialog open={confirming} title="是否要彻底删除？" danger confirmLabel="彻底删除" busy={busy}
+        description="删除后这条内容会从本机收藏库移除，备注与所有收藏夹归属一并消失。"
+        onCancel={() => setConfirming(false)}
+        onConfirm={() => { setBusy(true); onDelete?.(); setBusy(false); setConfirming(false); }} />
       {!editing && bookmark.note && <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-cyber-text-secondary">{bookmark.note}</p>}
       {editing && <>
       <label htmlFor={id} className="mb-1 block text-xs text-cyber-text-muted">备注</label>

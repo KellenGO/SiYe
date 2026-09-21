@@ -59,8 +59,13 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
     [library.items],
   );
   const watchLaterCount = useMemo(() => library.items.filter((item) => item.watchLater).length, [library.items]);
+  // 「全部」= 已收藏的内容；只挂在稍后再看上的不算，它有自己的视图。
+  const savedCount = useMemo(
+    () => library.stats?.saved_count ?? library.items.filter((item) => item.saved).length,
+    [library.stats, library.items],
+  );
   const visibleItems = useMemo(() => {
-    if (selection.kind === "all") return library.items;
+    if (selection.kind === "all") return library.items.filter((item) => item.saved);
     if (selection.kind === "default") return library.items.filter((item) => item.inDefault);
     if (selection.kind === "watch_later") return library.items.filter((item) => item.watchLater);
     return library.items.filter((item) => item.collections.some((tag) => tag.id === selection.id));
@@ -198,7 +203,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
       ? `${defaultCount} 条默认收藏 · 点击收藏按钮可独立加入或移出`
       : selection.kind === "watch_later"
         ? `${watchLaterCount} 条稍后再看 · 不会修改平台原生收藏`
-      : `${library.items.length} 条已收藏 · 收藏与备注保存在本机数据库`;
+      : `${savedCount} 条已收藏 · 收藏与备注保存在本机数据库`;
 
   return (
     <div className="preview-container favorites-page">
@@ -270,7 +275,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
               className={`library-side-item ${selection.kind === "all" ? "active" : ""}`}
               onClick={() => setSelection({ kind: "all" })}
             >
-              <Bookmark aria-hidden="true" />全部<span>{library.items.length}</span>
+              <Bookmark aria-hidden="true" />全部<span>{savedCount}</span>
             </button>
             <button
               type="button"

@@ -6,7 +6,7 @@ import {
   sortResults,
 } from "@/lib/searchExperience";
 import { ResultCard } from "./ResultCard";
-import { BookmarkControl, BookmarkNote, ExportActions, MembershipEditor, WatchLaterControl } from "./ResultTools";
+import { BookmarkControl, BookmarkNote, ExportActions, WatchLaterControl } from "./ResultTools";
 import type { BookmarkLibrary } from "@/hooks/useBookmarks";
 import { DEFAULT_FILTERS, exportRows, filterResultGroups, groupKey, resultKey, type ResultFilters } from "@/lib/resultTools";
 
@@ -196,8 +196,12 @@ export function ResultTabs({
         {filteredResults.map((result, index) => {
           const key = groupKey(result);
           const bookmark = bookmarks.get(resultKey(result));
+          // 刚收藏完的一次性小框：和收藏页用同一套，省得跑到收藏页去改归属
+          const promptItem = membershipPrompt?.group === key
+            ? library?.items.find((item) => membershipPrompt.keys.includes(item.key))
+            : undefined;
           return (
-            <div key={key} className={savedView ? "saved-result-item" : undefined}>
+            <div key={key} className={savedView || promptItem ? "saved-result-item" : undefined}>
               {exportOpen && <div className="mb-1.5 flex items-center gap-2 px-1">
                 <label className="flex min-w-0 items-center gap-1.5 text-xs text-cyber-text-muted">
                   <input type="checkbox" aria-label={`选择 ${result.title}`} checked={selected.has(key)} onChange={() => setSelected((previous) => {
@@ -212,11 +216,14 @@ export function ResultTabs({
                   <WatchLaterControl result={source} library={library} fetchedAt={fetchedAt} />
                 </> : undefined}
                 onDelete={onDeleteItem ? () => onDeleteItem(result) : undefined} />
-              {membershipPrompt?.group === key && library && <div className="card-membership-prompt">
-                <span>已加入默认收藏夹</span>
-                <MembershipEditor keys={membershipPrompt.keys} library={library} subject={result.title} onClose={() => setMembershipPrompt(null)} />
-              </div>}
-              {savedView && bookmark && library && <BookmarkNote bookmark={bookmark} onSave={library.saveNote} library={library} />}
+              {/* 收藏页每条本来就常驻这个信息条，只有搜索结果页才需要"刚收藏完"弹出一次 */}
+              {!savedView && promptItem && library && <BookmarkNote bookmark={promptItem} onSave={library.saveNote} library={library}
+                onDelete={() => {
+                  void library.deleteItems(membershipPrompt?.keys ?? []);
+                  setMembershipPrompt(null);
+                }} />}
+              {savedView && bookmark && library && <BookmarkNote bookmark={bookmark} onSave={library.saveNote} library={library}
+                onDelete={() => void library.deleteItems([bookmark.key])} />}
             </div>
           );
         })}

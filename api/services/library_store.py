@@ -24,7 +24,7 @@ from urllib.parse import urlsplit
 from .favorite_snapshot import decode_metrics, encode_metrics, merge_into_result
 from .sqlite_base import RESULT_FIELDS, SqliteStoreBase, default_db_path, utc_now
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 MAX_NOTE_LENGTH = 1000
 MAX_ITEMS = 500
 SYSTEM_COLLECTIONS = {"default": "默认收藏夹", "watch_later": "稍后再看"}
@@ -60,6 +60,7 @@ CREATE TABLE IF NOT EXISTS items (
     fetched_at    TEXT,
     in_default    INTEGER NOT NULL DEFAULT 0,
     watch_later   INTEGER NOT NULL DEFAULT 0,
+    saved         INTEGER NOT NULL DEFAULT 0,
     UNIQUE (platform, content_id)
 );
 
@@ -104,6 +105,18 @@ class LibraryStore(SqliteStoreBase):
         columns = {row["name"] for row in conn.execute("PRAGMA table_info(items)").fetchall()}
         if "watch_later" not in columns:
             conn.execute("ALTER TABLE items ADD COLUMN watch_later INTEGER NOT NULL DEFAULT 0")
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(items)").fetchall()}
+        if "saved" not in columns:
+            conn.execute("ALTER TABLE items ADD COLUMN saved INTEGER NOT NULL DEFAULT 0")
+            # 旧数据里只挂「稍后再看」的条目不算已收藏：它们不该出现在「全部」里。
+            conn.execute("UPDATE items SET saved = 1")
+            conn.execute(
+                """
+                UPDATE items SET saved = 0
+                WHERE in_default = 0 AND watch_later = 1
+                  AND NOT EXISTS (SELECT 1 FROM item_collections ic WHERE ic.item_id = items.id)
+                """
+            )
         self._enable_wal(conn)
         conn.execute(
             "INSERT INTO meta (key, value) VALUES ('schema_version', ?) "
@@ -163,6 +176,7 @@ class LibraryStore(SqliteStoreBase):
             "fetched_at": row["fetched_at"],
             "in_default": bool(row["in_default"]),
             "watch_later": bool(row["watch_later"]),
+            "saved": bool(row["saved"]),
             "collections": collections or [],
         }
 
@@ -184,8 +198,13 @@ class LibraryStore(SqliteStoreBase):
         collection_ids: Optional[Sequence[int]] = None,
         in_default: Optional[bool] = None,
         watch_later: bool = False,
+        saved: Optional[bool] = None,
     ) -> Dict[str, Any]:
-        """Insert or refresh one item; keeps first saved_at and existing note."""
+        """Insert or refresh one item; keeps first saved_at and existing note.
+
+        `saved` 是「是否收藏」：它决定这条内容出现在不在「全部」里，与
+        `in_default`（是否放在默认收藏夹）是两件独立的事。
+        """
         platform = str(result.get("platform") or "")
         content_id = str(result.get("content_id") or "")
         if not platform or not content_id:
@@ -198,6 +217,9 @@ class LibraryStore(SqliteStoreBase):
             raise ValueError("收藏时间格式无效")
         note = (note or "")[:MAX_NOTE_LENGTH]
         now = utc_now()
+        # 「是否收藏」默认就是收藏：只有稍后再看这条独立的线会显式传 False。
+        if saved is None:
+            saved = True
 
         with self._conn(write=True) as conn:
             for collection_id in collection_ids or []:
@@ -217,15 +239,16 @@ class LibraryStore(SqliteStoreBase):
                     """
                     INSERT OR IGNORE INTO items (platform, content_id, content_type, title, snippet, author,
                                                  url, published_at, cover_url, metrics, note, saved_at, fetched_at,
-                                                 in_default, watch_later)
+                                                 in_default, watch_later, saved)
                     VALUES (:platform, :content_id, :content_type, :title, :snippet, :author,
                             :url, :published_at, :cover_url, :metrics, :note, :saved_at, :fetched_at,
-                            :in_default, :watch_later)
+                            :in_default, :watch_later, :saved)
                     """,
                     {
                         **row, "note": note, "saved_at": saved_at or now, "fetched_at": fetched_at,
                         "in_default": int(in_default if in_default is not None else not collection_ids),
                         "watch_later": int(bool(watch_later)),
+                        "saved": int(bool(saved)),
                     },
                 )
                 if cursor.rowcount == 0:
@@ -251,6 +274,8 @@ class LibraryStore(SqliteStoreBase):
                     conn.execute("UPDATE items SET in_default = 1 WHERE id = ?", (item_id,))
                 if watch_later:
                     conn.execute("UPDATE items SET watch_later = 1 WHERE id = ?", (item_id,))
+                if saved:
+                    conn.execute("UPDATE items SET saved = 1 WHERE id = ?", (item_id,))
             else:
                 item_id = int(cursor.lastrowid)
 
@@ -288,6 +313,7 @@ class LibraryStore(SqliteStoreBase):
                     collection_ids=entry.get("collection_ids"),
                     in_default=entry.get("in_default"),
                     watch_later=bool(entry.get("watch_later")),
+                    saved=entry.get("saved"),
                 )
             except ValueError:
                 skipped += 1
@@ -539,9 +565,11 @@ class LibraryStore(SqliteStoreBase):
         for entry in entries:
             normalized.append({
                 **entry,
-                # A newly saved watch-later item must not silently enter the
-                # default folder; the two controls are deliberately independent.
+                # 收藏与稍后再看是两条独立的线：
+                # - 点收藏 = 已收藏（进入「全部」），同时放进默认收藏夹；
+                # - 点稍后再看只挂稍后再看，不碰「已收藏」，也不进默认收藏夹。
                 "in_default": collection == "default",
+                "saved": True if collection == "default" else bool(entry.get("saved")),
                 field: True,
             })
         return self.add_items(normalized)
@@ -565,6 +593,34 @@ class LibraryStore(SqliteStoreBase):
                     (platform, content_id),
                 )
                 removed += cursor.rowcount
+            # 取消稍后再看后，既没收藏也不稍后再看的条目没有任何入口能看到它，
+            # 直接删掉，避免变成谁也看不见的残留数据。
+            conn.execute("DELETE FROM items WHERE saved = 0 AND watch_later = 0")
+        return {"removed": removed}
+
+    def unsave_items(self, keys: Sequence[Tuple[str, str]]) -> Dict[str, Any]:
+        """取消收藏：清掉默认收藏夹与所有自建归属，并把「已收藏」置否。
+
+        稍后再看不受影响——它是独立的一条线。取消之后既没收藏也不稍后再看的
+        条目直接删除，否则会变成谁也看不见的残留数据。
+        """
+        removed = 0
+        with self._conn(write=True) as conn:
+            for platform, content_id in keys:
+                cursor = conn.execute(
+                    "UPDATE items SET in_default = 0, saved = 0 "
+                    "WHERE platform = ? AND content_id = ? AND saved = 1",
+                    (platform, content_id),
+                )
+                if cursor.rowcount:
+                    removed += cursor.rowcount
+                row = conn.execute(
+                    "SELECT id FROM items WHERE platform = ? AND content_id = ?",
+                    (platform, content_id),
+                ).fetchone()
+                if row is not None:
+                    conn.execute("DELETE FROM item_collections WHERE item_id = ?", (int(row["id"]),))
+            conn.execute("DELETE FROM items WHERE saved = 0 AND watch_later = 0")
         return {"removed": removed}
 
     # ------------------------------------------------------------ 导入 / 导出
@@ -578,7 +634,7 @@ class LibraryStore(SqliteStoreBase):
                 for row in rows
             ]
         return {
-            "version": 3,
+            "version": 4,
             "exported_at": utc_now(),
             "collections": self.list_collections(),
             "items": items,
@@ -595,13 +651,14 @@ class LibraryStore(SqliteStoreBase):
         兼容两种输入：
         - v1（旧浏览器收藏）：``{"version":1,"items":[{"result":..., "note":..., "savedAt":..., "fetchedAt":...}]}``
         - v2（旧本机库导出）：额外带 ``collections`` 与条目内嵌的 ``collections`` 名称；
-        - v3：再保存两个内置收藏夹的独立归属。
+        - v3：再保存两个内置收藏夹的独立归属；
+        - v4：额外保存「是否已收藏」（`saved`，决定它出现在不在「全部」里）。
         """
         raw_items = payload.get("items")
         if not isinstance(raw_items, list):
             raise ValueError("备份文件格式不正确：缺少 items 数组")
         version = payload.get("version", 1)
-        if version not in (1, 2, 3):
+        if version not in (1, 2, 3, 4):
             raise ValueError("暂不支持这个备份版本")
         folders = payload.get("collections") or []
         if not isinstance(folders, list):
@@ -653,8 +710,10 @@ class LibraryStore(SqliteStoreBase):
                     "saved_at": raw.get("saved_at") or raw.get("savedAt"),
                     "fetched_at": raw.get("fetched_at") or raw.get("fetchedAt"),
                     "collection_ids": collection_ids,
-                    "in_default": bool(raw.get("in_default")) if version == 3 else not collection_ids,
-                    "watch_later": bool(raw.get("watch_later")) if version == 3 else False,
+                    "in_default": bool(raw.get("in_default")) if version >= 3 else not collection_ids,
+                    "watch_later": bool(raw.get("watch_later")) if version >= 3 else False,
+                    # v4 之前没有「已收藏」这一说，凡是进了备份的都算已收藏。
+                    "saved": bool(raw.get("saved")) if version >= 4 else True,
                 }
             )
 
@@ -665,8 +724,9 @@ class LibraryStore(SqliteStoreBase):
     def stats(self) -> Dict[str, Any]:
         with self._conn() as conn:
             total = conn.execute("SELECT COUNT(*) AS n FROM items").fetchone()["n"]
+            saved_count = conn.execute("SELECT COUNT(*) AS n FROM items WHERE saved = 1").fetchone()["n"]
             unclassified = conn.execute(
-                "SELECT COUNT(*) AS n FROM items WHERE in_default = 0 AND watch_later = 0 "
+                "SELECT COUNT(*) AS n FROM items WHERE saved = 1 AND in_default = 0 "
                 "AND NOT EXISTS (SELECT 1 FROM item_collections ic WHERE ic.item_id = items.id)"
             ).fetchone()["n"]
             default_count = conn.execute(
@@ -687,6 +747,7 @@ class LibraryStore(SqliteStoreBase):
                 migration = None
         return {
             "total": int(total),
+            "saved_count": int(saved_count),
             "unclassified": int(unclassified),
             "default_count": int(default_count),
             "watch_later_count": int(watch_later_count),

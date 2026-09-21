@@ -129,23 +129,16 @@ def main():
                 expect(page.get_by_role("button", name="稍后再看 1", exact=True)).to_be_visible()
                 assert store.get_item("xhs", "a")["in_default"] is True
                 assert store.get_item("xhs", "a")["watch_later"] is True
-                # 收藏成功后当场给一次「编辑归属」入口：不强制展开，点开才出现面板。
-                page.get_by_role("button", name="移出收藏 图文收藏测试", exact=True).click()
-                expect(page.get_by_role("button", name="收藏 图文收藏测试", exact=True)).to_be_visible()
-                page.get_by_role("button", name="收藏 图文收藏测试", exact=True).click()
-                prompt = page.locator(".card-membership-prompt")
-                expect(prompt).to_be_visible()
-                prompt.get_by_role("button", name="编辑归属", exact=True).click()
+                # 收藏信息条：归属面板只管收藏体系，稍后再看不在里面
+                note_bar = page.locator(".saved-result-item").filter(has_text="图文收藏测试").locator(".bookmark-note")
+                expect(note_bar).to_be_visible()
+                note_bar.get_by_role("button", name="编辑归属", exact=True).click()
                 inline_card = page.locator(".membership-card")
                 expect(inline_card).to_be_visible()
                 assert inline_card.get_by_role("checkbox", name="默认收藏夹").is_checked()
-                # 勾选要等一次写库 + 重新拉取，用可重试的断言而不是 uncheck 的即时校验
-                inline_card.get_by_role("checkbox", name="稍后再看").click()
-                expect(inline_card.get_by_role("checkbox", name="稍后再看")).not_to_be_checked()
-                expect(page.get_by_role("button", name="稍后再看 0", exact=True)).to_be_visible()
-                assert store.get_item("xhs", "a")["watch_later"] is False
+                assert inline_card.get_by_role("checkbox", name="稍后再看").count() == 0
                 inline_card.get_by_role("button", name="完成", exact=True).click()
-                expect(prompt).to_have_count(0)
+                expect(inline_card).to_have_count(0)
                 page.get_by_role("button", name="新建收藏夹", exact=True).click()
                 page.get_by_role("textbox", name="新收藏夹名称").fill("跨平台学习")
                 page.get_by_role("button", name="创建收藏夹", exact=True).click()
@@ -228,6 +221,33 @@ def main():
                 page.get_by_role("button", name="删除收藏夹 跨平台学习", exact=True).click()
                 expect(page.get_by_role("button", name="跨平台学习 2", exact=True)).to_have_count(0)
                 assert store.stats()["total"] == 2
+                # ── 取消收藏 = 从「全部」消失；稍后再看是独立的一条线 ──
+                page.get_by_role("button", name="取消收藏 图文收藏测试", exact=True).click()
+                kept = store.get_item("xhs", "a")
+                assert kept is not None and kept["saved"] is False and kept["watch_later"] is True
+                expect(page.get_by_role("button", name="全部 1", exact=True)).to_be_visible()
+                # 取消稍后再看后两头都不沾，条目没有任何入口能看到，直接清掉
+                page.get_by_role("button", name="稍后再看 1", exact=True).click()
+                expect(page.get_by_text("图文收藏测试", exact=True)).to_be_visible()
+                page.get_by_role("button", name="取消稍后再看 图文收藏测试", exact=True).click()
+                assert store.get_item("xhs", "a") is None
+                assert store.stats()["total"] == 1
+                # ── 单条彻底删除：红色垃圾桶 + 屏幕正中的确认框 ──
+                page.get_by_role("button", name="全部 1", exact=True).click()
+                bar = page.locator(".saved-result-item").first.locator(".bookmark-note")
+                bar.get_by_role("button", name="彻底删除 视频收藏测试", exact=True).click()
+                dialog = page.locator(".confirm-card")
+                expect(dialog).to_be_visible()
+                box = dialog.bounding_box()
+                assert box is not None and box["y"] > 200, "确认框要在屏幕正中，不是顶部提示"
+                dialog.get_by_role("button", name="取消", exact=True).click()
+                expect(dialog).to_have_count(0)
+                assert store.get_item("bilibili", "b") is not None
+                bar.get_by_role("button", name="彻底删除 视频收藏测试", exact=True).click()
+                page.locator(".confirm-card").get_by_role("button", name="彻底删除", exact=True).click()
+                expect(page.locator(".confirm-card")).to_have_count(0)
+                assert store.get_item("bilibili", "b") is None
+                assert store.stats()["total"] == 0
                 page.get_by_role("button", name="跨平台收藏", exact=True).click()
                 expect(page.get_by_text("视频收藏测试", exact=True)).to_be_visible()
                 page.get_by_role("button", name="重新同步", exact=True).click()
