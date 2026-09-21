@@ -192,10 +192,10 @@ def main():
                 assert json.loads(page.evaluate("localStorage.getItem('aggregate_search_platform_pref')")) == ["douyin"]
 
                 page.get_by_role("button", name="收藏 剪辑入门 PRIVATE_RESULT", exact=True).click()
-                expect(page.get_by_role("button", name="移出收藏 剪辑入门 PRIVATE_RESULT", exact=True)).to_be_visible()
+                expect(page.get_by_role("button", name="取消收藏 剪辑入门 PRIVATE_RESULT", exact=True)).to_be_visible()
                 guide.get_by_role("button", name="下一步", exact=True).click()
                 expect(page).to_have_url(origin + "/#/favorites/local")
-                expect(page.get_by_role("button", name="移出收藏 剪辑入门 PRIVATE_RESULT", exact=True)).to_be_visible()
+                expect(page.get_by_role("button", name="取消收藏 剪辑入门 PRIVATE_RESULT", exact=True)).to_be_visible()
                 page.reload()
                 expect(guide.get_by_role("heading", name="收藏与整理", exact=True)).to_be_visible()
                 page.set_viewport_size({"width": 390, "height": 844})

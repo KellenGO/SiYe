@@ -52,6 +52,9 @@
 
 ## 已知坑 / 边界
 
+- **`.row-actions button` 不能用后代选择器写**（2026-09-21 修）：那条 34×34 的规则会连下拉面板里的
+  文字按钮一起命中，把「全部加入收藏」压成一个方块（文字竖排）。现在收窄成
+  `.row-actions > button, .row-actions > .relative > button`。
 - `PATCH /items/{platform}/{content_id}` 把 content_id 放**路径参数**：含 `/` 的 ID 会被切段，
   可能改错条目或 404。当前数据无此情况，其他接口都走 body。
 - 500 条上限在批量导入时按实际条目数判定，超限条目被跳过并反馈。

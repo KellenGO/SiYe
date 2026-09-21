@@ -130,6 +130,11 @@ def main() -> None:
             expect(page.get_by_role("checkbox", name="选择当前全部结果", exact=True)).to_have_count(0)
             page.get_by_role("button", name="选择收藏平台 研究素材图文", exact=True).click()
             popup = page.get_by_role("group", name="选择收藏来源", exact=True)
+            # 这个按钮在 224px 宽的下拉里，被压窄就会一个字一行（历史回归）
+            group_button = popup.get_by_role("button", name="全部加入收藏 研究素材图文", exact=True)
+            group_box = group_button.bounding_box()
+            assert group_box is not None and group_box["height"] < 44, "「全部加入收藏」按钮被压成了竖排文字"
+            assert group_box["width"] >= 90, "「全部加入收藏」按钮宽度不足"
             if args.screenshots:
                 page.screenshot(path=str(ROOT / "build/result-bookmark-menu.png"), full_page=True)
             popup.get_by_role("button", name="收藏 研究素材视频", exact=True).click()
@@ -142,9 +147,12 @@ def main() -> None:
             page.get_by_role("button", name="选择收藏平台 研究素材图文", exact=True).click()
             popup.get_by_role("button", name="收藏 研究素材图文", exact=True).click()
             popup.get_by_role("button", name="取消收藏 研究素材图文", exact=True).first.click()
+            # 取消收藏会先弹居中的确认框（见 docs/features/favorites-library.md）
+            page.locator(".confirm-card").get_by_role("button", name="取消收藏", exact=True).click()
+            expect(page.locator(".confirm-card")).to_have_count(0)
             expect(popup.get_by_role("button", name="收藏 研究素材图文", exact=True)).to_be_visible()
             assert store.get_item("xhs", "old-note") is None
-            popup.get_by_role("button", name="收藏全部来源 研究素材图文", exact=True).click()
+            popup.get_by_role("button", name="全部加入收藏 研究素材图文", exact=True).click()
             expect(popup.get_by_role("button", name="取消收藏 研究素材图文", exact=True)).to_have_count(2)
             page.keyboard.press("Escape")
             assert page.locator("a button, a input, a textarea").count() == 0

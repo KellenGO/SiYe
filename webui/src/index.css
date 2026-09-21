@@ -635,11 +635,11 @@ html.dark .search-submit { color: #101525; }
 .result-summary-line { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 28px; color: var(--siye-muted); font-size: 11px; }
 .result-list { margin-top: 3px; }
 .result-row { display: flex; align-items: flex-start; gap: 18px; padding: 24px 0; border-bottom: 1px solid var(--siye-line); }
-.result-number { width: 20px; padding-top: 5px; color: var(--siye-muted); font-size: 11px; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+/* 序号：搜索页和收藏页共用同一套（品牌色数字 + 上方短横线），只在窄屏隐藏 */
+.result-number { width: 20px; padding-top: 5px; color: var(--siye-brand-ink); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.result-number::before { content: ""; display: block; width: 14px; height: 2px; margin-bottom: 6px; border-radius: 999px; background: var(--siye-brand); }
 .saved-result-item { position: relative; margin-bottom: 16px; border-radius: 0 0 10px 10px; }
 .saved-result-item .result-row { padding-bottom: 18px; border-bottom: 0; }
-.saved-result-item .result-number { color: var(--siye-brand-ink); font-weight: 600; }
-.saved-result-item .result-number::before { content: ""; display: block; width: 14px; height: 2px; margin-bottom: 6px; border-radius: 999px; background: var(--siye-brand); }
 .saved-result-item .bookmark-note { margin-top: 0; padding-left: 38px; border-top: 1px solid var(--siye-line); border-radius: 0 0 10px 10px; background: color-mix(in srgb, var(--siye-brand) 4%, transparent); }
 .confirm-overlay { position: fixed; inset: 0; z-index: 120; display: flex; align-items: center; justify-content: center; padding: 16px; background: color-mix(in srgb, #172b3d 45%, transparent); }
 .confirm-card { width: min(456px, 100%); padding: 22px 24px; border: 1px solid var(--siye-line-strong); border-radius: 14px; background: var(--siye-bg); }
@@ -676,8 +676,11 @@ html.dark .search-submit { color: #101525; }
 .source { display: inline-flex; align-items: center; gap: 6px; }
 .meta-divider { width: 1px; height: 10px; background: var(--siye-line-strong); }
 .row-actions { display: flex; flex-direction: column; align-items: center; gap: 3px; padding-top: 1px; flex-shrink: 0; }
-.row-actions button { width: 34px; height: 34px; border: 0; border-radius: 8px; background: none; color: var(--siye-muted); }
-.row-actions button:hover { background: var(--siye-soft); color: var(--siye-brand-ink); }
+/* 只圈定行内的图标按钮：下拉面板里是文字按钮，被套上 34×34 会被压成方块（文字竖排） */
+.row-actions > button,
+.row-actions > .relative > button { width: 34px; height: 34px; border: 0; border-radius: 8px; background: none; color: var(--siye-muted); }
+.row-actions > button:hover,
+.row-actions > .relative > button:hover { background: var(--siye-soft); color: var(--siye-brand-ink); }
 .details-toggle { display: grid; place-items: center; }
 .details-toggle svg { width: 15px; height: 15px; transition: transform .18s ease; }
 .details-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
