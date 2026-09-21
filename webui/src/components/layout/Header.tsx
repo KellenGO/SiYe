@@ -28,6 +28,8 @@ export type SettingsSection = 'search' | 'accounts' | 'appearance'
 
 interface HeaderProps {
   viewMode: ViewMode
+  /** 设置页里的当前分区：外观设置要把「自定义」换成「回首页」。 */
+  settingsSection: SettingsSection
   onNavigate: (mode: ViewMode, section?: SettingsSection) => void
 }
 
@@ -131,7 +133,7 @@ function AccountPopover({
   )
 }
 
-export function Header({ viewMode, onNavigate }: HeaderProps) {
+export function Header({ viewMode, settingsSection, onNavigate }: HeaderProps) {
   const { t } = useTranslation()
   const { accounts, loading, initialLoaded, error } = useAccounts()
   const [accountOpen, setAccountOpen] = useState(false)
@@ -264,12 +266,22 @@ export function Header({ viewMode, onNavigate }: HeaderProps) {
             )}
           </div>
 
+          {/* 首页的「自定义」和外观设置页的「回首页」出现在同一个位置：
+              从首页进来、在同一处回去，不用去页面底部找出口。 */}
           {viewMode === 'search' && <button
             type="button"
             onClick={() => onNavigate('accounts', 'appearance')}
             className="customize-link"
           >
             自定义
+          </button>}
+
+          {viewMode === 'accounts' && settingsSection === 'appearance' && <button
+            type="button"
+            onClick={() => onNavigate('search')}
+            className="customize-link"
+          >
+            回首页
           </button>}
 
           <ThemeToggle />

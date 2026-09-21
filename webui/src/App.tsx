@@ -126,7 +126,7 @@ function App() {
 
       {/* 顶部栏：品牌 / 导航 / 本地服务 / 账号状态 / 主题 / 语言 / 帮助 */}
       {licenseAccepted && !showDisclaimer && (
-        <Header viewMode={viewMode} onNavigate={navigate} />
+        <Header viewMode={viewMode} settingsSection={settingsSection} onNavigate={navigate} />
       )}
 
       {/* 打开程序即自动检测并同步登录状态（结果走 toast，进行中给出细提示） */}
@@ -155,7 +155,6 @@ function App() {
                 <AccountsPage
                   activeSection={settingsSection}
                   onSectionChange={(section) => navigate('accounts', section)}
-                  onNavigateSearch={() => navigate('search')}
                   onNavigateHelp={() => navigate('help')}
                 />
               </Suspense>
