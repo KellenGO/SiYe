@@ -10,6 +10,11 @@ from typing import Protocol
 
 from aggregate_search.adapters.bilibili import BilibiliAdapter
 
+# 平台分页接口的页大小与单请求超时。落库时的位置换算也用 PAGE_SIZE，
+# 两处必须一致，所以放在这里做单一来源。
+PAGE_SIZE = 20
+REQUEST_TIMEOUT = 30.0
+
 
 @dataclass
 class FavoritePage:
@@ -21,6 +26,7 @@ class FavoritePage:
 
 
 class FavoritesSource(Protocol):
+    platform: str
     incremental_verified: bool
     async def identity(self) -> str: ...
     async def folders(self, account: str) -> list[dict]: ...
@@ -36,6 +42,7 @@ class FavoritesSyncError(ValueError):
 
 
 class BilibiliFavoritesSource:
+    platform = "bilibili"
     # No verified live-account evidence of stable incremental boundaries yet.
     incremental_verified = False
 
@@ -49,7 +56,7 @@ class BilibiliFavoritesSource:
     async def request(self, method, *args, **kwargs):
         await asyncio.sleep(max(0, self.last_request + self.interval - time.monotonic()))
         self.last_request = time.monotonic()
-        return await asyncio.wait_for(method(*args, **kwargs), timeout=30)
+        return await asyncio.wait_for(method(*args, **kwargs), timeout=REQUEST_TIMEOUT)
 
     async def identity(self):
         nav = await self.request(self.client.get, "/x/web-interface/nav", enable_params_sign=False)
@@ -75,16 +82,16 @@ class BilibiliFavoritesSource:
         return sorted(folders, key=lambda r: r["id"])
 
     async def page(self, folder, number):
-        data = await self.request(self.client.get_favorite_folder_contents, int(folder["id"]), number, 20)
+        data = await self.request(self.client.get_favorite_folder_contents, int(folder["id"]), number, PAGE_SIZE)
         if not isinstance(data, dict) or data.get("has_more") not in (True, False, 0, 1):
             raise FavoritesSyncError("Invalid favorite pagination")
         rows = data.get("medias")
         if rows is None and folder["count"] == 0 and not data["has_more"]:
             rows = []
-        if not isinstance(rows, list) or len(rows) > 20 or (not rows and data["has_more"]):
+        if not isinstance(rows, list) or len(rows) > PAGE_SIZE or (not rows and data["has_more"]):
             raise FavoritesSyncError("Invalid favorite page")
-        expected = max(0, min(20, folder["count"] - (number - 1) * 20))
-        if len(rows) != expected or bool(data["has_more"]) != (number * 20 < folder["count"]):
+        expected = max(0, min(PAGE_SIZE, folder["count"] - (number - 1) * PAGE_SIZE))
+        if len(rows) != expected or bool(data["has_more"]) != (number * PAGE_SIZE < folder["count"]):
             raise FavoritesSyncError("Favorite list changed during sync")
         identities, results = [], []
         for row in rows:
@@ -116,7 +123,7 @@ async def synchronize_favorites(source: FavoritesSource, store, mode, progress):
     folders = await source.folders(account)
     # An unfinished auto scan can resume importing, but is never authoritative
     # evidence of absence. Full reconciliation always creates a fresh scan.
-    scan = store.begin_scan(account, folders, mode)
+    scan = store.begin_scan(source.platform, account, folders, mode)
     saved = 0
     first_pages = {}
     try:
@@ -143,7 +150,9 @@ async def synchronize_favorites(source: FavoritesSource, store, mode, progress):
             while True:
                 overlap = store.baseline_overlap(account, fid, page.identities) if incremental else None
                 stop = bool(overlap and previous_overlap and overlap[0] == previous_overlap[1] + 1)
-                store.save_sync_page(account, scan, fid, folder["name"], number, page.fingerprint, page.results, page.complete or stop, page.identities)
+                store.save_sync_page(source.platform, account, scan, fid, folder["name"], number,
+                                     page.fingerprint, page.results, page.complete or stop, PAGE_SIZE,
+                                     page.identities)
                 saved += page.count
                 progress(account, saved, f"正在保存 {folder['name']} · 第 {number} 页" + ("（检查新增）" if incremental else "（完整列表读取）"))
                 if page.complete or stop:

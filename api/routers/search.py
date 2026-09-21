@@ -420,6 +420,12 @@ async def resolve_missing_favorites(request: MissingDecisions):
     return await asyncio.to_thread(get_remote_favorites_store().resolve_missing, request.decisions)
 
 
+@search_router.post("/favorites/archive/purge-legacy")
+async def purge_legacy_favorites_archive():
+    """清掉「账号未确认」的历史归档。只动同步镜像，不碰本地收藏、备注与收藏夹。"""
+    return await asyncio.to_thread(get_remote_favorites_store().purge_legacy_archive)
+
+
 @search_router.get("/favorites/jobs/latest", response_model=FavoritesJobResponse)
 async def get_latest_favorites_job(summary: bool = False):
     """Restore the last favourites result so entering the page needs no sync.

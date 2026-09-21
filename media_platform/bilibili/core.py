@@ -99,8 +99,10 @@ class BilibiliCrawler(AbstractCrawler):
             # Create a client to interact with the xiaohongshu website.
             self.bili_client = await self.create_bilibili_client(None)
             if self.runtime_options and self.runtime_options.extra.get("favorites_sync"):
+                from aggregate_search.favorites_sync import REQUEST_TIMEOUT
                 self.bili_client.favorites_sync = True
-                self.bili_client.timeout = 30
+                # 客户端层也压住单请求超时，别让一次请求挂死整轮同步。
+                self.bili_client.timeout = REQUEST_TIMEOUT
             if not await self.bili_client.pong():
                 if self._login_fail_fast():
                     from base.exceptions import LoginRequiredError

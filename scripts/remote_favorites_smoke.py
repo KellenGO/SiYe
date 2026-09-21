@@ -41,15 +41,15 @@ def main():
         rows = [{"platform": "bilibili", "content_id": f"BV{i}", "content_type": "video",
                  "title": f"同步条目 {i}", "author": "测试作者", "url": f"https://www.bilibili.com/video/BV{i}"}
                 for i in range(61)]
-        scan = store.begin_scan("bilibili:1", [{"id": "10"}], "full")
+        scan = store.begin_scan("bilibili", "bilibili:1", [{"id": "10"}], "full")
         for offset in range(0, 61, 20):
-            store.save_sync_page("bilibili:1", scan, "10", "收藏夹", offset // 20 + 1,
-                                 str(offset), rows[offset:offset + 20], offset == 60)
+            store.save_sync_page("bilibili", "bilibili:1", scan, "10", "收藏夹", offset // 20 + 1,
+                                 str(offset), rows[offset:offset + 20], offset == 60, 20)
         store.finish_scan("bilibili:1", scan, True)
-        scan = store.begin_scan("bilibili:1", [{"id": "10"}], "full")
+        scan = store.begin_scan("bilibili", "bilibili:1", [{"id": "10"}], "full")
         for offset in range(0, 59, 20):
-            store.save_sync_page("bilibili:1", scan, "10", "收藏夹", offset // 20 + 1,
-                                 str(offset), rows[offset:min(offset + 20, 59)], offset == 40)
+            store.save_sync_page("bilibili", "bilibili:1", scan, "10", "收藏夹", offset // 20 + 1,
+                                 str(offset), rows[offset:min(offset + 20, 59)], offset == 40, 20)
         store.finish_scan("bilibili:1", scan, True)
         library.add_item(rows[60], note="本地备注必须保留")
         app = FastAPI()
@@ -88,10 +88,11 @@ def main():
                 page = context.new_page()
                 page.on("pageerror", lambda error: errors.append(str(error)))
                 page.goto(origin + "/#/favorites/remote")
-                expect(page.get_by_text("共 61 条 · 第 1 页 · 每页 50 条")).to_be_visible()
+                # 默认只看「平台中已找到」：61 条里有 2 条第二次扫描没找到，进了待确认
+                expect(page.get_by_text("共 59 条 · 第 1 页 · 每页 50 条")).to_be_visible()
                 assert sync_requests == []
                 page.get_by_role("button", name="下一页", exact=True).click()
-                expect(page.get_by_text("共 61 条 · 第 2 页 · 每页 50 条")).to_be_visible()
+                expect(page.get_by_text("共 59 条 · 第 2 页 · 每页 50 条")).to_be_visible()
                 page.get_by_role("button", name="待确认 2 条", exact=True).click()
                 expect(page.get_by_text("共 2 条 · 第 1 页 · 每页 50 条")).to_be_visible()
                 expect(page.get_by_label("选择本页待确认条目")).not_to_be_checked()

@@ -242,6 +242,52 @@ async def test_pending_survives_restart_and_legacy_unclaimed(store, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_summary_counts_states_so_legacy_need_not_be_listed(store):
+    """摘要给出各类状态的条数：界面靠它做汇总，不必把「账号未确认」逐条铺出来。"""
+    store.save_platform("bilibili", [{"content_id": "legacy"}], status="succeeded")
+    client = FavoriteClient({10: list(range(25))})
+    await sync(store, client, "full")
+
+    summary = store.archive_summary()
+    assert summary["states"]["present"] == 25
+    assert summary["states"]["legacy"] == 1
+    assert summary["states"]["pending"] == 0
+    # save_platform 不建账号行；老版本用默认账号开过扫描时，账号行要能被标成 legacy
+    store.begin_scan("bilibili", "default", [{"id": "10"}], "full")
+    legacy_accounts = [a for a in store.archive_summary()["accounts"] if a["account"] == "default"]
+    assert legacy_accounts and legacy_accounts[0]["legacy"] is True
+
+
+@pytest.mark.asyncio
+async def test_purge_legacy_archive_keeps_confirmed_accounts(store):
+    """清理历史归档只删「账号未确认」那一份，已确认账号的归档不受影响。"""
+    store.save_platform("bilibili", [{"content_id": "legacy-1"}, {"content_id": "legacy-2"}], status="succeeded")
+    client = FavoriteClient({10: [1]})
+    await sync(store, client, "full")
+
+    assert store.purge_legacy_archive() == {"removed": 2}
+    assert store.archive_page(state="legacy")["total"] == 0
+    assert store.archive_page(state="present")["total"] == 1
+    # 再清一次是幂等的，且不会连已确认账号一起删
+    assert store.purge_legacy_archive() == {"removed": 0}
+    assert store.archive_page()["total"] == 1
+
+
+@pytest.mark.asyncio
+async def test_sync_conflicts_use_a_dedicated_error_type(store):
+    """重复页这类可预期冲突要是 SyncStateError，别和普通 ValueError（代码 bug）混在一起。"""
+    from api.services.remote_sync_state import SyncStateError
+
+    scan = store.begin_scan("bilibili", "bilibili:1", [{"id": "10"}], "full")
+    store.save_sync_page("bilibili", "bilibili:1", scan, "10", "收藏夹", 1, "same",
+                         [{"platform": "bilibili", "content_id": "BV1"}], False, 20)
+    with pytest.raises(SyncStateError):
+        store.save_sync_page("bilibili", "bilibili:1", scan, "10", "收藏夹", 2, "same",
+                             [{"platform": "bilibili", "content_id": "BV2"}], True, 20)
+    assert issubclass(SyncStateError, ValueError)
+
+
+@pytest.mark.asyncio
 async def test_large_archive_summary_does_not_load_results(store, monkeypatch):
     for offset in range(0, 10000, 50):
         store.save_platform("bilibili", [{"platform": "bilibili", "content_id": str(i)} for i in range(offset, offset + 50)], status="succeeded", record_run=False)
@@ -313,7 +359,7 @@ from api.services.remote_favorites_store import get_remote_favorites_store
 r=json.loads(sys.stdin.readline())
 assert r['sync_mode']=='auto'
 s=get_remote_favorites_store()
-scan=s.begin_scan('bilibili:1',[], 'auto')
+scan=s.begin_scan('bilibili','bilibili:1',[], 'auto')
 for event,data in [('status',{'status':'running','account':'bilibili:1','result_count':0})]:
  print('MC_AGG_EVENT\\t'+json.dumps({'event':event,'job_id':r['job_id'],'platform':'bilibili','data':data}),flush=True)
 time.sleep(.1)

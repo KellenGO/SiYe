@@ -22,14 +22,13 @@ import threading
 from typing import Any, Dict, Iterator, List, Optional, Sequence
 
 from .favorite_snapshot import decode_metrics, encode_metrics, merge_into_result
-from .remote_sync_state import RemoteSyncStateMixin, SYNC_SCHEMA
+# DEFAULT_ACCOUNT_KEY 定义在 remote_sync_state 里（mixin 自己也要用），这里重新导出保持既有引用可用。
+from .remote_sync_state import DEFAULT_ACCOUNT_KEY, RemoteSyncStateMixin, SYNC_SCHEMA
 from .sqlite_base import (
     RESULT_FIELDS as _RESULT_FIELDS,
     SqliteStoreBase,
     utc_now,
 )
-
-DEFAULT_ACCOUNT_KEY = "default"
 
 _REMOTE_SCHEMA = """
 CREATE TABLE IF NOT EXISTS remote_favorites (

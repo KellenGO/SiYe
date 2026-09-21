@@ -59,8 +59,10 @@ export interface FavoritePlatformInfo {
 
 export interface FavoritesJobResponse {
   counts?: Partial<Record<PlatformSlug, number>>;
-  accounts?: { account: string; platform: PlatformSlug; last_full: string | null; full_due: boolean; status: string }[];
+  accounts?: { account: string; platform: PlatformSlug; last_full: string | null; full_due: boolean; status: string; legacy?: boolean }[];
   pending_count?: number;
+  /** 归档各类状态的条数（present / pending / archived / legacy）：界面靠它做汇总，不逐条铺开。 */
+  states?: Record<string, number>;
   data_version?: string;
   persistence_error?: string | null;
   job_id: string;

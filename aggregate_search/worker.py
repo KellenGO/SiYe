@@ -462,9 +462,12 @@ async def _run_favorites(job_id: str, platform: str, limit: int, sync_mode=None)
         emit_error(job_id, platform, "timed_out", "收藏夹同步超时")
     except Exception as exc:
         import sqlite3
+        from aggregate_search.favorites_sync import FavoritesSyncError
+        from api.services.remote_sync_state import SyncStateError
         if isinstance(exc, sqlite3.Error):
             emit_error(job_id, platform, "failed", "本机收藏保存失败，请检查磁盘空间后继续同步")
-        elif isinstance(exc, ValueError) and platform == "bilibili" and sync_mode:
+        # 只认分页同步自己抛的错：别的 ValueError（代码 bug）要按原样暴露，别包装成"列表变化"。
+        elif isinstance(exc, (FavoritesSyncError, SyncStateError)) and platform == "bilibili" and sync_mode:
             emit_error(job_id, platform, "failed", "收藏列表变化或返回异常，已保留进度，请稍后重新同步")
         else:
             emit_error(job_id, platform, _classify_error(exc), _safe_error_message(exc))

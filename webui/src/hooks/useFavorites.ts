@@ -13,7 +13,9 @@ export function useFavorites() {
   const adopted = useRef(false);
   const [page, setPage] = useState(0);
   const [platform, setPlatform] = useState<PlatformSlug | "">("");
-  const [state, setState] = useState("");
+  // 默认只看"平台上确实存在"的条目。历史归档（账号未确认）与已归档的缺失项
+  // 数量可能很大，全铺出来会把页面淹没 —— 它们只在需要时用筛选器查看。
+  const [state, setState] = useState("present");
   const [account, setAccount] = useState("");
 
   // Re-entering the page restores the last snapshot from the backend. This is a
@@ -105,6 +107,16 @@ export function useFavorites() {
     if (archive.data && page > 0 && page * 50 >= archive.data.total) setPage(Math.max(0, Math.ceil(archive.data.total / 50) - 1));
   }, [archive.data, page]);
   const data = summary ? { ...summary, results: archive.data?.items.map(item => item.result) ?? [] } : null;
+  const purgeLegacy = useMutation({
+    mutationFn: async () =>
+      (await axios.post<{ removed: number }>("/api/search/favorites/archive/purge-legacy")).data,
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["favorites-archive"] }),
+        queryClient.invalidateQueries({ queryKey: ["favorites-latest"] }),
+      ]);
+    },
+  });
   const resolve = useMutation({
     mutationFn: async (decisions: { id: number; missing_batch: string; action: "keep" | "remove" }[]) =>
       (await axios.post<{ applied: number; stale: number }>("/api/search/favorites/missing/resolve", { decisions })).data,
@@ -124,6 +136,7 @@ export function useFavorites() {
     setState: (value: string) => { setState(value); setPage(0); },
     setAccount: (value: string) => { setAccount(value); setPage(0); },
     resolve,
+    purgeLegacy,
     sync: refresh,
     cancel: async () => {
       if (!data || cancel.isPending) return;

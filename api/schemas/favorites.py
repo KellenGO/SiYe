@@ -43,6 +43,9 @@ class FavoritesJobResponse(BaseModel):
     counts: Dict[str, int] = Field(default_factory=dict)
     accounts: List[Dict[str, Any]] = Field(default_factory=list)
     pending_count: int = 0
+    # 归档各类状态的条数（present / pending / archived / legacy），界面用它做汇总，
+    # 不必把「账号未确认」这类历史数据逐条铺出来。
+    states: Dict[str, int] = Field(default_factory=dict)
     data_version: str = ""
 
 

@@ -37,6 +37,8 @@
 - 新 B站同步不逐条补详情，列表已有信息直接保存；没拿到的互动数据沿用旧快照，不能据此承诺实时指标。
 - 30 天核对提醒只提供手动入口，不自动访问平台。多平台与单平台共用任务入口；完整核对按钮当前只针对 B站。
 - 新界面按页读取归档，任务轮询只取摘要。平台、账号和缺失状态筛选在数据库完成；卡片内排序、搜索及导出作用于当前加载页。
+- **归档列表只铺"需要用户处理"的内容**（2026-09-21 善后）：默认筛选是「平台中已找到」；历史归档（账号未确认）和已保留的缺失项可能上千条，逐条铺出来会把整个收藏页淹没，所以它们只以计数出现，点计数才切过去看。摘要接口 `archive_summary` 返回各类状态条数（`states`）供界面做这个汇总。
+- **「清理历史归档」是一次显式操作**：删掉 `default` 账号那份归档镜像（`purge_legacy_archive`），不碰本地收藏库、备注与收藏夹；这些记录不会再被更新，留着只会继续占列表。
 - 相关取舍见 [B站收藏全量与缺失确认](../decisions/2026-09-21-B站收藏全量与缺失确认.md)。
 - 启动时会把已知旧目录中的跨平台归档一起合并到稳定数据库；保留最早发现时间、最新内容快照、收藏夹名称和最新同步状态，旧库不删除。
 - 打开页面**只显示上次保存的数据和同步时间，不自动访问平台**；只有用户主动点同步才更新。
@@ -57,10 +59,13 @@
 - 当前覆盖自己创建的收藏夹及其接口可返回的条目，不包含订阅的他人收藏夹，不下载媒体。平台响应结构不符时停止，不冒充空收藏。
 - 页面切换不中断后台任务，退出程序后需手动继续；现有搜索 / 账号操作互斥保留，长同步期间可先取消再搜索。
 - 两页重叠算法只优化日常新增发现，不能可靠发现深处删除、移动及旧内容修改。当前保守模式仍与列表总量相关，但省去了历史条目的逐条详情请求。
+- **平台相关的东西不许写死**：分页大小与单请求超时是 `aggregate_search/favorites_sync.py` 的 `PAGE_SIZE` / `REQUEST_TIMEOUT`（落库换算位置也用它），平台名、页大小都从调用方传进 `begin_scan` / `save_sync_page`。复刻到其他平台时，这是前提条件之一。**上别的平台前必须先跑只读探测**（`scripts/probe_bilibili_favorites.py` 是模板），确认收藏时间是否单调、翻页是否稳定、总数是否一致——不稳的平台上指纹校验会频繁判「列表变化」，每次同步都白跑。
+- 「可预期的同步失败」和「代码 bug」要分开：分页同步自己抛 `FavoritesSyncError`、归档落库抛 `SyncStateError`，两者才会被翻译成「列表变化，请重新同步」的安全文案；其他 `ValueError` 按原样暴露，别包装掉。
 
 ## 测试怎么跑
 
-`tests/test_remote_favorites_store.py`、`tests/test_remote_favorites.py`、`tests/test_favorites_reliability.py`、`tests/test_library_migration.py`、`tests/test_favorite_snapshot.py`。其中覆盖四平台落库后两个平台未登录、重启后四个平台历史仍在。
+`tests/test_remote_favorites_store.py`、`tests/test_remote_favorites.py`、`tests/test_favorites_reliability.py`、`tests/test_library_migration.py`、`tests/test_favorite_snapshot.py`、`tests/test_bilibili_favorites_sync.py`（分页全量导入、断点续传与漂移重扫、缺失确认、状态计数与清理、错误类型收窄）。其中覆盖四平台落库后两个平台未登录、重启后四个平台历史仍在。
+浏览器侧：`scripts/remote_favorites_smoke.py`（默认只显示已找到、待确认批量处理、清理入口与完整核对）。
 
 新增 `tests/test_bilibili_favorites_sync.py` 覆盖分页超过 100、恢复、分页漂移、缺失决定与过期请求、账号隔离、一万条归档摘要、增量算法和 worker 协议。pytest 必须使用新的项目内 `--basetemp`。
 
