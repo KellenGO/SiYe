@@ -6,7 +6,7 @@ import {
   sortResults,
 } from "@/lib/searchExperience";
 import { ResultCard } from "./ResultCard";
-import { BookmarkControl, BookmarkNote, ExportActions, WatchLaterControl } from "./ResultTools";
+import { BookmarkControl, BookmarkNote, ExportActions, MembershipEditor, WatchLaterControl } from "./ResultTools";
 import type { BookmarkLibrary } from "@/hooks/useBookmarks";
 import { DEFAULT_FILTERS, exportRows, filterResultGroups, groupKey, resultKey, type ResultFilters } from "@/lib/resultTools";
 
@@ -71,6 +71,8 @@ export function ResultTabs({
   const [filters, setFilters] = useState<ResultFilters>({ ...DEFAULT_FILTERS });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [exportOpen, setExportOpen] = useState(false);
+  // 收藏成功后的一次性提示：让用户当场改归属，不用跑到收藏页去找。
+  const [membershipPrompt, setMembershipPrompt] = useState<{ group: string; keys: string[] } | null>(null);
   const nowMs = useMemo(() => Date.now(), [results, filters]);
 
   // 把勾选结果同步给外部（收藏夹页据此做批量加入 / 移出）
@@ -205,10 +207,15 @@ export function ResultTabs({
               </div>}
               <ResultCard result={result} index={index} highlightQuery={filters.query || keyword}
                 renderBookmark={library ? (source) => <>
-                  <BookmarkControl result={source} library={library} fetchedAt={fetchedAt} />
+                  <BookmarkControl result={source} library={library} fetchedAt={fetchedAt}
+                    onToggled={(added, keys) => setMembershipPrompt(added ? { group: groupKey(source), keys } : null)} />
                   <WatchLaterControl result={source} library={library} fetchedAt={fetchedAt} />
                 </> : undefined}
                 onDelete={onDeleteItem ? () => onDeleteItem(result) : undefined} />
+              {membershipPrompt?.group === key && library && <div className="card-membership-prompt">
+                <span>已加入默认收藏夹</span>
+                <MembershipEditor keys={membershipPrompt.keys} library={library} subject={result.title} onClose={() => setMembershipPrompt(null)} />
+              </div>}
               {savedView && bookmark && library && <BookmarkNote bookmark={bookmark} onSave={library.saveNote} library={library} />}
             </div>
           );

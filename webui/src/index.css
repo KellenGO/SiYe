@@ -639,6 +639,11 @@ html.dark .search-submit { color: #101525; }
 .saved-result-item .result-number { color: var(--siye-brand-ink); font-weight: 600; }
 .saved-result-item .result-number::before { content: ""; display: block; width: 14px; height: 2px; margin-bottom: 6px; border-radius: 999px; background: var(--siye-brand); }
 .saved-result-item .bookmark-note { margin-top: 0; padding-left: 38px; border-top: 1px solid var(--siye-line); border-radius: 0 0 10px 10px; background: color-mix(in srgb, var(--siye-brand) 4%, transparent); }
+.card-membership-prompt { display: flex; align-items: center; gap: 9px; padding: 6px 0 2px 38px; color: var(--siye-muted); font-size: 12px; }
+.card-membership-prompt .membership-editor { display: inline-flex; }
+@media (max-width: 900px) {
+  .card-membership-prompt { padding-left: 12px; }
+}
 .result-cover { width: 144px; height: 104px; overflow: hidden; border: 1px solid var(--siye-line); border-radius: 12px; background: var(--siye-soft); flex: 0 0 auto; }
 .result-cover img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .result-content { min-width: 0; flex: 1; }

@@ -129,6 +129,23 @@ def main():
                 expect(page.get_by_role("button", name="稍后再看 1", exact=True)).to_be_visible()
                 assert store.get_item("xhs", "a")["in_default"] is True
                 assert store.get_item("xhs", "a")["watch_later"] is True
+                # 收藏成功后当场给一次「编辑归属」入口：不强制展开，点开才出现面板。
+                page.get_by_role("button", name="移出收藏 图文收藏测试", exact=True).click()
+                expect(page.get_by_role("button", name="收藏 图文收藏测试", exact=True)).to_be_visible()
+                page.get_by_role("button", name="收藏 图文收藏测试", exact=True).click()
+                prompt = page.locator(".card-membership-prompt")
+                expect(prompt).to_be_visible()
+                prompt.get_by_role("button", name="编辑归属", exact=True).click()
+                inline_card = page.locator(".membership-card")
+                expect(inline_card).to_be_visible()
+                assert inline_card.get_by_role("checkbox", name="默认收藏夹").is_checked()
+                # 勾选要等一次写库 + 重新拉取，用可重试的断言而不是 uncheck 的即时校验
+                inline_card.get_by_role("checkbox", name="稍后再看").click()
+                expect(inline_card.get_by_role("checkbox", name="稍后再看")).not_to_be_checked()
+                expect(page.get_by_role("button", name="稍后再看 0", exact=True)).to_be_visible()
+                assert store.get_item("xhs", "a")["watch_later"] is False
+                inline_card.get_by_role("button", name="完成", exact=True).click()
+                expect(prompt).to_have_count(0)
                 page.get_by_role("button", name="新建收藏夹", exact=True).click()
                 page.get_by_role("textbox", name="新收藏夹名称").fill("跨平台学习")
                 page.get_by_role("button", name="创建收藏夹", exact=True).click()

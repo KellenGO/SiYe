@@ -181,6 +181,46 @@ export function toAddPayload(
   return entries;
 }
 
+/** 勾选框三态：全部命中 = true，部分命中 = null（半选），都没命中 = false。 */
+export type MembershipState = boolean | null;
+
+export interface CollectionMembership {
+  inDefault: MembershipState;
+  watchLater: MembershipState;
+  /** 自建收藏夹 id -> 勾选三态。 */
+  custom: Record<number, MembershipState>;
+}
+
+function triState(hit: number, total: number): MembershipState {
+  if (total === 0) return false;
+  if (hit === total) return true;
+  return hit > 0 ? null : false;
+}
+
+/**
+ * 一批收藏条目的归属勾选状态。
+ *
+ * 聚合卡片一次会收藏多个平台版本，勾选框要按"这批里有多少条已属于该收藏夹"
+ * 显示成选中 / 半选 / 未选，而不是只看第一条。
+ */
+export function collectionMembership(items: readonly LibraryItem[]): CollectionMembership {
+  const total = items.length;
+  const custom: Record<number, MembershipState> = {};
+  const ids = new Set<number>();
+  for (const item of items) {
+    for (const tag of item.collections) ids.add(tag.id);
+  }
+  for (const id of ids) {
+    const hit = items.filter((item) => item.collections.some((tag) => tag.id === id)).length;
+    custom[id] = triState(hit, total);
+  }
+  return {
+    inDefault: triState(items.filter((item) => item.inDefault).length, total),
+    watchLater: triState(items.filter((item) => item.watchLater).length, total),
+    custom,
+  };
+}
+
 export function describeImport(stats: ImportStats): string {
   if (stats.added === 0 && stats.updated === 0) {
     return stats.skipped > 0 ? `未导入 ${stats.skipped} 条：内容无效或收藏数量已达上限` : "备份里没有可导入的内容";

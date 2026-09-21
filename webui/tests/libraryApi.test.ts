@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  collectionMembership,
   decideMigration,
   describeImport,
   legacyBookmarkCount,
@@ -181,6 +182,35 @@ test("describeImport：分别覆盖新增、更新、跳过与空结果", () => 
   assert.ok(/跳过 2 条/.test(text));
   assert.ok(/无效或收藏数量已达上限/.test(describeImport({ added: 0, updated: 0, skipped: 5 })));
   assert.ok(/没有可导入的内容/.test(describeImport({ added: 0, updated: 0, skipped: 0 })));
+});
+
+// ── 收藏后编辑归属：一批条目的勾选三态 ────────────────────────────────
+
+test("collectionMembership：单条条目按自身归属给出勾选状态", () => {
+  const state = collectionMembership([expectItem(apiItem())]);
+  assert.equal(state.inDefault, true);
+  assert.equal(state.watchLater, false);
+  assert.equal(state.custom[2], true);
+  assert.equal(state.custom[3], true);
+  assert.equal(state.custom[99], undefined);
+});
+
+test("collectionMembership：一批条目只有部分属于某收藏夹时是半选（null）", () => {
+  const items = [
+    expectItem(apiItem({ key: "xhs|n1", in_default: true, collections: [{ id: 2, name: "AI 学习" }] })),
+    expectItem(apiItem({ key: "douyin|d1", in_default: true, watch_later: true, collections: [] })),
+  ];
+  const state = collectionMembership(items);
+  assert.equal(state.inDefault, true);
+  assert.equal(state.watchLater, null);
+  assert.equal(state.custom[2], null);
+});
+
+test("collectionMembership：空批次不算选中，避免凭空勾上收藏夹", () => {
+  const state = collectionMembership([]);
+  assert.equal(state.inDefault, false);
+  assert.equal(state.watchLater, false);
+  jsonEqual(state.custom, {});
 });
 
 // ── groupKey 还原（批量加入/移出收藏夹的关键路径） ─────────────────────

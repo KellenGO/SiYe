@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Bookmark as BookmarkIcon, Check, Clock3, Copy, Download, FolderCog } from "lucide-react";
 import { toast } from "sonner";
 import type { BookmarkLibrary } from "@/hooks/useBookmarks";
@@ -7,7 +7,7 @@ import { PLATFORM_LABELS } from "@/types/search";
 import type { Bookmark } from "@/lib/bookmarks";
 import { MAX_NOTE_LENGTH } from "@/lib/bookmarks";
 import { resultKey, resultLinks, resultSources, resultsCsv, resultsMarkdown, type ExportRow } from "@/lib/resultTools";
-import type { SystemCollectionKey } from "@/lib/libraryApi";
+import { collectionMembership, type LibraryItem, type MembershipState, type SystemCollectionKey } from "@/lib/libraryApi";
 
 export const TOOL_BUTTON = "inline-flex items-center gap-1.5 rounded-lg border border-cyber-border-subtle px-2.5 py-1.5 text-xs text-cyber-text-secondary hover:text-brand-strong hover:border-brand/50 disabled:opacity-40 disabled:cursor-not-allowed";
 
@@ -46,11 +46,17 @@ export function ExportActions({ rows, keyword }: { rows: ExportRow[]; keyword: s
   );
 }
 
-function SystemCollectionButton({ result, library, fetchedAt, collection, compact = false }: {
+/**
+ * 收藏 / 稍后再看按钮。
+ * `onToggled` 在写库结束后回调，`added` 表示这次是"加入"还是"移出"
+ * （写失败算移出，调用方据此决定要不要弹"编辑归属"）。
+ */
+function SystemCollectionButton({ result, library, fetchedAt, collection, compact = false, onToggled }: {
   result: UnifiedSearchResult; library: BookmarkLibrary;
   fetchedAt: Partial<Record<PlatformSlug, string | null>>;
   collection: SystemCollectionKey;
   compact?: boolean;
+  onToggled?: (added: boolean, keys: string[]) => void;
 }) {
   const membership = new Map(library.items.map((item) => [item.key, collection === "default" ? item.inDefault : item.watchLater]));
   const sources = resultSources(result);
@@ -62,17 +68,23 @@ function SystemCollectionButton({ result, library, fetchedAt, collection, compac
     <button type="button" aria-label={`${label} ${result.title}`} aria-pressed={saved}
       title={label}
       className={compact ? `inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-brand/50 ${saved ? "text-brand-strong bg-brand-soft" : "text-cyber-text-muted hover:text-brand-strong hover:bg-brand-soft"}` : TOOL_BUTTON}
-      onClick={() => library.toggleSystem(collection, result, fetchedAt)}>
+      onClick={() => {
+        void (async () => {
+          const ok = await library.toggleSystem(collection, result, fetchedAt);
+          onToggled?.(ok && !saved, sources.map(resultKey));
+        })();
+      }}>
       {saved ? <Check className="w-3.5 h-3.5 text-brand-strong" /> : <Icon className="w-3.5 h-3.5" />}
       {!compact && (saved ? `已加入${baseLabel}` : label)}
     </button>
   );
 }
 
-function SystemCollectionControl({ result, library, fetchedAt, collection }: {
+function SystemCollectionControl({ result, library, fetchedAt, collection, onToggled }: {
   result: UnifiedSearchResult; library: BookmarkLibrary;
   fetchedAt: Partial<Record<PlatformSlug, string | null>>;
   collection: SystemCollectionKey;
+  onToggled?: (added: boolean, keys: string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -92,7 +104,7 @@ function SystemCollectionControl({ result, library, fetchedAt, collection }: {
     document.addEventListener("keydown", escape);
     return () => { document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", escape); };
   }, [open]);
-  if (sources.length < 2) return <SystemCollectionButton result={result} library={library} fetchedAt={fetchedAt} collection={collection} compact />;
+  if (sources.length < 2) return <SystemCollectionButton result={result} library={library} fetchedAt={fetchedAt} collection={collection} compact onToggled={onToggled} />;
   return <div ref={root} className="relative shrink-0">
     <button type="button" aria-label={`选择${baseLabel}平台 ${result.title}`} aria-expanded={open} aria-controls={id}
       title={savedCount ? `${baseLabel} ${savedCount}/${sources.length} 个来源，点击管理` : `选择要加入${baseLabel}的平台`}
@@ -105,9 +117,9 @@ function SystemCollectionControl({ result, library, fetchedAt, collection }: {
       <p className="mb-2 text-xs font-medium text-cyber-text-secondary">选择要加入{baseLabel}的平台版本</p>
       {sources.map((source) => <div key={resultKey(source)} className="flex items-center justify-between gap-2 py-1 text-xs text-cyber-text-secondary">
         <span>{PLATFORM_LABELS[source.platform]}</span>
-        <SystemCollectionButton result={source} library={library} fetchedAt={fetchedAt} collection={collection} compact />
+        <SystemCollectionButton result={source} library={library} fetchedAt={fetchedAt} collection={collection} compact onToggled={onToggled} />
       </div>)}
-      <div className="mt-2 border-t border-cyber-border-subtle pt-2"><SystemCollectionButton result={result} library={library} fetchedAt={fetchedAt} collection={collection} /></div>
+      <div className="mt-2 border-t border-cyber-border-subtle pt-2"><SystemCollectionButton result={result} library={library} fetchedAt={fetchedAt} collection={collection} onToggled={onToggled} /></div>
     </div>}
   </div>;
 }
@@ -124,34 +136,69 @@ function customCollectionLabel(name: string): string {
   return ["全部", "全部收藏", "默认收藏夹", "稍后再看"].includes(name) ? `${name}（自建）` : name;
 }
 
-function MembershipEditor({ bookmark, library }: { bookmark: Bookmark & { key: string; inDefault: boolean; watchLater: boolean; collections: { id: number; name: string }[] }; library: BookmarkLibrary }) {
+function MembershipCheckbox({ state, disabled, onChange, label }: {
+  state: MembershipState; disabled: boolean;
+  onChange: (enabled: boolean) => void; label: string;
+}) {
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (input.current) input.current.indeterminate = state === null;
+  }, [state]);
+  return <label>
+    <input ref={input} type="checkbox" checked={state === true} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
+    <span className="membership-folder-name" title={label}>{label}</span>
+  </label>;
+}
+
+/**
+ * 归属编辑面板：一条或一批收藏条目共用。
+ * 聚合卡片一次收藏了多个平台版本时，`keys` 会有多个，勾选框按"部分命中"显示半选。
+ * `onClose` 传了表示这是一次性提示（关闭后整个入口收起），不传则保留「编辑归属」按钮可反复打开。
+ */
+export function MembershipEditor({ keys, library, subject, label = "编辑归属", onClose }: {
+  keys: string[]; library: BookmarkLibrary; subject?: string; label?: string; onClose?: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  const close = useCallback(() => { setOpen(false); onClose?.(); }, [onClose]);
+  const byKey = new Map(library.items.map((item) => [item.key, item]));
+  const items = keys
+    .map((key) => byKey.get(key))
+    .filter((item): item is LibraryItem => Boolean(item));
+  useEffect(() => {
+    if (!open) return;
+    const outside = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node)) close(); };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { close(); root.current?.querySelector("button")?.focus(); }
+    };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    return () => { document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", escape); };
+  }, [open, close]);
+  if (!items.length) return null;
+  const membership = collectionMembership(items);
   const updateSystem = async (collection: SystemCollectionKey, enabled: boolean) => {
     setBusy(true);
-    await library.setSystemMembership([bookmark.key], collection, enabled);
+    await library.setSystemMembership(keys, collection, enabled);
     setBusy(false);
   };
   const updateCustom = async (id: number, enabled: boolean) => {
     setBusy(true);
-    if (enabled) await library.addToCollection([bookmark.key], id);
-    else await library.removeFromCollection([bookmark.key], id);
+    if (enabled) await library.addToCollection(keys, id);
+    else await library.removeFromCollection(keys, id);
     setBusy(false);
   };
-  const customIds = new Set(bookmark.collections.map((item) => item.id));
-  return <div className="membership-editor">
-    <button type="button" className="text-link" aria-expanded={open} onClick={() => setOpen(!open)}><FolderCog />编辑归属</button>
-    {open && <div className="membership-card" role="group" aria-label={`编辑收藏夹归属 ${bookmark.result.title}`}>
-      <div className="membership-card-head"><p>收藏夹归属</p><button type="button" className="text-link" onClick={() => setOpen(false)}>完成</button></div>
+  return <div className="membership-editor" ref={root}>
+    <button type="button" className="text-link" aria-expanded={open} onClick={() => setOpen(!open)}><FolderCog />{label}</button>
+    {open && <div className="membership-card" role="group" aria-label={subject ? `编辑收藏夹归属 ${subject}` : "编辑收藏夹归属"}>
+      <div className="membership-card-head"><p>收藏夹归属</p><button type="button" className="text-link" onClick={close}>完成</button></div>
       <label><input type="checkbox" checked disabled /><span className="membership-folder-name" title="全部">全部</span></label>
-      <label><input type="checkbox" checked={bookmark.inDefault} disabled={busy} onChange={(event) => void updateSystem("default", event.target.checked)} /><span className="membership-folder-name" title="默认收藏夹">默认收藏夹</span></label>
-      <label><input type="checkbox" checked={bookmark.watchLater} disabled={busy} onChange={(event) => void updateSystem("watch_later", event.target.checked)} /><span className="membership-folder-name" title="稍后再看">稍后再看</span></label>
+      <MembershipCheckbox state={membership.inDefault} disabled={busy} onChange={(enabled) => void updateSystem("default", enabled)} label="默认收藏夹" />
+      <MembershipCheckbox state={membership.watchLater} disabled={busy} onChange={(enabled) => void updateSystem("watch_later", enabled)} label="稍后再看" />
       {library.collections.map((collection) => {
-        const label = customCollectionLabel(collection.name);
-        return <label key={collection.id}>
-          <input type="checkbox" checked={customIds.has(collection.id)} disabled={busy} onChange={(event) => void updateCustom(collection.id, event.target.checked)} />
-          <span className="membership-folder-name" title={label}>{label}</span>
-        </label>;
+        const name = customCollectionLabel(collection.name);
+        return <MembershipCheckbox key={collection.id} state={membership.custom[collection.id] ?? false} disabled={busy} onChange={(enabled) => void updateCustom(collection.id, enabled)} label={name} />;
       })}
     </div>}
   </div>;
@@ -171,7 +218,7 @@ export function BookmarkNote({ bookmark, onSave, library }: {
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-cyber-text-muted mb-2">
         <span>收藏于 {new Date(bookmark.savedAt).toLocaleString("zh-CN")}</span>
         <span className="bookmark-meta-actions">
-          <MembershipEditor bookmark={bookmark} library={library} />
+          <MembershipEditor keys={[bookmark.key]} library={library} subject={bookmark.result.title} />
           {!editing && <button type="button" aria-label={`${bookmark.note ? "编辑备注" : "添加备注"} ${bookmark.result.title}`}
             className="rounded px-1 py-1 text-xs text-cyber-text-muted hover:text-brand-strong focus-visible:ring-2 focus-visible:ring-brand/50"
             onClick={() => { setDraft(bookmark.note); setEditing(true); }}>{bookmark.note ? "编辑备注" : "添加备注"}</button>}

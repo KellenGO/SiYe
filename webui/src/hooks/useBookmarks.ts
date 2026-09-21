@@ -101,15 +101,16 @@ export function useBookmarks() {
     if (decision.shouldOffer) setMigration({ count: decision.count });
   }, []);
 
+  /** 返回是否写成功：调用方据此决定要不要接着弹"编辑归属"（失败就不打扰用户）。 */
   const toggleSystem = useCallback(
-    async (collection: SystemCollectionKey, result: UnifiedSearchResult, fetchedAt: Partial<Record<PlatformSlug, string | null>> = {}) => {
+    async (collection: SystemCollectionKey, result: UnifiedSearchResult, fetchedAt: Partial<Record<PlatformSlug, string | null>> = {}): Promise<boolean> => {
       const entries = toAddPayload([result], fetchedAt);
       if (!entries.length) {
         toast.error("这条内容的格式无法收藏");
-        return;
+        return false;
       }
       const keys = entries.map((entry) => resultKey(entry.result));
-      if (query.isPending || query.isError || keys.some((key) => pending.current.has(key))) return;
+      if (query.isPending || query.isError || keys.some((key) => pending.current.has(key))) return false;
       keys.forEach((key) => pending.current.add(key));
       const existing = new Map(state.items.map((item) => [item.key, item]));
       const allSaved = keys.every((key) => {
@@ -126,9 +127,11 @@ export function useBookmarks() {
           if (stats.skipped) toast.warning(describeImport(stats));
         }
         await refresh();
+        return true;
       } catch (error) {
         const label = collection === "default" ? "收藏" : "稍后再看";
         toast.error(errorText(error, allSaved ? `移出${label}失败` : `加入${label}失败，请稍后重试`));
+        return false;
       } finally {
         keys.forEach((key) => pending.current.delete(key));
       }
