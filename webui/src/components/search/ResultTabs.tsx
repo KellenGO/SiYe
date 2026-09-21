@@ -24,6 +24,11 @@ interface ResultTabsProps {
   fetchedAt?: Partial<Record<PlatformSlug, string | null>>;
   /** 关闭内置排序、严格按传入顺序渲染（历史页按最近浏览倒序时需要）。 */
   disableSort?: boolean;
+  /**
+   * 隐藏平台页签。传入的数据本身只是"服务端分页的一页"时（收藏归档页）必须隐藏：
+   * 页签只过滤当前页，会让人误以为翻页是按平台分的。
+   */
+  hidePlatformTabs?: boolean;
   /** 每条结果的可删除回调（历史页用来删除单条记录）。 */
   onDeleteItem?: (result: UnifiedSearchResult) => void;
   /** 勾选状态变化时回调（收藏夹页用同一套勾选做批量加入 / 移出）。 */
@@ -65,6 +70,7 @@ export function ResultTabs({
   selectionToolLabel,
   selectionResetKey,
   disableSort = false,
+  hidePlatformTabs = false,
   onDeleteItem,
 }: ResultTabsProps) {
   const [activeTab, setActiveTab] = useState<TabKey>("all");
@@ -155,7 +161,7 @@ export function ResultTabs({
 
   return (
     <div className="results-block">
-      <div className="tabs" role="tablist" aria-label="结果平台">
+      {!hidePlatformTabs && <div className="tabs" role="tablist" aria-label="结果平台">
           {visibleTabs.map((tab) => {
             const count = counts[tab.key] || 0;
             const active = effectiveTab === tab.key;
@@ -172,7 +178,7 @@ export function ResultTabs({
               </button>
             );
           })}
-      </div>
+      </div>}
 
       <div className="toolbar">
         <div className="toolbar-left">

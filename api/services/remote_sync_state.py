@@ -185,7 +185,12 @@ class RemoteSyncStateMixin:
         source = " FROM remote_favorites r LEFT JOIN remote_presence p ON p.account=r.account_key AND p.content_id=r.content_id WHERE " + " AND ".join(where)
         with self._conn() as conn:
             total = conn.execute("SELECT count(*)" + source, args).fetchone()[0]
-            rows = conn.execute("SELECT r.*,COALESCE(p.state,'legacy') AS presence,p.missing_batch" + source + " ORDER BY r.id DESC LIMIT ? OFFSET ?", (*args, limit, offset)).fetchall()
+            # 按平台分组、组内最近入库在前：翻页时同一个平台是连续的，不会跨平台乱跳。
+            # 想只看某一个平台，用平台筛选把范围收窄（分页也随之限定在该平台内）。
+            rows = conn.execute(
+                "SELECT r.*,COALESCE(p.state,'legacy') AS presence,p.missing_batch" + source
+                + " ORDER BY r.platform ASC, r.id DESC LIMIT ? OFFSET ?", (*args, limit, offset)
+            ).fetchall()
             items = []
             for row in rows:
                 result = self._row_to_result(row)

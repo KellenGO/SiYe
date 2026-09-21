@@ -86,7 +86,7 @@ export function RemoteArchiveControls({ remote }: { remote: ReturnType<typeof us
       <button className="btn" disabled={remote.page === 0 || remote.loadingArchive} onClick={() => remote.setPage(remote.page - 1)}>上一页</button>
       <button className="btn" disabled={remote.loadingArchive || (remote.page + 1) * 50 >= (remote.archive?.total ?? 0)} onClick={() => remote.setPage(remote.page + 1)}>下一页</button>
     </div>
-    <p className="collection-count">下方结果内的筛选、排序和导出仅作用于当前页。</p>
+    <p className="collection-count">列表按平台分组、组内按入库时间从新到旧；想只看某一个平台，用上面的「归档平台」筛选（分页会跟着限定在该平台内）。下方结果内的关键词筛选与导出仅作用于当前页。</p>
 
     <ConfirmDialog open={removing.length > 0} title={`从跨平台收藏移除 ${removing.length} 条？`}
       description="只移除同步归档及远端归属，不会删除本地收藏副本、备注或本地收藏夹。以后在平台再次发现时仍可重新导入。"

@@ -242,6 +242,20 @@ async def test_pending_survives_restart_and_legacy_unclaimed(store, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_archive_page_groups_by_platform(store):
+    """归档分页按平台分组、组内最近入库在前：翻页时同一平台是连续的，不会跨平台乱跳。"""
+    store.save_platform("xhs", [{"platform": "xhs", "content_id": f"x{i}"} for i in range(3)], status="succeeded")
+    store.save_platform("bilibili", [{"platform": "bilibili", "content_id": f"b{i}"} for i in range(2)], status="succeeded")
+
+    items = store.archive_page(limit=10)["items"]
+    assert [item["result"]["platform"] for item in items] == ["bilibili", "bilibili", "xhs", "xhs", "xhs"]
+    # 组内：后入库的排在前面
+    assert [item["result"]["content_id"] for item in items] == ["b1", "b0", "x2", "x1", "x0"]
+    # 收窄到某一个平台时，分页范围也跟着变
+    assert store.archive_page(platform="xhs", limit=10)["total"] == 3
+
+
+@pytest.mark.asyncio
 async def test_summary_counts_states_so_legacy_need_not_be_listed(store):
     """摘要给出各类状态的条数：界面靠它做汇总，不必把「账号未确认」逐条铺出来。"""
     store.save_platform("bilibili", [{"content_id": "legacy"}], status="succeeded")
