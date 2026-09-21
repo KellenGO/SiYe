@@ -204,7 +204,9 @@ export function SearchBar({
                 dispatchPopover({ type: "focus_within" });
               }
             }}
-            className="w-full h-[58px] rounded-full border-0 bg-transparent text-[16px] text-cyber-text-primary placeholder:text-cyber-text-muted focus:outline-none disabled:opacity-50"
+            // 不给 input 加圆角：胶囊形状由外层 .search-box 负责。input 自己带圆角时，
+            // 光标停在最左边（圆角收缩区）会被裁成"上下窄中间宽"的一段弧线。
+            className="w-full h-[58px] rounded-none border-0 bg-transparent text-[16px] text-cyber-text-primary placeholder:text-cyber-text-muted focus:outline-none disabled:opacity-50"
           />
 
           {/* 聚焦浮层：最近搜索 + 推荐搜索（必须 === "open"，"closed" 也是 truthy 字符串） */}
