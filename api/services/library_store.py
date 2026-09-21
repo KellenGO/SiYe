@@ -598,31 +598,6 @@ class LibraryStore(SqliteStoreBase):
             conn.execute("DELETE FROM items WHERE saved = 0 AND watch_later = 0")
         return {"removed": removed}
 
-    def unsave_items(self, keys: Sequence[Tuple[str, str]]) -> Dict[str, Any]:
-        """取消收藏：清掉默认收藏夹与所有自建归属，并把「已收藏」置否。
-
-        稍后再看不受影响——它是独立的一条线。取消之后既没收藏也不稍后再看的
-        条目直接删除，否则会变成谁也看不见的残留数据。
-        """
-        removed = 0
-        with self._conn(write=True) as conn:
-            for platform, content_id in keys:
-                cursor = conn.execute(
-                    "UPDATE items SET in_default = 0, saved = 0 "
-                    "WHERE platform = ? AND content_id = ? AND saved = 1",
-                    (platform, content_id),
-                )
-                if cursor.rowcount:
-                    removed += cursor.rowcount
-                row = conn.execute(
-                    "SELECT id FROM items WHERE platform = ? AND content_id = ?",
-                    (platform, content_id),
-                ).fetchone()
-                if row is not None:
-                    conn.execute("DELETE FROM item_collections WHERE item_id = ?", (int(row["id"]),))
-            conn.execute("DELETE FROM items WHERE saved = 0 AND watch_later = 0")
-        return {"removed": removed}
-
     # ------------------------------------------------------------ 导入 / 导出
 
     def export_payload(self) -> Dict[str, Any]:

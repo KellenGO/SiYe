@@ -22,6 +22,28 @@ export const LEGACY_BOOKMARKS_KEY = "aggregate_search_bookmarks_v1";
 export const MIGRATION_MARKER_KEY = "aggregate_search_library_migrated_v1";
 /** 「以后再说」只在本次会话内隐藏迁移提示（sessionStorage），下次打开仍会提示。 */
 export const MIGRATION_DISMISS_KEY = "aggregate_search_library_migration_dismissed";
+/** 「取消收藏」确认框的开关：用户勾过「下次不再提示」就记为 "0"。 */
+export const UNSAVE_CONFIRM_KEY = "aggregate_search_unsave_confirm_v1";
+
+type ReadStorage = Pick<Storage, "getItem">;
+type WriteStorage = Pick<Storage, "setItem">;
+
+/** 取消收藏前是否还要弹确认框；读不到（隐私模式等）时按"要提示"处理。 */
+export function unsaveConfirmEnabled(storage: ReadStorage | null = window.localStorage): boolean {
+  try {
+    return storage?.getItem(UNSAVE_CONFIRM_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+
+export function setUnsaveConfirm(enabled: boolean, storage: WriteStorage | null = window.localStorage): void {
+  try {
+    storage?.setItem(UNSAVE_CONFIRM_KEY, enabled ? "1" : "0");
+  } catch {
+    /* 存储不可用时忽略：只是下次还会再问一次 */
+  }
+}
 
 export interface LibraryTag {
   id: number;
@@ -299,13 +321,6 @@ export async function removeItems(keys: string[]): Promise<void> {
   const parsed = keys.map(splitKey).filter((key): key is { platform: string; content_id: string } => key !== null);
   if (!parsed.length) return;
   await axios.delete(`${LIBRARY_API_BASE}/items`, { data: { keys: parsed } });
-}
-
-/** 取消收藏：清掉收藏夹归属并移出「全部」；稍后再看保留（后端自行清理孤儿）。 */
-export async function unsaveItems(keys: string[]): Promise<void> {
-  const parsed = keys.map(splitKey).filter((entry): entry is { platform: string; content_id: string } => entry !== null);
-  if (!parsed.length) return;
-  await axios.post(`${LIBRARY_API_BASE}/items/unsave`, { keys: parsed });
 }
 
 export async function updateNote(key: string, note: string): Promise<void> {

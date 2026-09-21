@@ -221,32 +221,31 @@ def main():
                 page.get_by_role("button", name="删除收藏夹 跨平台学习", exact=True).click()
                 expect(page.get_by_role("button", name="跨平台学习 2", exact=True)).to_have_count(0)
                 assert store.stats()["total"] == 2
-                # ── 取消收藏 = 从「全部」消失；稍后再看是独立的一条线 ──
-                page.get_by_role("button", name="取消收藏 图文收藏测试", exact=True).click()
-                kept = store.get_item("xhs", "a")
-                assert kept is not None and kept["saved"] is False and kept["watch_later"] is True
-                expect(page.get_by_role("button", name="全部 1", exact=True)).to_be_visible()
-                # 取消稍后再看后两头都不沾，条目没有任何入口能看到，直接清掉
-                page.get_by_role("button", name="稍后再看 1", exact=True).click()
-                expect(page.get_by_text("图文收藏测试", exact=True)).to_be_visible()
-                page.get_by_role("button", name="取消稍后再看 图文收藏测试", exact=True).click()
-                assert store.get_item("xhs", "a") is None
-                assert store.stats()["total"] == 1
-                # ── 单条彻底删除：红色垃圾桶 + 屏幕正中的确认框 ──
-                page.get_by_role("button", name="全部 1", exact=True).click()
-                bar = page.locator(".saved-result-item").first.locator(".bookmark-note")
-                bar.get_by_role("button", name="彻底删除 视频收藏测试", exact=True).click()
+                # ── 取消收藏 = 从本机移除，先弹居中的确认框 ──
+                page.get_by_role("button", name="取消收藏 视频收藏测试", exact=True).click()
                 dialog = page.locator(".confirm-card")
                 expect(dialog).to_be_visible()
+                expect(dialog).to_contain_text("是否要取消收藏")
+                expect(dialog).to_contain_text("编辑归属")
                 box = dialog.bounding_box()
                 assert box is not None and box["y"] > 200, "确认框要在屏幕正中，不是顶部提示"
                 dialog.get_by_role("button", name="取消", exact=True).click()
                 expect(dialog).to_have_count(0)
                 assert store.get_item("bilibili", "b") is not None
-                bar.get_by_role("button", name="彻底删除 视频收藏测试", exact=True).click()
-                page.locator(".confirm-card").get_by_role("button", name="彻底删除", exact=True).click()
+                page.get_by_role("button", name="取消收藏 视频收藏测试", exact=True).click()
+                page.locator(".confirm-card").get_by_role("button", name="取消收藏", exact=True).click()
                 expect(page.locator(".confirm-card")).to_have_count(0)
                 assert store.get_item("bilibili", "b") is None
+                assert store.stats()["total"] == 1
+                # ── 勾了「下次不再提示」之后直接取消，不再弹框 ──
+                page.get_by_role("button", name="全部 1", exact=True).click()
+                page.get_by_role("button", name="取消收藏 图文收藏测试", exact=True).click()
+                dialog = page.locator(".confirm-card")
+                expect(dialog).to_be_visible()
+                dialog.get_by_role("checkbox", name="下次不再提示").check()
+                dialog.get_by_role("button", name="取消收藏", exact=True).click()
+                expect(page.locator(".confirm-card")).to_have_count(0)
+                assert store.get_item("xhs", "a") is None
                 assert store.stats()["total"] == 0
                 page.get_by_role("button", name="跨平台收藏", exact=True).click()
                 expect(page.get_by_text("视频收藏测试", exact=True)).to_be_visible()

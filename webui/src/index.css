@@ -639,15 +639,13 @@ html.dark .search-submit { color: #101525; }
 .saved-result-item .result-number { color: var(--siye-brand-ink); font-weight: 600; }
 .saved-result-item .result-number::before { content: ""; display: block; width: 14px; height: 2px; margin-bottom: 6px; border-radius: 999px; background: var(--siye-brand); }
 .saved-result-item .bookmark-note { margin-top: 0; padding-left: 38px; border-top: 1px solid var(--siye-line); border-radius: 0 0 10px 10px; background: color-mix(in srgb, var(--siye-brand) 4%, transparent); }
-/* 收藏信息行：时间 + 编辑归属/备注靠左，彻底删除推到最右 */
-.bookmark-note-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 8px; color: var(--siye-muted); font-size: 12px; }
-.bookmark-delete { display: grid; place-items: center; width: 26px; height: 26px; margin-left: auto; border: 0; border-radius: 7px; background: none; color: var(--siye-muted); }
-.bookmark-delete:hover { background: color-mix(in srgb, var(--siye-red) 10%, transparent); color: var(--siye-red); }
-.bookmark-delete svg { width: 14px; height: 14px; }
 .confirm-overlay { position: fixed; inset: 0; z-index: 120; display: flex; align-items: center; justify-content: center; padding: 16px; background: color-mix(in srgb, #172b3d 45%, transparent); }
 .confirm-card { width: min(380px, 100%); padding: 20px 22px; border: 1px solid var(--siye-line-strong); border-radius: 14px; background: var(--siye-bg); }
 .confirm-title { margin: 0 0 8px; color: var(--siye-ink); font-size: 14px; font-weight: 600; }
 .confirm-text { margin: 0; color: var(--siye-secondary); font-size: 13px; line-height: 1.7; }
+.confirm-hint { margin: 8px 0 0; color: var(--siye-muted); font-size: 12px; line-height: 1.7; }
+.confirm-remember { display: flex; align-items: center; gap: 8px; margin-top: 14px; color: var(--siye-secondary); font-size: 12px; cursor: pointer; }
+.confirm-remember input { flex: none; accent-color: var(--siye-brand); }
 .confirm-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
 .result-cover { width: 144px; height: 104px; overflow: hidden; border: 1px solid var(--siye-line); border-radius: 12px; background: var(--siye-soft); flex: 0 0 auto; }
 .result-cover img { display: block; width: 100%; height: 100%; object-fit: cover; }

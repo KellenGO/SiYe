@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   collectionMembership,
   decideMigration,
+  setUnsaveConfirm,
+  unsaveConfirmEnabled,
   describeImport,
   legacyBookmarkCount,
   parseBackupFile,
@@ -185,6 +187,22 @@ test("describeImport：分别覆盖新增、更新、跳过与空结果", () => 
 });
 
 // ── 收藏后编辑归属：一批条目的勾选三态 ────────────────────────────────
+
+test("取消收藏确认框的开关：默认要提示，勾过「下次不再提示」后不再提示", () => {
+  const memory = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => (memory.has(key) ? (memory.get(key) as string) : null),
+    setItem: (key: string, value: string) => { memory.set(key, value); },
+  };
+  assert.equal(unsaveConfirmEnabled(storage), true);
+  setUnsaveConfirm(false, storage);
+  assert.equal(unsaveConfirmEnabled(storage), false);
+  setUnsaveConfirm(true, storage);
+  assert.equal(unsaveConfirmEnabled(storage), true);
+  // 存储读不到（隐私模式）时宁可多问一次，也不要静默删掉用户的东西
+  assert.equal(unsaveConfirmEnabled(null), true);
+  assert.equal(unsaveConfirmEnabled({ getItem: () => { throw new Error("blocked"); } }), true);
+});
 
 test("toLibraryItem：saved 是独立状态，后端没给时按收藏夹归属兜底推断", () => {
   assert.equal(expectItem(apiItem({ saved: true, in_default: false, collections: [] })).saved, true);

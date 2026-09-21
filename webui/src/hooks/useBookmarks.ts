@@ -34,7 +34,6 @@ import {
   removeItems,
   removeItemsFromSystemCollection as apiRemoveFromSystemCollection,
   removeItemsFromCollection as apiRemoveFromCollection,
-  unsaveItems as apiUnsaveItems,
   renameCollection as apiRenameCollection,
   toAddPayload,
   updateNote,
@@ -123,9 +122,9 @@ export function useBookmarks() {
       // 重复请求（后端按 platform|content_id 去重），不会出现"想取消却变成收藏"。
       try {
         if (allSaved) {
-          // 取消收藏 = 从「全部」消失：清掉收藏夹归属（稍后再看保留，它是独立的一条线）。
+          // 取消收藏和「彻底删除」是同一个动作：整条记录连备注和所有归属一起移除。
           // 取消稍后再看只解绑稍后再看；两头都不沾的条目由后端顺手清掉。
-          if (collection === "default") await apiUnsaveItems(keys);
+          if (collection === "default") await removeItems(keys);
           else await apiRemoveFromSystemCollection(collection, keys);
         } else {
           const stats = await apiAddToSystemCollection(collection, entries);

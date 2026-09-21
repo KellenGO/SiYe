@@ -217,13 +217,8 @@ export function ResultTabs({
                 </> : undefined}
                 onDelete={onDeleteItem ? () => onDeleteItem(result) : undefined} />
               {/* 收藏页每条本来就常驻这个信息条，只有搜索结果页才需要"刚收藏完"弹出一次 */}
-              {!savedView && promptItem && library && <BookmarkNote bookmark={promptItem} onSave={library.saveNote} library={library}
-                onDelete={() => {
-                  void library.deleteItems(membershipPrompt?.keys ?? []);
-                  setMembershipPrompt(null);
-                }} />}
-              {savedView && bookmark && library && <BookmarkNote bookmark={bookmark} onSave={library.saveNote} library={library}
-                onDelete={() => void library.deleteItems([bookmark.key])} />}
+              {!savedView && promptItem && library && <BookmarkNote bookmark={promptItem} onSave={library.saveNote} library={library} />}
+              {savedView && bookmark && library && <BookmarkNote bookmark={bookmark} onSave={library.saveNote} library={library} />}
             </div>
           );
         })}
