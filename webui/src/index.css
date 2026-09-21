@@ -567,7 +567,9 @@ html.dark .btn.primary { color: #101525; }
 .search-leading > svg { pointer-events: none; }
 .search-leading > button { display: grid; place-items: center; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; }
 .search-leading > button:hover { color: var(--siye-ink); }
-.search-box input { width: 100%; height: 44px; min-width: 0; border: 0; outline: none; background: none; color: var(--siye-ink); font-size: 16px; }
+/* border-radius 显式归零：光标停在文本最左边时，input 自己的圆角会把竖线上下裁掉，
+   胶囊形状一律交给外层 .search-box。这里再写一遍是防止构建时工具类缺失。 */
+.search-box input { width: 100%; height: 44px; min-width: 0; border: 0; border-radius: 0; outline: none; background: none; color: var(--siye-ink); font-size: 16px; }
 .search-box input:focus-visible { outline: none; }
 .search-box input::placeholder { color: var(--siye-muted); }
 .search-submit { width: 44px; height: 44px; border-radius: 50%; background: var(--siye-brand); color: #fff; display: grid; place-items: center; flex-shrink: 0; }
