@@ -26,10 +26,11 @@ export function ConfirmDialog({
   onCancel: () => void;
 }) {
   const id = useId();
-  const confirm = useRef<HTMLButtonElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (!open) return;
-    confirm.current?.focus();
+    // 焦点默认给「取消」：破坏性操作不该让回车直接生效
+    cancel.current?.focus();
     const escape = (event: KeyboardEvent) => { if (event.key === "Escape") onCancel(); };
     document.addEventListener("keydown", escape);
     return () => document.removeEventListener("keydown", escape);
@@ -46,8 +47,8 @@ export function ConfirmDialog({
           <span>{rememberLabel}</span>
         </label>}
         <div className="confirm-actions">
-          <button type="button" className="btn" onClick={onCancel}>取消</button>
-          <button type="button" ref={confirm} className={danger ? "btn danger" : "btn primary"} disabled={busy} onClick={onConfirm}>{confirmLabel}</button>
+          <button type="button" className="btn" ref={cancel} onClick={onCancel}>取消</button>
+          <button type="button" className={danger ? "btn danger-solid" : "btn primary"} disabled={busy} onClick={onConfirm}>{confirmLabel}</button>
         </div>
       </div>
     </div>

@@ -222,6 +222,8 @@ def main():
                 expect(page.get_by_role("button", name="跨平台学习 2", exact=True)).to_have_count(0)
                 assert store.stats()["total"] == 2
                 # ── 取消收藏 = 从本机移除，先弹居中的确认框 ──
+                page.get_by_role("combobox", name="切换主题", exact=True).click()
+                page.get_by_role("option", name="Light", exact=True).click()
                 page.get_by_role("button", name="取消收藏 视频收藏测试", exact=True).click()
                 dialog = page.locator(".confirm-card")
                 expect(dialog).to_be_visible()
@@ -229,6 +231,8 @@ def main():
                 expect(dialog).to_contain_text("编辑归属")
                 box = dialog.bounding_box()
                 assert box is not None and box["y"] > 200, "确认框要在屏幕正中，不是顶部提示"
+                assert box["width"] >= 440, "确认框要放得下正文，别挤成一条窄柱"
+                page.screenshot(path=str(ROOT / "build" / "review-unsave-confirm.png"), full_page=True)
                 dialog.get_by_role("button", name="取消", exact=True).click()
                 expect(dialog).to_have_count(0)
                 assert store.get_item("bilibili", "b") is not None
