@@ -23,6 +23,7 @@
 
 ## 其他文档
 
+- [协作记录](collaboration.md) —— 每个 agent 开工必读：当前任务、修改范围、最近交接与未完成事项。
 - [`history/2026-09-15-合并后测试版交付.md`](history/2026-09-15-合并后测试版交付.md) —— 本地测试包、验证证据与待实测项目
 - [`使用说明.md`](使用说明.md) —— 面向普通用户的操作步骤（网页版 `site/guide.html`）
 - [`favorite-metrics.md`](favorite-metrics.md) —— 收藏指标补全的来源与字段
