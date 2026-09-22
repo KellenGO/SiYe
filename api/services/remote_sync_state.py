@@ -92,8 +92,8 @@ class RemoteSyncStateMixin:
 
     def folders_page(self, *, platform=None, account=None):
         where, args = ["1=1"], []
-        if platform: where.append("platform=?"); args.append(platform)
-        if account: where.append("account=?"); args.append(account)
+        if platform: where.append("f.platform=?"); args.append(platform)
+        if account: where.append("f.account=?"); args.append(account)
         with self._conn() as conn:
             rows = conn.execute("SELECT f.*, count(DISTINCT m.content_id) AS item_count FROM remote_folders f LEFT JOIN remote_memberships m ON m.account=f.account AND m.folder=f.folder WHERE " + " AND ".join(where) + " GROUP BY f.account,f.folder ORDER BY f.platform,f.name,f.folder", args).fetchall()
         return [dict(row) for row in rows]
