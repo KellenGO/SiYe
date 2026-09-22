@@ -23,7 +23,7 @@ function errorMessage(error: unknown): string {
 }
 
 /** 本地收藏左侧选择：全部 / 内置分类 / 某个自建收藏夹。 */
-type LibrarySelection = { kind: "all" } | { kind: "unclassified" } | { kind: "default" } | { kind: "watch_later" } | { kind: "collection"; id: number };
+type LibrarySelection = { kind: "all" } | { kind: "default" } | { kind: "watch_later" } | { kind: "collection"; id: number };
 type RemoteFolder = { account: string; folder: string; platform: PlatformSlug; name: string; item_count: number; cover_url?: string | null; observed_state: "present" | "not_found"; last_content_complete_at?: string | null };
 type RemoteFolderItems = { items: UnifiedSearchResult[]; total: number; offset: number; limit: number };
 
@@ -77,10 +77,6 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
     [library.items],
   );
   const watchLaterCount = useMemo(() => library.items.filter((item) => item.watchLater).length, [library.items]);
-  const unclassifiedCount = useMemo(
-    () => library.stats?.unclassified ?? library.items.filter((item) => item.saved && !item.inDefault && !item.collections.length).length,
-    [library.stats, library.items],
-  );
   // 「全部」= 已收藏的内容；只挂在稍后再看上的不算，它有自己的视图。
   const savedCount = useMemo(
     () => library.stats?.saved_count ?? library.items.filter((item) => item.saved).length,
@@ -88,7 +84,6 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
   );
   const visibleItems = useMemo(() => {
     if (selection.kind === "all") return library.items.filter((item) => item.saved);
-    if (selection.kind === "unclassified") return library.items.filter((item) => item.saved && !item.inDefault && !item.collections.length);
     if (selection.kind === "default") return library.items.filter((item) => item.inDefault);
     if (selection.kind === "watch_later") return library.items.filter((item) => item.watchLater);
     return library.items.filter((item) => item.collections.some((tag) => tag.id === selection.id));
@@ -108,14 +103,13 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
   };
   const localFolderCards = useMemo(() => ({
     all: { count: savedCount, cover: localCardCover(library.items.filter((item) => item.saved)) },
-    unclassified: { count: unclassifiedCount, cover: localCardCover(library.items.filter((item) => item.saved && !item.inDefault && !item.collections.length)) },
     default: { count: defaultCount, cover: localCardCover(library.items.filter((item) => item.inDefault)) },
     watchLater: { count: watchLaterCount, cover: localCardCover(library.items.filter((item) => item.watchLater)) },
     collections: library.collections.map((collection) => ({
       ...collection,
       cover: localCardCover(library.items.filter((item) => item.collections.some((tag) => tag.id === collection.id)), collection.id),
     })),
-  }), [library.items, library.collections, savedCount, unclassifiedCount, defaultCount, watchLaterCount]);
+  }), [library.items, library.collections, savedCount, defaultCount, watchLaterCount]);
 
   // 收藏夹被删除后回到「全部」
   useEffect(() => {
@@ -284,8 +278,6 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
       ? `${defaultCount} 条默认收藏 · 点击收藏按钮可独立加入或移出`
       : selection.kind === "watch_later"
         ? `${watchLaterCount} 条稍后再看 · 不会修改平台原生收藏`
-        : selection.kind === "unclassified"
-          ? `${unclassifiedCount} 条未分类内容 · 尚未加入默认或自建收藏夹`
         : `${savedCount} 条已收藏 · 收藏与备注保存在本机数据库`;
 
   const setLocalView = (view: LocalFolderView) => {
@@ -385,7 +377,6 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
           <section className="local-folder-section" aria-label="快捷分类"><h3>快捷分类</h3><div className="local-folder-grid">
             {([
               ["all", "全部收藏", localFolderCards.all],
-              ["unclassified", "未分类", localFolderCards.unclassified],
               ["default", "默认收藏夹", localFolderCards.default],
               ["watch_later", "稍后再看", localFolderCards.watchLater],
             ] as const).map(([kind, label, card]) => <article className="local-folder-card" key={kind}>
@@ -408,13 +399,6 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
               onClick={() => setSelection({ kind: "all" })}
             >
               <Bookmark aria-hidden="true" />全部<span>{savedCount}</span>
-            </button>
-            <button
-              type="button"
-              className={`library-side-item ${selection.kind === "unclassified" ? "active" : ""}`}
-              onClick={() => setSelection({ kind: "unclassified" })}
-            >
-              <FolderHeart aria-hidden="true" />未分类<span>{unclassifiedCount}</span>
             </button>
             <button
               type="button"

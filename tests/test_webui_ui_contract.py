@@ -534,3 +534,15 @@ def test_folder_cards_share_the_poster_stack_geometry():
         inner = match.group(1)
         assert "FolderHeart" not in inner and "<Icon />" not in inner, \
             f"{prefix}-folder-cover 里又出现占位图标了"
+
+
+def test_local_favorites_has_no_unclassified_view():
+    """本地收藏不再提供「未分类」视图（2026-09-23 按用户要求移除，用户强调过两次）。
+
+    它原本是列表侧栏与图标网格里的一项。后端仍保留 `stats.unclassified` 与
+    `GET /items?unclassified=true` 作为数据能力（见 docs/decisions/2026-09-23-移除未分类视图.md），
+    所以这条只钉界面：组件里不许再出现这个分类名，也不许有它的选中态分支。
+    """
+    favorites = (_ROOT / "components" / "favorites" / "FavoritesPage.tsx").read_text(encoding="utf-8")
+    assert "未分类" not in favorites, "「未分类」又回到界面文案里了"
+    assert '"unclassified"' not in favorites, "「未分类」的选中态/筛选分支又回来了"

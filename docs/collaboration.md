@@ -13,6 +13,15 @@
 
 ## 最近交接
 
+### REMOVE-UNCLASSIFIED-20260923 — 本地收藏去掉「未分类」视图
+
+- 负责人：WorkBuddy / 当前会话；工作区：`MediaCrawler-main`；分支：`master`；起始提交：`d36e12e`。
+- 范围：`webui/src/components/favorites/FavoritesPage.tsx`、`CHANGELOG.md`、`docs/features/favorites-library.md`、`docs/decisions/2026-09-23-移除未分类视图.md`。只删界面入口，后端（`api/routers/library.py`、`api/services/library_store.py`）与 `webui/src/lib/libraryApi.ts` 的响应类型未动。
+- 结果：列表侧栏与图标网格都不再有「未分类」；`LibrarySelection` 的 `unclassified` 分支、`unclassifiedCount` memo、`localFolderCards.unclassified` 与那条摘要文案一并删除（不留死代码）。后端 `stats.unclassified` 与 `GET /items?unclassified=true` 保留为数据能力，取舍与理由见新加的决策记录。内容不会因此失去入口——「全部」的口径是 `saved`，与归夹无关。
+- 验证：前端 `npm run test:search` 367 通过、`npm run build` 通过；pytest `tests/test_docs_wiki.py` + `tests/test_webui_ui_contract.py` 通过。隔离渲染（临时 SQLite + TestClient + `webui/dist` + Playwright 拦 `/api`）在列表模式与图标模式两种视图下确认「未分类」不再出现、其余内置视图与自建夹不受影响。后端字段仍在，`tests/test_library_store.py` / `tests/test_library_api.py` 未改、未跑（本轮不动后端）。
+- 交付定位：`git log --all --grep=REMOVE-UNCLASSIFIED-20260923`。`webui/dist` 随本轮生产构建更新；已打包的 EXE 不会自动更新。
+- 未完成 / 待核实：`webui/src/lib/libraryApi.ts` 的 `stats.unclassified` 字段现在只剩类型声明（前端无消费方）——保留是刻意的，理由见决策记录。
+
 ### FOLDER-CARD-BILI-20260922 — 收藏夹卡片对齐 B站 的「一页海报 + 两层副本」
 
 - 负责人：WorkBuddy / 当前会话；工作区：`MediaCrawler-main`；分支：`master`；起始提交：`88a7185`。
