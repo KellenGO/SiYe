@@ -171,12 +171,12 @@ export function useAutoAccountSync(): AutoAccountSyncState {
         } else {
           const summary = buildBulkSummaryMessage(counts);
           if (summary.tone === "success") {
-            toast.success(summary.title);
+            toast.success(summary.title, { position: "top-center" });
           } else if (summary.tone === "warning") {
-            toast.warning(summary.title, { description: summary.description });
+            toast.warning(summary.title, { description: summary.description, position: "top-center" });
           } else {
             // "已导入待确认"这类结果也必须看得见 —— 否则用户会以为什么都没发生。
-            toast.info(summary.title);
+            toast.info(summary.title, { position: "top-center" });
           }
           showNote(summary.title);
         }
@@ -247,9 +247,9 @@ export function useAutoAccountSync(): AutoAccountSyncState {
       }
       const summary = buildVerifySummaryMessage(counts);
       if (summary.tone === "warning") {
-        toast.warning(summary.title, { description: summary.description });
+        toast.warning(summary.title, { description: summary.description, position: "top-center" });
       } else {
-        toast.info(summary.title);
+        toast.info(summary.title, { position: "top-center" });
       }
       showNote(summary.title);
     } finally {
