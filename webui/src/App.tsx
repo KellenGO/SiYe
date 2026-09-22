@@ -168,10 +168,7 @@ function App() {
         <AuthorFooter onShowDisclaimer={handleShowDisclaimer} onNavigateHelp={() => navigate('help')} />
       )}
 
-      {/* Toast notifications - Theme-aware style。
-          全局只挂这一个 Toaster：sonner 的每个 Toaster 实例都会渲染所有位置的分节，
-          挂两个会把每条 toast 画两遍。需要出现在顶部居中的提示，在 toast 上
-          显式传 position: "top-center"，由这同一个 Toaster 渲染。 */}
+      {/* 普通通知默认在右上；登录复核的单条位置由其自身样式控制。 */}
       <Toaster
         position="top-right"
         toastOptions={{

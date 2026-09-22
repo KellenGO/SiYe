@@ -1706,3 +1706,12 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
 .trending-word { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .trending-heat { flex: none; color: rgb(var(--cyber-text-muted)); font-size: 11px; font-variant-numeric: tabular-nums; }
 @media (max-width: 700px) { .trending-list { grid-template-columns: 1fr; } }
+/* Sonner's global container is right-aligned. Login verification is a
+   page-level report, so its own fixed box is centered without moving other
+   notifications. */
+.account-verification-toast {
+  position: fixed !important;
+  top: 1rem !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+}

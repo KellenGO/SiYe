@@ -247,9 +247,12 @@ export function useAutoAccountSync(): AutoAccountSyncState {
       }
       const summary = buildVerifySummaryMessage(counts);
       if (summary.tone === "warning") {
-        toast.warning(summary.title, { description: summary.description, position: "top-center" });
+        toast.warning(summary.title, {
+          description: summary.description,
+          className: "account-verification-toast",
+        });
       } else {
-        toast.info(summary.title, { position: "top-center" });
+        toast.info(summary.title, { className: "account-verification-toast" });
       }
       showNote(summary.title);
     } finally {
