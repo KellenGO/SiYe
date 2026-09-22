@@ -13,11 +13,30 @@
 
 ## 产品截图
 
-![四野搜索结果页：小红书、抖音、B站、知乎结果合并展示](site/shot-search.png)
+**首页**：热搜卡片 + 搜索入口，勾选要搜的平台：
+
+![首页：热搜与搜索入口](docs/images/shot-home.png)
+
+**一次搜索，一个结果页**：四平台结果统一排序、平台内筛选、可导出：
+
+![聚合搜索结果页](docs/images/shot-search.png)
+
+| 本机收藏 | 跨平台收藏 |
+| --- | --- |
+| ![本机收藏](docs/images/shot-favorites.png) | ![跨平台收藏](docs/images/shot-fav-cross.png) |
+
+| 看过的历史 | 账号与登录 |
+| --- | --- |
+| ![看过的历史](docs/images/shot-history.png) | ![账号与登录](docs/images/shot-settings-account.png) |
+
+| 外观 · 浅色 | 外观 · 暗色 |
+| --- | --- |
+| ![外观浅色](docs/images/shot-appearance-light.png) | ![外观暗色](docs/images/shot-appearance-dark.png) |
+
+> 截图中的内容封面与作者昵称已做打码处理。
 
 - 推广落地页：<https://kellengo.github.io/SiYe/>（仓库内 `site/index.html`，单文件无依赖，可直接部署到静态托管）
 - 使用说明：<https://kellengo.github.io/SiYe/guide.html>（仓库内 `docs/使用说明.md`）
-- 首页与账号设置截图：`site/shot-home.png`、`site/shot-account.png`
 
 ## 文档入口
 
