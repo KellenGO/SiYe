@@ -68,7 +68,7 @@
 - **平台相关的东西不许写死**：分页大小与单请求超时是 `aggregate_search/favorites_sync.py` 的 `PAGE_SIZE` / `REQUEST_TIMEOUT`（落库换算位置也用它），平台名、页大小都从调用方传进 `begin_scan` / `save_sync_page`。复刻到其他平台时，这是前提条件之一。**上别的平台前必须先跑只读探测**（`scripts/probe_bilibili_favorites.py` 是模板），确认收藏时间是否单调、翻页是否稳定、总数是否一致——不稳的平台上指纹校验会频繁判「列表变化」，每次同步都白跑。
 - 「可预期的同步失败」和「代码 bug」要分开：分页同步自己抛 `FavoritesSyncError`、归档落库抛 `SyncStateError`，两者才会被翻译成「列表变化，请重新同步」的安全文案；其他 `ValueError` 按原样暴露，别包装掉。
 - **别在 CSS 里引用没定义的变量**（2026-09-22 修）：收藏夹卡片原来引用了 `--siye-surface` / `--siye-border` / `--siye-primary` / `--siye-text` / `--siye-danger` 五个**全仓库都没有定义**的变量。变量拼错不报错 —— `background` 整条失效（空夹变成一块纯白板 + 一个灰心形），`border: 1px solid var(...)` 这种简写更狠，整条降级成 `border-style: none`，于是「两层副本」一个像素都没画出来（用户看到的"没有多个文件的感觉"就是这个）。正确名字是 `--siye-bg` / `--siye-line` / `--siye-brand` / `--siye-ink` / `--siye-red`；`tests/test_webui_ui_contract.py::test_css_theme_variables_are_all_defined` 拦这一类。
-- `.remote-folder-cover` 里的封面图与兜底图标必须叠在同一格（`img, svg { grid-area: 1 / 1 }`）。少了它两个子元素各占一行网格：心形图标独占第一行、封面被压到第二行只剩 85px 高（本该 120px），看起来像"图标浮在封面上面"。`.local-folder-cover` 一直是对的，只有跨平台那份漏了。
+- **封面格只放封面图和数量角标，不渲染占位图标**（2026-09-22 用户明确要求去掉：它既浮在每一张封面之上，空夹那边也多余）。两个坑记在这里：① 图标与图若同格叠放，必须靠**图片的 `z-index`** 压住图标 —— 图标带 `opacity`，会自建层叠上下文而被排到比流内图片更晚的绘制层，光把图片写在 DOM 后面盖不住（这就是"心形浮在所有封面之上"的原因）；② 少了 `grid-area: 1 / 1`（`.remote-folder-cover` 曾漏掉，`.local-folder-cover` 一直有）两个子元素会各占一行网格：图标独占第一行、封面被压到 2.3:1。空夹现在只有浅色渐变底 + 数量角标。
 
 ## 测试怎么跑
 

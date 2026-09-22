@@ -724,8 +724,11 @@ html.dark .search-submit { color: #101525; }
 .remote-folder-stack span:first-child { top: -10px; right: 16px; bottom: 0; left: 16px; background: color-mix(in srgb, var(--siye-line) 30%, var(--siye-bg)); }
 .remote-folder-stack span:last-child { top: -5px; right: 8px; bottom: 0; left: 8px; background: color-mix(in srgb, var(--siye-line) 55%, var(--siye-bg)); }
 .remote-folder-cover { display: grid; place-items: center; position: relative; z-index: 1; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 10px; background: linear-gradient(145deg, var(--siye-soft), color-mix(in srgb, var(--siye-line) 50%, var(--siye-bg))); color: var(--siye-muted); box-shadow: 0 1px 2px rgb(20 30 70 / .06); transition: box-shadow .18s ease; }
+/* 封面格只放封面图 + 右下角角标，不渲染占位图标（用户明确不要；它以前浮在每张封面之上）。
+   日后若再加占位图标：必须与图同格（grid-area: 1 / 1）叠放，并靠图片的 z-index 压住 ——
+   图标带 opacity 会自建层叠上下文，被排到比流内图片更晚的绘制层，光靠 DOM 顺序（图在后）压不住。 */
 .remote-folder-cover img, .remote-folder-cover svg { grid-area: 1 / 1; }
-.remote-folder-cover img { width: 100%; height: 100%; object-fit: cover; }
+.remote-folder-cover img { position: relative; z-index: 1; width: 100%; height: 100%; object-fit: cover; }
 .remote-folder-cover svg { width: 27px; height: 27px; opacity: .5; }
 .remote-folder-cover::after { content: ""; position: absolute; right: 0; bottom: 0; left: 0; height: 42%; pointer-events: none; background: linear-gradient(to top, rgb(8 12 24 / .55), rgb(8 12 24 / 0)); }
 .remote-folder-count { position: absolute; z-index: 2; right: 8px; bottom: 6px; color: #fff; font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums; text-shadow: 0 1px 3px rgb(0 0 0 / .5); }
@@ -762,8 +765,8 @@ html.dark .search-submit { color: #101525; }
 .local-folder-stack span:first-child { top: -10px; right: 16px; bottom: 0; left: 16px; background: color-mix(in srgb, var(--siye-line) 30%, var(--siye-bg)); }
 .local-folder-stack span:last-child { top: -5px; right: 8px; bottom: 0; left: 8px; background: color-mix(in srgb, var(--siye-line) 55%, var(--siye-bg)); }
 .local-folder-cover { display: grid; position: relative; z-index: 1; place-items: center; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 10px; background: linear-gradient(145deg, var(--siye-soft), color-mix(in srgb, var(--siye-line) 50%, var(--siye-bg))); color: var(--siye-muted); box-shadow: 0 1px 2px #2029450f; transition: box-shadow .18s ease; }
-.local-folder-cover img { grid-area: 1 / 1; width: 100%; height: 100%; object-fit: cover; }
-.local-folder-cover svg { grid-area: 1 / 1; width: 27px; height: 27px; opacity: .5; }
+.local-folder-cover img, .local-folder-cover svg { grid-area: 1 / 1; }
+.local-folder-cover img { position: relative; z-index: 1; width: 100%; height: 100%; object-fit: cover; }
 .local-folder-cover::after { content: ""; position: absolute; right: 0; bottom: 0; left: 0; height: 42%; pointer-events: none; background: linear-gradient(to top, rgb(8 12 24 / .55), rgb(8 12 24 / 0)); }
 .local-folder-count { position: absolute; z-index: 2; right: 8px; bottom: 6px; color: #fff; font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums; text-shadow: 0 1px 3px rgb(0 0 0 / .5); }
 .local-folder-name { display: block; overflow: hidden; margin-top: 12px; text-overflow: ellipsis; white-space: nowrap; color: var(--siye-ink); font-size: 14px; font-weight: 650; }

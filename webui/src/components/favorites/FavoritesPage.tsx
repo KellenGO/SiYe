@@ -384,17 +384,17 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
           </div>
           <section className="local-folder-section" aria-label="快捷分类"><h3>快捷分类</h3><div className="local-folder-grid">
             {([
-              ["all", "全部收藏", Bookmark, localFolderCards.all],
-              ["unclassified", "未分类", FolderHeart, localFolderCards.unclassified],
-              ["default", "默认收藏夹", FolderHeart, localFolderCards.default],
-              ["watch_later", "稍后再看", Clock3, localFolderCards.watchLater],
-            ] as const).map(([kind, label, Icon, card]) => <article className="local-folder-card" key={kind}>
-              <button type="button" className="local-folder-open" onClick={() => openLocalFolder({ kind })}><span className="local-folder-stack" aria-hidden="true"><span /><span /></span><span className="local-folder-cover"><Icon />{card.cover && <img src={card.cover} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} />}<span className="local-folder-count">{card.count} 条</span></span><span className="local-folder-name" title={label}>{label}</span><span className="local-folder-meta"><span>本地分类</span></span></button>
+              ["all", "全部收藏", localFolderCards.all],
+              ["unclassified", "未分类", localFolderCards.unclassified],
+              ["default", "默认收藏夹", localFolderCards.default],
+              ["watch_later", "稍后再看", localFolderCards.watchLater],
+            ] as const).map(([kind, label, card]) => <article className="local-folder-card" key={kind}>
+              <button type="button" className="local-folder-open" onClick={() => openLocalFolder({ kind })}><span className="local-folder-stack" aria-hidden="true"><span /><span /></span><span className="local-folder-cover">{card.cover && <img src={card.cover} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} />}<span className="local-folder-count">{card.count} 条</span></span><span className="local-folder-name" title={label}>{label}</span><span className="local-folder-meta"><span>本地分类</span></span></button>
             </article>)}
           </div></section>
           <section className="local-folder-section" aria-label="自建收藏夹"><h3>自建收藏夹</h3>
             {localFolderCards.collections.length ? <div className="local-folder-grid">{localFolderCards.collections.map((collection) => <article className="local-folder-card" key={collection.id}>
-              <button type="button" className="local-folder-open" onClick={() => openLocalFolder({ kind: "collection", id: collection.id })}><span className="local-folder-stack" aria-hidden="true"><span /><span /></span><span className="local-folder-cover"><FolderHeart />{collection.cover && <img src={collection.cover} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} />}<span className="local-folder-count">{collection.item_count} 条</span></span><span className="local-folder-name" title={customCollectionLabel(collection.name)}>{customCollectionLabel(collection.name)}</span><span className="local-folder-meta"><span>本地收藏夹</span></span></button>
+              <button type="button" className="local-folder-open" onClick={() => openLocalFolder({ kind: "collection", id: collection.id })}><span className="local-folder-stack" aria-hidden="true"><span /><span /></span><span className="local-folder-cover">{collection.cover && <img src={collection.cover} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} />}<span className="local-folder-count">{collection.item_count} 条</span></span><span className="local-folder-name" title={customCollectionLabel(collection.name)}>{customCollectionLabel(collection.name)}</span><span className="local-folder-meta"><span>本地收藏夹</span></span></button>
               <details className="local-folder-actions" onClick={(event) => event.stopPropagation()}><summary aria-label={`更多操作：${collection.name}`}><MoreHorizontal /></summary>{renaming === collection.id ? <span className="local-card-rename"><input className="field" aria-label={`重命名收藏夹 ${collection.name}`} value={renameValue} autoFocus maxLength={60} onChange={(event) => setRenameValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void submitRename(collection.id); if (event.key === "Escape") setRenaming(null); }} /><button type="button" onClick={() => void submitRename(collection.id)}><Check /></button><button type="button" onClick={() => setRenaming(null)}><X /></button></span> : <><button type="button" onClick={() => { setRenaming(collection.id); setRenameValue(collection.name); }}><Pencil />重命名</button><button type="button" className="danger" onClick={() => void library.deleteCollection(collection.id)}><Trash2 />删除</button></>}</details>
             </article>)}</div> : <p className="local-folder-empty">还没有自建收藏夹。新建后，可在内容列表中把同一条内容放进多个收藏夹。</p>}
           </section>
@@ -605,7 +605,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
               <div className="remote-folder-grid">
                 {remoteFolders.map((folder) => <button type="button" className="remote-folder-card" key={`${folder.platform}:${folder.account}:${folder.folder}`} onClick={() => openRemoteFolder(folder)}>
                   <span className="remote-folder-stack" aria-hidden="true"><span /><span /></span>
-                  <span className="remote-folder-cover"><FolderHeart />{folder.cover_url && <img src={folder.cover_url} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} />}<span className="remote-folder-count">{folder.item_count} 条</span></span>
+                  <span className="remote-folder-cover">{folder.cover_url && <img src={folder.cover_url} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} />}<span className="remote-folder-count">{folder.item_count} 条</span></span>
                   <span className="remote-folder-name" title={folder.name}>{folder.name}</span><span className="remote-folder-meta"><i className="pd" style={{ backgroundColor: PLATFORM_COLORS[folder.platform] }} />{PLATFORM_LABELS[folder.platform]} · {folder.observed_state === "not_found" ? "平台暂未找到" : "只读"}</span>
                 </button>)}
               </div>

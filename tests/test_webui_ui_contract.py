@@ -505,7 +505,9 @@ def test_folder_cards_share_the_poster_stack_geometry():
         assert "aspect-ratio: 16 / 9" in cover, f"{prefix} 海报不再是 16:9"
         assert "height:" not in cover, f"{prefix} 海报不该再有固定高度（会和 aspect-ratio 打架）"
         assert "grid-area: 1 / 1" in _css_rule(css, f".{prefix}-folder-cover img"), \
-            f"{prefix} 封面图没和兜底图标叠在同一格"
+            f"{prefix} 封面图没和占位图标叠在同一格"
+        assert "z-index: 1" in _css_rule(css, f".{prefix}-folder-cover img {{"), \
+            f"{prefix} 封面图没显式压住占位图标（图标带 opacity 会自建层叠上下文，反过来盖住图）"
         assert "position: absolute" in _css_rule(css, f".{prefix}-folder-count {{"), \
             f"{prefix} 数量角标必须脱离网格流，否则会给海报多加一格"
         assert "top: 12px" in _css_rule(css, f".{prefix}-folder-stack {{"), \
@@ -520,3 +522,15 @@ def test_folder_cards_share_the_poster_stack_geometry():
     favorites = (_ROOT / "components" / "favorites" / "FavoritesPage.tsx").read_text(encoding="utf-8")
     for class_name in ("remote-folder-count", "local-folder-count"):
         assert f'className="{class_name}"' in favorites, f"{class_name} 角标没渲染出来"
+
+    # 封面格里只允许封面图和角标：占位图标曾浮在所有封面之上，用户明确要求不要。
+    for prefix in ("remote", "local"):
+        match = re.search(
+            rf'className="{prefix}-folder-cover">(.*?)<span className="{prefix}-folder-count"',
+            favorites,
+            re.S,
+        )
+        assert match, f"找不到 {prefix}-folder-cover 的结构"
+        inner = match.group(1)
+        assert "FolderHeart" not in inner and "<Icon />" not in inner, \
+            f"{prefix}-folder-cover 里又出现占位图标了"

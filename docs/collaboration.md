@@ -22,6 +22,7 @@
 - 数据边界：只改视觉与一处 JSX 角标节点，未改接口、未改库、未访问平台或真实收藏库；角标文案沿用全站既有的「条」。
 - 未完成 / 待核实：未在真实 B站 数据上跑（本轮不访问账号）；未跑全量 pytest（只跑了文档与契约两个文件）。另发现一处**未改动**：图标模式的浏览偏好（`siye.favorites.local-folder-view.v1`）重新打开页面后不会直接进图标网格——`localFolderRoot` 初始为 `false`，得再点一次工具栏的「图标」；本轮只做卡片视觉，没碰这个状态初始化。
 - 交付定位：`git log --all --grep=FOLDER-CARD-BILI-20260922`。`webui/dist` 已由本轮生产构建对齐；用户手上已打包的 EXE 不会自动更新。
+- **追加（用户看完实机后的返工）**：去掉封面格里的占位图标（`FolderHeart` / 分类 `<Icon />`）。根因是层叠上下文：图标带 `opacity: .5`，会被排到比流内图片更晚的绘制层，DOM 顺序（图在后）压不住它，于是每张封面正中都浮着一个心形。处理：① 两套卡片的封面格不再渲染任何图标（空夹只剩浅色渐变底 + 数量角标）；② 图片保留 `position: relative; z-index: 1` 作为防线，并在 index.css 注明"日后若要加占位图标必须靠它压住"；③ 契约守卫加两条断言——图片必须带 `z-index: 1`、封面格 markup 里不许出现 `FolderHeart` / `<Icon />`。返工后重跑：`npm run test:search` 367、`npm run build`、pytest 两文件 54 全过；隔离渲染 22 项几何/渲染断言全过（新增"封面格无 svg"与"封面中心 `elementFromPoint` 命中 IMG"两项）。截图已重生成。
 
 ### LOCAL-FOLDER-GRID-20260922 — 本地收藏夹图标模式
 

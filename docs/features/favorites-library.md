@@ -65,7 +65,7 @@
 - 备注超 1000 字是**静默截断**，不给用户提示。
 - `LOCALAPPDATA` 不可用时才回退到应用目录；目标目录不可写会让启动明确失败，不会静默改读空库。
 - 图标模式只在根页展示夹名；内容搜索仍由进入夹后的原有结果列表负责，不能误解为按夹名搜索。切换到图标模式时，若当前已在某个夹中会留在该夹的列表，避免意外跳转。
-- **卡片的视觉几何与跨平台那份共用**（一页 16:9 海报 + 后面两层副本：每退一层左右内缩 8px、上移 5px，只从顶部露出；数量是海报右下角的白色角标，不再放在下面那行）。详见[跨平台收藏同步](remote-favorites-sync.md)；只改一份会让两边漂开，`tests/test_webui_ui_contract.py` 有守卫。
+- **卡片的视觉几何与跨平台那份共用**（一页 16:9 海报 + 后面两层副本：每退一层左右内缩 8px、上移 5px，只从顶部露出；数量是海报右下角的白色角标，不再放在下面那行；封面格只放封面图与角标，不再渲染占位图标）。详见[跨平台收藏同步](remote-favorites-sync.md)；只改一份会让两边漂开，`tests/test_webui_ui_contract.py` 有守卫。
 - **CSS 变量拼错不会报任何错**：`border: 1px solid var(--siye-border)` 这种简写会整条降级成 `border-style: none`（元素一个像素都不画），`background: ... var(--siye-surface) ...` 直接失效。2026-09-22 就是这五个幽灵变量（`--siye-surface` / `--siye-border` / `--siye-primary` / `--siye-text` / `--siye-danger`）让「两层副本」完全没渲染、空收藏夹变成一块纯白板。正确名字是 `--siye-bg` / `--siye-line` / `--siye-brand` / `--siye-ink` / `--siye-red`，`tests/test_webui_ui_contract.py::test_css_theme_variables_are_all_defined` 专门拦这一类。
 
 ## 测试怎么跑
