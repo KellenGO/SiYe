@@ -8,7 +8,7 @@
 
 本项目的产品主体是跨平台搜索，而不是通用爬虫控制台。
 
-> **本仓库是桌面端（Windows）版本。** 同一聚合搜索方向的 Android 客户端由朋友独立开发维护：
+> **本仓库是桌面端（Windows）版本。** 同一聚合搜索方向的 Android 客户端由 MMY 独立开发维护：
 > [OpenScope Android](https://github.com/metaMMY07/MediaCrawler)（详见文末「移动端」）。
 
 ## 产品截图
@@ -247,7 +247,7 @@ CI 在 push / PR 到 `master` 时运行后端测试、前端搜索测试与 buil
 
 ## 移动端（Android）
 
-本仓库只发布 Windows 桌面端。移动端的同源项目由朋友独立开发与维护：
+本仓库只发布 Windows 桌面端。移动端的同源项目由 MMY 独立开发与维护：
 
 - **[OpenScope Android](https://github.com/metaMMY07/MediaCrawler)** —— Kotlin + Jetpack Compose + Material 3，
   面向 B站 / 知乎 / 小红书；在 App 内的官方页面登录，不依赖 PC、Termux 或 root。

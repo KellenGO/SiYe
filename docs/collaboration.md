@@ -24,6 +24,13 @@
 - 验证：人工核对打码后截图；`git status` 确认仅上述文件。未运行测试（无代码改动）。
 - **后续（同任务追加，2026-09-22）**：落地页同步换图 —— `site/` 8 张截图全部换为打码版（shot-search 裁掉底部半条，1600×700；其余 1600×773）；`site/index.html` 首屏图换新并在 features 后新增「界面一览」区块（`.shots` 网格 + 6 张卡，含浅/深主题并排卡）；新增 CSS 已同步进 `guide.html`；guide 两处 `figure.shot` 与 `docs/使用说明.md` 图注随新图更新（账号图从「4/4 已登录」改为 2/4 实拍状态）；`og.png` 已用 `scripts/build_landing_og.py` 重新生成；`site/维护说明.md` 截图表与流程已同步。Playwright 冒烟截图确认 `#shots` 区块浅深主题与 guide 图渲染正常。
 
+### MOBILE-CREDIT-20260922 — Android 客户端归属署名改为 MMY
+
+- 负责人：WorkBuddy / 当前会话；工作区：`MediaCrawler-main`；分支：`master`；起始提交：`1b1fbe6`。
+- 范围：`README.md`（顶部说明与「移动端（Android）」）、`site/index.html`（移动端板块与 FAQ 一条）共 4 处文案：把「由朋友独立开发 / 维护」改为「由 MMY 独立开发 / 维护」。
+- 不动：`docs/decisions/2026-09-15-产品命名与仓库名.md` 里提到「朋友的 Android 版」属当时的决策记录，保留原文；仓库链接 `metaMMY07/MediaCrawler` 未改。
+- 交付定位：`git log --all --grep=MOBILE-CREDIT-20260922`。纯文案交付，未运行测试。
+
 ### COORD-20260922 — 统一协作规则和交接入口
 
 - 负责人：Codex / 当前协作规则会话；工作区：`MediaCrawler-main`；分支：`master`；起始提交：`ab89a90`。
