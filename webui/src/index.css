@@ -834,7 +834,8 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
 .auto-sync-notice {
   position: fixed;
   top: 96px;
-  right: 24px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 60;
   display: inline-flex;
   align-items: center;
@@ -914,7 +915,7 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
   .result-title { font-size: 15px; }
   .result-description { font-size: 12px; line-height: 1.85; }
   .result-meta { gap: 6px 9px; font-size: 10px; }
-  .auto-sync-notice { top: 80px; right: 16px; }
+  .auto-sync-notice { top: 80px; }
   .result-meta .meta-divider { display: none; }
   .row-actions { gap: 2px; }
   .settings-layout { grid-template-columns: 1fr; gap: 23px; }
