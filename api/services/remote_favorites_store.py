@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS remote_favorites (
     platform         TEXT NOT NULL,
     content_id       TEXT NOT NULL,
     content_type     TEXT NOT NULL DEFAULT '',
+    content_key      TEXT NOT NULL DEFAULT '',
     title            TEXT NOT NULL DEFAULT '',
     snippet          TEXT,
     author           TEXT NOT NULL DEFAULT '',
@@ -47,7 +48,7 @@ CREATE TABLE IF NOT EXISTS remote_favorites (
     collection_names TEXT NOT NULL DEFAULT '[]',
     first_seen_at    TEXT NOT NULL,
     last_seen_at     TEXT NOT NULL,
-    UNIQUE (account_key, platform, content_id)
+    UNIQUE (account_key, platform, content_key)
 );
 
 CREATE TABLE IF NOT EXISTS remote_sync_runs (
@@ -78,6 +79,7 @@ class RemoteFavoritesStore(RemoteSyncStateMixin, SqliteStoreBase):
 
     def _bootstrap(self, conn: sqlite3.Connection) -> None:
         super()._bootstrap(conn)
+        self._migrate_remote_content_identity(conn)
         columns = {row[1] for row in conn.execute("PRAGMA table_info(remote_accounts)")}
         if "result_count" not in columns:
             conn.execute("ALTER TABLE remote_accounts ADD COLUMN result_count INTEGER NOT NULL DEFAULT 0")
@@ -93,6 +95,35 @@ class RemoteFavoritesStore(RemoteSyncStateMixin, SqliteStoreBase):
                 observed_state TEXT NOT NULL DEFAULT 'present', last_observed_at TEXT NOT NULL,
                 last_content_complete_at TEXT, PRIMARY KEY(account, folder))""")
         self._enable_wal(conn)
+
+    @staticmethod
+    def _migrate_remote_content_identity(conn: sqlite3.Connection) -> None:
+        """Give Zhihu type/id pairs an internal key without touching local items.
+
+        Earlier caches only had ``content_id`` in their uniqueness constraint,
+        so an article and answer with the same number could overwrite one
+        another.  The old row is retained (a past overwrite cannot be
+        reconstructed), while all future writes use the typed key.
+        """
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(remote_favorites)")}
+        if not columns or "content_key" in columns:
+            return
+        conn.execute("ALTER TABLE remote_favorites RENAME TO remote_favorites_legacy_identity")
+        conn.execute("""CREATE TABLE remote_favorites (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, account_key TEXT NOT NULL DEFAULT 'default',
+            platform TEXT NOT NULL, content_id TEXT NOT NULL, content_type TEXT NOT NULL DEFAULT '',
+            content_key TEXT NOT NULL, title TEXT NOT NULL DEFAULT '', snippet TEXT, author TEXT NOT NULL DEFAULT '',
+            url TEXT NOT NULL DEFAULT '', published_at TEXT, cover_url TEXT, metrics TEXT NOT NULL DEFAULT '{}',
+            collection_names TEXT NOT NULL DEFAULT '[]', first_seen_at TEXT NOT NULL, last_seen_at TEXT NOT NULL,
+            UNIQUE(account_key, platform, content_key))""")
+        conn.execute("""INSERT INTO remote_favorites
+            (id,account_key,platform,content_id,content_type,content_key,title,snippet,author,url,published_at,cover_url,metrics,collection_names,first_seen_at,last_seen_at)
+            SELECT id,account_key,platform,content_id,content_type,
+              CASE WHEN platform='zhihu' AND content_type<>'' THEN content_type || ':' || content_id ELSE content_id END,
+              title,snippet,author,url,published_at,cover_url,metrics,collection_names,first_seen_at,last_seen_at
+            FROM remote_favorites_legacy_identity""")
+        conn.execute("DROP TABLE remote_favorites_legacy_identity")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_remote_favorites_platform ON remote_favorites(account_key, platform)")
 
     # ------------------------------------------------------------------ 写入
 
@@ -113,17 +144,17 @@ class RemoteFavoritesStore(RemoteSyncStateMixin, SqliteStoreBase):
         with self._conn() as conn:
             # 本次没拿到的指标要沿用本机已有的值（见 favorite_snapshot.merge_counts）：
             # 一次超时或只拿到列表字段的同步，不能把以前完整的指标覆盖成残缺版本。
-            ids = [str(row.get("content_id", "")) for row in results]
+            ids = [self._content_key(platform, row) for row in results]
             previous_metrics = {}
             for offset in range(0, len(ids), 500):
                 batch = ids[offset:offset + 500]
                 placeholders = ",".join("?" for _ in batch)
                 previous_metrics.update({
-                    row["content_id"]: row["metrics"]
+                    row["content_key"]: row["metrics"]
                     for row in conn.execute(
-                        "SELECT content_id, metrics FROM remote_favorites "
+                        "SELECT content_key, metrics FROM remote_favorites "
                         "WHERE account_key = ? AND platform = ? "
-                        f"AND content_id IN ({placeholders})",
+                        f"AND content_key IN ({placeholders})",
                         (account_key, platform, *batch),
                     ).fetchall()
                 })
@@ -131,19 +162,20 @@ class RemoteFavoritesStore(RemoteSyncStateMixin, SqliteStoreBase):
                 row = self._split(raw)
                 if not row["content_id"]:
                     continue
-                previous_raw = previous_metrics.get(row["content_id"])
+                row["content_key"] = self._content_key(platform, raw)
+                previous_raw = previous_metrics.get(row["content_key"])
                 if previous_raw:
                     row["metrics"] = encode_metrics(merge_into_result(raw, previous_raw))
                 conn.execute(
                     """
                     INSERT INTO remote_favorites (
-                        account_key, platform, content_id, content_type, title, snippet, author,
+                        account_key, platform, content_id, content_type, content_key, title, snippet, author,
                         url, published_at, cover_url, metrics, collection_names,
                         first_seen_at, last_seen_at)
                     VALUES (
-                        :account_key, :platform, :content_id, :content_type, :title, :snippet, :author,
+                        :account_key, :platform, :content_id, :content_type, :content_key, :title, :snippet, :author,
                         :url, :published_at, :cover_url, :metrics, :collection_names, :now, :now)
-                    ON CONFLICT (account_key, platform, content_id) DO UPDATE SET
+                    ON CONFLICT (account_key, platform, content_key) DO UPDATE SET
                         content_type = excluded.content_type,
                         title = excluded.title,
                         snippet = excluded.snippet,
@@ -261,6 +293,12 @@ class RemoteFavoritesStore(RemoteSyncStateMixin, SqliteStoreBase):
             ensure_ascii=False,
         )
         return row
+
+    @staticmethod
+    def _content_key(platform: str, result: Dict[str, Any]) -> str:
+        content_id = str(result.get("content_id") or "")
+        content_type = str(result.get("content_type") or "")
+        return f"{content_type}:{content_id}" if platform == "zhihu" and content_type else content_id
 
     @staticmethod
     def _row_to_result(row: sqlite3.Row) -> Dict[str, Any]:

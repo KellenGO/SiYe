@@ -52,7 +52,10 @@ class BilibiliFavoritesSource(_Source):
         data=await self.request(self.client.get_created_favorite_folders,int(account.split(":",1)[1])); rows=data.get("list") if isinstance(data,dict) else None
         if rows is None and isinstance(data,dict) and data.get("count")==0:return []
         if not isinstance(rows,list):raise FavoritesSyncError("Invalid favorite folders")
-        return [{"id":str(x["id"]),"name":str(x.get("title") or "默认收藏夹")} for x in rows if isinstance(x,dict) and x.get("id")]
+        if any(not isinstance(x,dict) or not x.get("id") for x in rows): raise FavoritesSyncError("Invalid favorite folder")
+        folders=[{"id":str(x["id"]),"name":str(x.get("title") or "默认收藏夹")} for x in rows]
+        if len({x["id"] for x in folders}) != len(folders): raise FavoritesSyncError("Duplicate favorite folders")
+        return folders
     async def page(self,folder,token):
         number=int(token or 1); data=await self.request(self.client.get_favorite_folder_contents,int(folder["id"]),number,PAGE_SIZE)
         if not isinstance(data,dict) or data.get("has_more") not in (True,False,0,1):raise FavoritesSyncError("Invalid favorite pagination")
@@ -77,7 +80,10 @@ class ZhihuFavoritesSource(_Source):
         while True:
             data=await self.request(self.client.get_user_collections,str(token),offset,PAGE_SIZE); rows=data.get("data") if isinstance(data,dict) else None; paging=data.get("paging") if isinstance(data,dict) else None
             if not isinstance(rows,list) or not isinstance(paging,dict) or paging.get("is_end") not in (True,False):raise FavoritesSyncError("Invalid favorite folders")
-            out += [{"id":str(r["id"]),"name":str(r.get("title") or "默认收藏夹")} for r in rows if isinstance(r,dict) and r.get("id")]
+            if any(not isinstance(r,dict) or not r.get("id") for r in rows): raise FavoritesSyncError("Invalid favorite folder")
+            page_folders=[{"id":str(r["id"]),"name":str(r.get("title") or "默认收藏夹")} for r in rows]
+            if any(item["id"] in {old["id"] for old in out} for item in page_folders): raise FavoritesSyncError("Repeated favorite folder page")
+            out += page_folders
             if paging["is_end"]:return out
             if not rows:raise FavoritesSyncError("Favorite folders cannot advance")
             offset += len(rows)
@@ -120,9 +126,10 @@ async def synchronize_favorites(source:FavoritesSource,store,mode,progress):
     try:
         first_pages={}
         for index,folder in enumerate(folders,1):
-            token=1 if source.platform=="bilibili" else None; sequence=1; run=0; reached=False
+            token=1 if source.platform=="bilibili" else None; sequence=1; run=0; reached=False; folder_read=0
             try:
                 has_baseline=store.has_baseline(account,folder["id"])
+                store.start_folder_diagnostic(account,folder["id"],scan,mode,has_baseline)
                 checkpoint=store.checkpoint(account,folder["id"])
                 if checkpoint and checkpoint["scan"]==scan and not checkpoint["complete"]:
                     # Resume only a partial scan; its baseline remains absent until
@@ -140,11 +147,15 @@ async def synchronize_favorites(source:FavoritesSource,store,mode,progress):
                     crossed,tail=store.baseline_run(account,folder["id"],page.identities,run); reached=reached or crossed
                     stop=incremental and has_baseline and reached
                     store.save_sync_page(source.platform,account,scan,folder["id"],folder["name"],sequence,page.fingerprint,page.results,page.complete or stop,PAGE_SIZE,page.identities,token=token,next_token=page.next_token)
-                    saved += page.count; progress(account,saved,f"正在保存 {folder['name']} · 第 {sequence} 页")
-                    if page.complete or stop: store.complete_folder(account,scan,folder["id"],reconcile=mode=="full"); break
+                    saved += page.count; folder_read += page.count; progress(account,saved,f"正在保存 {folder['name']} · 第 {sequence} 页")
+                    if page.complete or stop:
+                        store.complete_folder(account,scan,folder["id"],reconcile=mode=="full")
+                        store.update_folder_diagnostic(account,folder["id"],scan,pages=sequence,returned=folder_read,stop_reason="history_run" if stop else "end")
+                        break
                     if page.next_token is None or page.next_token==token:raise FavoritesSyncError("Favorite page cannot advance")
                     token,sequence,run=page.next_token,sequence+1,tail
             except (FavoritesSyncError,SyncStateError):
+                store.update_folder_diagnostic(account,folder["id"],scan,pages=sequence,stop_reason="error",error_code="pagination")
                 errors.append(f"收藏夹 {index}：分页返回异常（第 {sequence} 页，已保存 {saved} 条）"); progress(account,saved,f"{errors[-1]}，继续下一个收藏夹")
         if errors: store.sync_status(account,"partial","；".join(errors)[:160]); return errors
         # A completed scan cannot claim a stable head if it changed while we read.

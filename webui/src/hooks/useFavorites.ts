@@ -55,8 +55,14 @@ export function useFavorites() {
 
   const poll = useQuery({
     queryKey: ["favorites-job", jobId],
-    queryFn: async () => (await axios.get<FavoritesJobResponse>(
-      `/api/search/favorites/jobs/${jobId}`)).data,
+    queryFn: async () => {
+      // Running jobs can have a large local archive. Poll only status/summary;
+      // fetch the full snapshot once when the task reaches a terminal state.
+      const { data: summary } = await axios.get<FavoritesJobResponse>(
+        `/api/search/favorites/jobs/${jobId}`, { params: { summary: true } });
+      if (summary.overall === "running") return summary;
+      return (await axios.get<FavoritesJobResponse>(`/api/search/favorites/jobs/${jobId}`)).data;
+    },
     enabled: !!jobId,
     refetchInterval: (query) => query.state.data?.overall === "running" ? 1500 : false,
     retry: 1,

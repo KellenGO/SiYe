@@ -1,13 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import axios from "axios";
 import {
-  AlertTriangle, Bookmark, Check, Clock3, FolderHeart, FolderPlus, Loader2, Pencil, RefreshCw, Trash2, X,
+  AlertTriangle, ArrowLeft, Bookmark, Check, Clock3, FolderHeart, FolderPlus, Loader2, Pencil, RefreshCw, Trash2, X,
 } from "lucide-react";
 import { ResultTabs } from "@/components/search/ResultTabs";
 import { BookmarkBackup } from "@/components/search/BookmarkBackup";
 import { useBookmarks } from "@/hooks/useBookmarks";
 import { useFavorites } from "@/hooks/useFavorites";
 import { parseGroupKey, resultSources } from "@/lib/resultTools";
-import type { PlatformSlug } from "@/types/search";
+import type { PlatformSlug, UnifiedSearchResult } from "@/types/search";
 import { PLATFORM_COLORS, PLATFORM_LABELS, STATUS_LABELS } from "@/types/search";
 import { PLATFORM_SLUGS } from "@/lib/platformMeta";
 
@@ -22,6 +23,8 @@ function errorMessage(error: unknown): string {
 
 /** 本地收藏左侧选择：全部 / 两个内置收藏夹 / 某个自建收藏夹。 */
 type LibrarySelection = { kind: "all" } | { kind: "default" } | { kind: "watch_later" } | { kind: "collection"; id: number };
+type RemoteFolder = { account: string; folder: string; platform: PlatformSlug; name: string; item_count: number; cover_url?: string | null; observed_state: "present" | "not_found"; last_content_complete_at?: string | null };
+type RemoteFolderItems = { items: UnifiedSearchResult[]; total: number; offset: number; limit: number };
 
 function customCollectionLabel(name: string): string {
   return ["全部", "全部收藏", "默认收藏夹", "稍后再看"].includes(name) ? `${name}（自建）` : name;
@@ -53,6 +56,12 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
   const [renameValue, setRenameValue] = useState("");
   const [moving, setMoving] = useState(false);
   const [showRecoveryNotice, setShowRecoveryNotice] = useState(false);
+  const [remoteFolders, setRemoteFolders] = useState<RemoteFolder[]>([]);
+  const [remoteFolderView, setRemoteFolderView] = useState<RemoteFolder | null>(null);
+  const [remoteFolderItems, setRemoteFolderItems] = useState<RemoteFolderItems | null>(null);
+  const [remoteFolderLoading, setRemoteFolderLoading] = useState(false);
+  const folderRequest = useRef(0);
+  const gridScrollY = useRef(0);
 
   const defaultCount = useMemo(
     () => library.items.filter((item) => item.inDefault).length,
@@ -112,6 +121,45 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
     () => Object.fromEntries(PLATFORMS.map((platform) => [platform, data?.platforms[platform]?.synced_at ?? null])),
     [data],
   );
+
+  useEffect(() => {
+    if (tab !== "remote") return;
+    let alive = true;
+    axios.get<RemoteFolder[]>("/api/search/favorites/folders")
+      .then(({ data: folders }) => { if (alive) setRemoteFolders(folders); })
+      .catch(() => { if (alive) setRemoteFolders([]); });
+    return () => { alive = false; };
+  }, [tab, data?.data_version, remote.busy]);
+
+  const loadRemoteFolder = async (folder: RemoteFolder, offset = 0) => {
+    const request = ++folderRequest.current;
+    setRemoteFolderLoading(true);
+    try {
+      const { data: page } = await axios.get<RemoteFolderItems>(
+        `/api/search/favorites/folders/${encodeURIComponent(folder.account)}/${encodeURIComponent(folder.folder)}`,
+        { params: { offset, limit: 50 } },
+      );
+      if (request !== folderRequest.current) return;
+      setRemoteFolderItems((previous) => offset && previous
+        ? { ...page, items: [...previous.items, ...page.items] }
+        : page);
+    } finally {
+      if (request === folderRequest.current) setRemoteFolderLoading(false);
+    }
+  };
+
+  const openRemoteFolder = (folder: RemoteFolder) => {
+    gridScrollY.current = window.scrollY;
+    setRemoteFolderView(folder);
+    setRemoteFolderItems(null);
+    void loadRemoteFolder(folder);
+  };
+  const closeRemoteFolder = () => {
+    folderRequest.current += 1;
+    setRemoteFolderView(null);
+    setRemoteFolderItems(null);
+    requestAnimationFrame(() => window.scrollTo({ top: gridScrollY.current }));
+  };
 
   const togglePlatform = (platform: PlatformSlug) => setSelected((before) => {
     const next = new Set(before);
@@ -240,7 +288,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
               </button>)}
             </div>
             <p className="collection-count">
-              B站读取完整收藏列表（不限条数），其余平台每次最多 100 条 · 同步只读取，不会修改平台收藏。
+              B站、知乎读取接口可返回的完整收藏分页（不限产品侧条数）；小红书仍为单一收藏笔记入口 · 同步只读取，不会修改平台收藏。
               <button type="button" className="text-link" disabled={!selected.size || remote.busy}
                 onClick={() => void remote.sync([...selected], "full")}>完整重扫</button>
             </p>
@@ -443,18 +491,40 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
         <div className="empty" role="status"><div className="empty-symbol"><Loader2 className="spinner" /></div><h2>正在整理你的收藏</h2><p>先获取列表，再补充内容信息。</p></div>
       ) : data ? (
         <>
-          <p className="collection-count">本机已保存 {data.results.length} 条 · 同步只拉新增，未取到的旧内容保留；要彻底对齐可用「完整重扫」</p>
+          <p className="collection-count">本机已保存 {data.results.length} 条 · 同步只读取并保存观察到的内容，未取到的旧内容保留；要彻底对齐可用「完整重扫」</p>
           <div className="progress-strip" aria-live="polite">
             {Object.entries(data.platforms).map(([platform, info]) => info && <span key={platform} className="progress-item">
-              {PLATFORM_LABELS[platform as PlatformSlug]}：{info.status === "running" ? "同步中" : STATUS_LABELS[info.status]} · 本次获取 {info.result_count} 条 · 本机保留 {retainedCounts[platform as PlatformSlug]} 条
+              {PLATFORM_LABELS[platform as PlatformSlug]}：{info.status === "running" ? "同步中" : STATUS_LABELS[info.status]} · 本次读取并保存 {info.result_count} 条 · 本机保留 {retainedCounts[platform as PlatformSlug]} 条
               {info.synced_at && <small>同步于 {new Date(info.synced_at).toLocaleString("zh-CN")}</small>}
               {info.phase && <small>{info.phase}</small>}
             </span>)}
           </div>
           {!remote.busy && Object.values(data.platforms).some(info => info?.status === "cancelled") && <p className="collection-count" role="status">同步已取消，已获取的内容和历史收藏仍会保留。</p>}
           {Object.entries(data.platforms).some(([, info]) => info && !["succeeded", "empty", "running", "pending", "cancelled"].includes(info.status)) && <div className="status-line"><span className="status-message"><AlertTriangle />部分平台没有完成：{Object.entries(data.platforms).filter(([, info]) => info && !["succeeded", "empty", "running", "pending", "cancelled"].includes(info.status)).map(([platform, info]) => `${PLATFORM_LABELS[platform as PlatformSlug]} ${info?.error_summary || STATUS_LABELS[info!.status]}`).join("；")}</span><button type="button" className="text-link" onClick={onNavigateAccounts}>检查账号</button></div>}
-          {/* 和 V0.3 一样：平台页签直接点着切，结果一次拿全；只是先渲染 100 条，其余点「显示更多」 */}
-          <ResultTabs results={data.results} overall={data.overall} jobId={data.job_id} platforms={Object.keys(data.platforms) as PlatformSlug[]} library={library} fetchedAt={fetchedAt} pageSize={100} />
+          {remoteFolderView ? (
+            <section className="remote-folder-detail" aria-label={`平台收藏夹 ${remoteFolderView.name}`}>
+              <button type="button" className="text-link remote-folder-back" onClick={closeRemoteFolder}><ArrowLeft />返回收藏夹</button>
+              <div className="remote-folder-title"><div><span className="remote-readonly">平台只读</span><h2>{remoteFolderView.name}</h2><p>{PLATFORM_LABELS[remoteFolderView.platform]} · 本机已同步 {remoteFolderView.item_count} 条</p></div></div>
+              {remoteFolderLoading && !remoteFolderItems ? <div className="empty"><Loader2 className="spinner" /><p>正在读取本机镜像…</p></div> : remoteFolderItems?.items.length ? <>
+                <p className="collection-count">当前已加载 {remoteFolderItems.items.length} / {remoteFolderItems.total} 条；搜索、排序和导出仅作用于当前已加载内容。</p>
+                <ResultTabs key={`${remoteFolderView.account}-${remoteFolderView.folder}-${remoteFolderItems.items.length}`} results={remoteFolderItems.items} overall="completed" jobId="remote-folder" platforms={[remoteFolderView.platform]} library={library} pageSize={remoteFolderItems.items.length} />
+                {remoteFolderItems.items.length < remoteFolderItems.total && <div className="library-batch-bar"><span>还有 {remoteFolderItems.total - remoteFolderItems.items.length} 条本机镜像</span><button type="button" className="btn small" disabled={remoteFolderLoading} onClick={() => void loadRemoteFolder(remoteFolderView, remoteFolderItems.items.length)}>{remoteFolderLoading ? "正在读取" : "显示更多"}</button></div>}
+              </> : <div className="empty"><div className="empty-symbol"><FolderHeart /></div><h2>这个平台收藏夹还是空的</h2><p>{remoteFolderView.last_content_complete_at ? "已完成读取，平台当前没有可保存内容。" : "目录已同步，内容仍待下一次手动同步读取。"}</p></div>}
+            </section>
+          ) : <>
+            {remoteFolders.length > 0 && <section className="remote-folder-section" aria-label="平台收藏夹">
+              <div className="remote-folder-intro"><div><span className="eyebrow">PLATFORM FOLDERS</span><h2>平台收藏夹</h2><p>只读镜像；点开后可将内容另存到自己的本地收藏夹。</p></div><span className="remote-readonly">名称与归属来自平台</span></div>
+              <div className="remote-folder-grid">
+                {remoteFolders.map((folder) => <button type="button" className="remote-folder-card" key={`${folder.platform}:${folder.account}:${folder.folder}`} onClick={() => openRemoteFolder(folder)}>
+                  <span className="remote-folder-stack" aria-hidden="true"><span /><span /></span>
+                  <span className="remote-folder-cover"><FolderHeart />{folder.cover_url && <img src={folder.cover_url} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} />}</span>
+                  <span className="remote-folder-name" title={folder.name}>{folder.name}</span><span className="remote-folder-meta"><i className="pd" style={{ backgroundColor: PLATFORM_COLORS[folder.platform] }} />{PLATFORM_LABELS[folder.platform]} · {folder.observed_state === "not_found" ? "平台暂未找到" : "只读"}<b>{folder.item_count}</b></span>
+                </button>)}
+              </div>
+            </section>}
+            {/* 保留 V0.3 的平台页签和全部内容入口；它不冒充一个真实平台收藏夹。 */}
+            <section className="remote-all-section"><h2>全部内容</h2><p className="collection-count">含未归属的旧镜像；这里的搜索、排序和导出作用于已加载的跨平台内容。</p><ResultTabs results={data.results} overall={data.overall} jobId={data.job_id} platforms={Object.keys(data.platforms) as PlatformSlug[]} library={library} fetchedAt={fetchedAt} pageSize={100} /></section>
+          </>}
         </>
       ) : (
         <div className="empty"><div className="empty-symbol"><FolderHeart /></div><h2>把喜欢的内容，放到一起</h2><p>选择平台后点击同步，四处散落的收藏会汇到这里。</p><button type="button" className="btn" onClick={() => void remote.sync([...selected])}>同步收藏</button></div>

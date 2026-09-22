@@ -706,6 +706,32 @@ html.dark .search-submit { color: #101525; }
 .collection-switch { gap: 28px; margin-bottom: 31px; }
 .collection-heading .scope { justify-content: flex-start; margin: 16px 0 21px; }
 .collection-count { margin-top: 8px; color: var(--siye-muted); font-size: 12px; }
+
+/* 平台收藏夹是本机只读镜像：用内容封面做一个轻量的书架，而非复用可编辑的本地侧栏。 */
+.remote-folder-section { margin-top: 28px; }
+.remote-folder-intro, .remote-folder-title { display: flex; justify-content: space-between; gap: 18px; align-items: flex-end; }
+.remote-folder-intro h2, .remote-folder-title h2, .remote-all-section h2 { margin: 4px 0; font-size: 20px; }
+.remote-folder-intro p, .remote-folder-title p { margin: 0; color: var(--siye-muted); font-size: 13px; }
+.remote-readonly { display: inline-flex; align-items: center; width: fit-content; border: 1px solid var(--siye-border); border-radius: 999px; padding: 3px 8px; color: var(--siye-muted); font-size: 11px; }
+.remote-folder-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(164px, 1fr)); gap: 26px 18px; margin-top: 20px; }
+.remote-folder-card { position: relative; isolation: isolate; min-width: 0; padding: 0; border: 0; background: transparent; text-align: left; color: inherit; cursor: pointer; }
+.remote-folder-card:hover .remote-folder-cover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--siye-primary) 50%, var(--siye-border)); box-shadow: 0 12px 25px rgb(20 30 70 / .12); }
+.remote-folder-stack { position: absolute; inset: 9px 9px auto; height: 112px; z-index: -1; }
+.remote-folder-stack span { position: absolute; inset: 0; border: 1px solid var(--siye-border); border-radius: 13px; background: color-mix(in srgb, var(--siye-surface) 87%, var(--siye-primary)); }
+.remote-folder-stack span:first-child { transform: translate(7px, 8px); opacity: .38; }
+.remote-folder-stack span:last-child { transform: translate(3px, 4px); opacity: .62; }
+.remote-folder-cover { display: grid; place-items: center; position: relative; height: 120px; overflow: hidden; border: 1px solid var(--siye-border); border-radius: 13px; background: linear-gradient(145deg, color-mix(in srgb, var(--siye-surface) 92%, var(--siye-primary)), var(--siye-surface)); color: var(--siye-muted); transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease; }
+.remote-folder-cover img { width: 100%; height: 100%; object-fit: cover; }
+.remote-folder-cover svg { width: 27px; height: 27px; opacity: .5; }
+.remote-folder-name { display: block; overflow: hidden; margin-top: 12px; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; font-size: 14px; }
+.remote-folder-meta { display: flex; align-items: center; gap: 5px; margin-top: 5px; min-width: 0; color: var(--siye-muted); font-size: 11px; white-space: nowrap; }
+.remote-folder-meta .pd { width: 6px; height: 6px; }
+.remote-folder-meta b { margin-left: auto; color: var(--siye-text); font-variant-numeric: tabular-nums; font-size: 12px; }
+.remote-all-section { margin-top: 38px; padding-top: 22px; border-top: 1px solid var(--siye-border); }
+.remote-folder-detail { margin-top: 26px; }
+.remote-folder-back { display: inline-flex; align-items: center; gap: 5px; margin-bottom: 18px; }
+.remote-folder-back svg { width: 15px; height: 15px; }
+@media (max-width: 620px) { .remote-folder-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 12px; } .remote-folder-intro, .remote-folder-title { align-items: flex-start; flex-direction: column; gap: 8px; } .remote-folder-cover { height: 104px; } }
 .remote-heading { align-items: center; margin-bottom: 0 !important; }
 .remote-heading h2 { margin: 0; color: var(--siye-ink); font-size: 18px; font-weight: 600; }
 .backup-details { position: relative; }

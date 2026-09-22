@@ -70,7 +70,9 @@ async def test_move_rename_deleted_folder_and_account_isolation(store, monkeypat
     client.contents = {12: [1]}
     await sync(store, client, "full")
     item = store.archive_page()["items"][0]
-    assert item["result"]["collection_names"] == ["folder-12"]
+    # A complete directory can no longer see folder-10, but its mirror remains
+    # browseable instead of being silently emptied.
+    assert item["result"]["collection_names"] == ["folder-10", "folder-12"]
     assert item["state"] == "present"
     # 另一个账号的归档互不影响
     await sync(store, FavoriteClient({10: [1]}, mid=2), "full")
