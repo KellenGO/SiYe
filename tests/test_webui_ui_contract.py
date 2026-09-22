@@ -414,3 +414,47 @@ def test_locales_define_the_same_keys():
         only_other = sorted(_locale_keys(other) - _locale_keys(base))
         assert not only_base and not only_other, (
             f"{base} 与 {other} 的键不一致: 缺 {only_base} / 多 {only_other}")
+
+
+# ── 长列表的收口与回顶（2026-09-22）─────────────────────────────────────
+
+
+def test_scroll_to_top_button_is_mounted_and_wired():
+    """返回顶部：组件必须在、挂在应用根部，并且有可见性控制与自身样式。
+
+    收藏页一次只渲染 100 条、点「显示更多」越叠越长，滚到底以后要一路拉回顶部，
+    所以入口放在应用根部（每个页面都在，短页面靠阈值不显示）。
+    """
+    component_path = _ROOT / "components" / "layout" / "ScrollToTopButton.tsx"
+    assert component_path.exists(), "ScrollToTopButton 组件不存在"
+    component = component_path.read_text(encoding="utf-8")
+
+    assert "window.scrollY" in component, "没有按滚动位置判断显隐"
+    assert "window.scrollTo({ top: 0" in component, "没有接回顶动作"
+    assert "is-visible" in component, "缺显隐状态类，按钮会一直可见"
+    assert "action.backToTop" in component, "无障碍名称没走 i18n"
+    assert "<ScrollToTopButton />" in _APP, "组件没挂在 App 上"
+
+
+def test_scroll_to_top_is_positioned_and_has_own_style():
+    """固定在右侧空白处，且在窄屏下不与收藏夹归属弹层抢右下角。"""
+    css = (_ROOT / "index.css").read_text(encoding="utf-8")
+    assert ".scroll-top {" in css
+    assert "position: fixed" in css
+    assert ".scroll-top.is-visible" in css
+    # 归属弹层在窄屏固定到右下角，回顶按钮需要让位
+    assert ".scroll-top { right: 14px" in css
+
+
+def test_library_batch_bar_puts_show_more_on_the_right():
+    """「已显示 x / y 条 + 显示更多」：文字在左、按钮贴右，且按钮用小号。
+
+    这个容器以前只有类名没有样式，文字和按钮挤在一起、按钮还被压得不像按钮。
+    """
+    css = (_ROOT / "index.css").read_text(encoding="utf-8")
+    assert ".library-batch-bar {" in css, "容器样式缺失（历史上就漏了这条）"
+    bar_rule = css.split(".library-batch-bar {", 1)[1].split("}", 1)[0]
+    assert "justify-content: space-between" in bar_rule
+
+    result_tabs = (_ROOT / "components" / "search" / "ResultTabs.tsx").read_text(encoding="utf-8")
+    assert 'className="btn small"' in result_tabs

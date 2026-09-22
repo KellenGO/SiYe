@@ -14,6 +14,16 @@
 
 ## 最近交接
 
+### LONG-LIST-NAV-20260922 — 底部「显示更多」靠右 + 新增返回顶部
+
+- 负责人：WorkBuddy / 当前会话；工作区：`MediaCrawler-main`；分支：`master`；起始提交：`dbd3e23`。
+- 范围：`webui/src/{index.css,App.tsx}`、`webui/src/components/search/ResultTabs.tsx`、新增 `webui/src/components/layout/ScrollToTopButton.tsx`、两个 locale 的 `common.json`、`tests/test_webui_ui_contract.py`、`docs/index.md` + 新增 `docs/features/long-list-navigation.md`。
+- 结果：① 修 `.library-batch-bar` —— 它此前只有类名没有样式，文字与「显示更多」挤在一起、按钮被压扁；现在 flex + `space-between`（文字左、按钮贴右）、按钮走 `.btn small`、顶部一条发丝线收口。② 新增返回顶部按钮，挂在应用根部（`App.tsx`），滚过 400px 淡入、固定视口右下角、走 `action.backToTop` i18n 键，宽窄屏都不与 `.membership-card` 抢右下角。
+- 验证：前端 `npm run test:search`（364 通过）与 `npm run build`（tsc -b + vite build）通过；`tests/test_docs_wiki.py` + `tests/test_webui_ui_contract.py` 共 52 通过（含新增 3 条契约断言）。真实渲染校验用一次性脚本（隔离 SQLite + TestClient + `webui/dist` 构建产物 + Playwright）：跨平台收藏页 120 条时 `.library-batch-bar`「已显示 100 / 120 条」按钮右边界与容器右边界相差 <1px、高 32px；`.scroll-top` 未滚动时 `visibility: hidden`、滚到底 `is-visible`、`position: fixed`、点击后 `scrollY < 5`；390px 视口无横向溢出。**该脚本是一次性的，未提交**。
+- 交付定位：`git log --all --grep=LONG-LIST-NAV-20260922`。
+- 未完成 / 待核实：`scripts/favorites_ui_smoke.py` **目前已过时**（既有问题，非本次引入）：它在跨平台收藏流程找 `重新同步` 按钮，而当前界面已是「同步收藏 / 同步所选平台」等文案（`FavoritesPage.tsx` 与 2026-09-21 的 `2968f7e`「收藏页回到 V0.3 形态；一键同步改为增量」相关），脚本在第 256 行即中断。该段属于 MIRROR-20260922 占用的范围，本次**未擅自修改**；修好后可把长列表断言补进脚本尾部。
+- 另一处观察（有意保留，未改）：**本机收藏页不传 `pageSize`**，一次渲染全部收藏，因此「已显示 / 显示更多」只出现在跨平台收藏页与搜索结果页；用户界面里若看到本机收藏页有这条，那是旧构建。详见 `docs/features/long-list-navigation.md`。
+
 ### DOC-SHOTS-20260922 — README 产品截图更新（含打码）
 
 - 负责人：WorkBuddy / 当前会话；工作区：`MediaCrawler-main`；分支：`master`；起始提交：`6d3cc5f`。

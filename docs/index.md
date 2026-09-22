@@ -19,6 +19,7 @@
 | 外观与主题色（8 种色 × 深浅） | [features/appearance-themes.md](features/appearance-themes.md) | `webui/src/store/themeStore.ts`、`webui/src/index.css` |
 | 热搜卡片（各平台热词 → 一键聚合搜索） | [features/trending-board.md](features/trending-board.md) | `api/services/trending.py`、`webui/src/components/trending/TrendingBoard.tsx` |
 | 返回首页（首页 / 结果页两个视图） | [features/back-to-home.md](features/back-to-home.md) | `webui/src/components/search/SearchPage.tsx`、`webui/src/index.css` |
+| 长列表的「显示更多」与「返回顶部」 | [features/long-list-navigation.md](features/long-list-navigation.md) | `webui/src/components/search/ResultTabs.tsx`、`webui/src/components/layout/ScrollToTopButton.tsx`、`webui/src/index.css` |
 | 平台没搜到时的原因提示（含疑似风控） | [features/platform-failure-reasons.md](features/platform-failure-reasons.md) | `webui/src/components/search/{SearchPage,PlatformStatus}.tsx`、`aggregate_search/worker.py` |
 
 ## 其他文档

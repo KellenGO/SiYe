@@ -738,6 +738,13 @@ html.dark .search-submit { color: #101525; }
 .library-inline-form .field { flex: 1; min-width: 0; padding: 6px 9px; font-size: 12.5px; }
 .library-batch { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; padding: 10px 14px; border: 1px solid var(--siye-line-strong); border-radius: 11px; background: var(--siye-brand-soft); color: var(--siye-brand-ink); font-size: 12.5px; }
 .library-batch .btn { padding: 6px 12px; font-size: 12.5px; }
+/* 列表底部「已显示 x / y 条 + 显示更多」：文字在左、按钮贴右，用发丝线收口。 */
+.library-batch-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--siye-line); color: var(--siye-secondary); font-size: 12.5px; }
+/* 返回顶部：固定在右侧空白处，滚过一屏才淡入（列表很长时一键回顶）。 */
+.scroll-top { position: fixed; right: 24px; bottom: 24px; z-index: 20; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; padding: 0; border: 1px solid var(--siye-line-strong); border-radius: 12px; background: var(--siye-bg); color: var(--siye-secondary); box-shadow: 0 10px 26px #2029451f; opacity: 0; visibility: hidden; transform: translateY(6px); transition: opacity .18s ease, transform .18s ease, visibility .18s ease, border-color .15s ease, color .15s ease; }
+.scroll-top svg { width: 17px; height: 17px; }
+.scroll-top.is-visible { opacity: 1; visibility: visible; transform: none; }
+.scroll-top:hover { border-color: var(--siye-brand); color: var(--siye-brand-ink); }
 .bookmark-meta-actions { display: inline-flex; align-items: center; gap: 8px; }
 .membership-editor { position: relative; }
 .membership-editor > .text-link { display: inline-flex; align-items: center; gap: 4px; }
@@ -757,6 +764,8 @@ html.dark .search-submit { color: #101525; }
   .library-side-row { flex: none; }
   .library-side-action { opacity: 1; }
   .membership-card { position: fixed; top: auto; right: 16px; bottom: 16px; left: 16px; width: auto; max-height: min(420px, calc(100vh - 32px)); overflow-y: auto; }
+  /* 窄屏右下方是收藏夹归属弹层的地盘（上一个规则），回顶按钮让开一点、并压在它下面 */
+  .scroll-top { right: 14px; bottom: 16px; }
   .saved-result-item { margin-bottom: 12px; }
   .saved-result-item .bookmark-note { padding-left: 12px; }
 }

@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useState } from 'react'
 import { Toaster } from 'sonner'
 import { Header, type SettingsSection, type ViewMode } from '@/components/layout/Header'
 import { AuthorFooter } from '@/components/layout/AuthorFooter'
+import { ScrollToTopButton } from '@/components/layout/ScrollToTopButton'
 import { LicenseDisclaimer, isLicenseAccepted } from '@/components/license/LicenseDisclaimer'
 import { SearchPage } from '@/components/search/SearchPage'
 import { AccountAutoSync } from '@/components/accounts/AccountAutoSync'
@@ -167,6 +168,9 @@ function App() {
       {licenseAccepted && !showDisclaimer && (
         <AuthorFooter onShowDisclaimer={handleShowDisclaimer} onNavigateHelp={() => navigate('help')} />
       )}
+
+      {/* 列表长了要一键回顶：固定在右侧空白处，滚过一屏才出现 */}
+      {licenseAccepted && !showDisclaimer && <ScrollToTopButton />}
 
       {/* 普通通知默认在右上；登录复核的单条位置由其自身样式控制。 */}
       <Toaster

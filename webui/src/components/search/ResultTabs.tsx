@@ -239,7 +239,7 @@ export function ResultTabs({
       {hiddenCount > 0 && (
         <div className="library-batch-bar">
           <span>已显示 {renderedResults.length} / {filteredResults.length} 条</span>
-          <button type="button" className="btn" onClick={() => setShown((current) => current + (pageSize ?? 0))}>显示更多</button>
+          <button type="button" className="btn small" onClick={() => setShown((current) => current + (pageSize ?? 0))}>显示更多</button>
         </div>
       )}
 

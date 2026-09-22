@@ -153,7 +153,8 @@
   "action": {
     "loading": "Loading...",
     "skip": "SKIP_CHECK",
-    "retry": "RETRY_SCAN"
+    "retry": "RETRY_SCAN",
+    "backToTop": "Back to top"
   },
   "unit": {
     "entries": "entries",

@@ -153,7 +153,8 @@
   "action": {
     "loading": "加载中...",
     "skip": "跳过检测",
-    "retry": "重新扫描"
+    "retry": "重新扫描",
+    "backToTop": "返回顶部"
   },
   "unit": {
     "entries": "条记录",
