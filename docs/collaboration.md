@@ -18,10 +18,11 @@
 
 - 负责人：WorkBuddy / 当前会话；工作区：`MediaCrawler-main`；分支：`master`；起始提交：`6d3cc5f`。
 - 范围：`README.md`（重写「产品截图」章节）、`docs/images/`（新增 8 张截图）。未触碰 MIRROR-20260922 占用的收藏相关代码。
-- 结果：README 改为嵌入 `docs/images/shot-*.png` 共 8 张（首页 / 搜索 / 本机收藏 / 跨平台收藏 / 历史 / 账号与登录 / 外观浅色与暗色），不再引用 `site/shot-*.png`（site 目录未动）。
+- 结果：README 改为嵌入 `docs/images/shot-*.png` 共 8 张（首页 / 搜索 / 本机收藏 / 跨平台收藏 / 历史 / 账号与登录 / 外观浅色与暗色），不再引用 `site/shot-*.png`。
 - 隐私处理：截图里的内容封面缩略图做了像素化、作者昵称用灰色圆角条覆盖；未打码原图只存在于会话临时目录，未进仓库。
 - 交付定位：`git log --all --grep=DOC-SHOTS-20260922`。文档与图片交付，不涉及应用构建或部署。
 - 验证：人工核对打码后截图；`git status` 确认仅上述文件。未运行测试（无代码改动）。
+- **后续（同任务追加，2026-09-22）**：落地页同步换图 —— `site/` 8 张截图全部换为打码版（shot-search 裁掉底部半条，1600×700；其余 1600×773）；`site/index.html` 首屏图换新并在 features 后新增「界面一览」区块（`.shots` 网格 + 6 张卡，含浅/深主题并排卡）；新增 CSS 已同步进 `guide.html`；guide 两处 `figure.shot` 与 `docs/使用说明.md` 图注随新图更新（账号图从「4/4 已登录」改为 2/4 实拍状态）；`og.png` 已用 `scripts/build_landing_og.py` 重新生成；`site/维护说明.md` 截图表与流程已同步。Playwright 冒烟截图确认 `#shots` 区块浅深主题与 guide 图渲染正常。
 
 ### COORD-20260922 — 统一协作规则和交接入口
 

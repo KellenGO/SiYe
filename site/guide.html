@@ -257,6 +257,18 @@ html.dark .i-moon{display:none}
   background:var(--surface);box-shadow:var(--shadow)}
 .mock-cap{margin-top:18px;text-align:center;font-size:12px;color:var(--muted)}
 
+/* ---------- 界面一览（真实截图，封面与作者已打码） ---------- */
+.shots{display:grid;gap:16px}
+@media (min-width:660px){.shots{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (min-width:1000px){.shots{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.shots>*{min-width:0}
+.shot-card img{display:block;width:100%;height:auto;margin-bottom:14px;
+  border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.shot-card h3{font-size:14.5px;font-weight:650;letter-spacing:-.2px;margin-bottom:6px}
+.shot-card p{color:var(--secondary);font-size:12.5px;line-height:1.7}
+.shot-card .note{display:block;margin-top:8px;color:var(--muted);font-size:12px;line-height:1.6}
+.shot-pair{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+
 /* ---------- 痛点对比 ---------- */
 .compare{display:grid;gap:18px}
 @media (min-width:840px){.compare{grid-template-columns:1fr auto 1fr;align-items:stretch}}
@@ -562,8 +574,8 @@ figure.todo .d{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.7}
     </div>
 
     <figure class="shot">
-      <img src="shot-account.png" width="2550" height="1094" alt="四野账号设置页：小红书、抖音、B站、知乎四个平台均显示「已登录」，右上角账号状态 4/4">
-      <figcaption>扫码登录做完后的样子：账号设置里四个平台都是「登录已确认」，右上角账号状态 4/4</figcaption>
+      <img src="shot-account.png" width="1600" height="773" alt="四野账号设置页：每个平台一张卡片，已连接的平台显示「可用」，未连接的显示「不可用 · 暂未确认登录」，右上角账号状态 2/4">
+      <figcaption>扫码登录后的样子：连上的平台显示「可用」，还没连的（如图中的小红书）点「扫码登录」再连 —— 不用等四个平台全部登录。</figcaption>
     </figure>
 
     <!-- ========== 可选：扩展同步 ========== -->
@@ -610,7 +622,7 @@ figure.todo .d{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.7}
     </p>
 
     <figure class="shot">
-      <img src="shot-search.png" width="2550" height="1116" alt="四野搜索结果页：关键词「拍摄技巧」，顶部显示小红书、抖音、B站、知乎各平台的结果数与耗时，下方是统一编号排序的结果列表（作者与互动数据已抹除）">
+      <img src="shot-search.png" width="1600" height="700" alt="四野搜索结果页：关键词「中国女排将与日本女排争夺金牌」，顶部显示各平台的结果数与耗时，下方是统一编号排序的结果列表（内容封面与作者昵称已打码）">
       <figcaption>搜索结果：四个平台的结果合并成一份列表，顶部显示各平台结果数与耗时</figcaption>
     </figure>
 
