@@ -245,16 +245,9 @@ export function useAutoAccountSync(): AutoAccountSyncState {
         showNote(null);
         return;
       }
-      const summary = buildVerifySummaryMessage(counts);
-      if (summary.tone === "warning") {
-        toast.warning(summary.title, {
-          description: summary.description,
-          className: "account-verification-toast",
-        });
-      } else {
-        toast.info(summary.title, { className: "account-verification-toast" });
-      }
-      showNote(summary.title);
+      // The compact status note is sufficient here.  A second toast repeats
+      // the same report and obscures the home screen during startup.
+      showNote(buildVerifySummaryMessage(counts).title);
     } finally {
       setRunning(false);
       guard.finish();

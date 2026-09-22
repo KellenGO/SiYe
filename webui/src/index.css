@@ -833,9 +833,8 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
 
 .auto-sync-notice {
   position: fixed;
-  top: 96px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 72px;
+  right: 24px;
   z-index: 60;
   display: inline-flex;
   align-items: center;
@@ -915,7 +914,7 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
   .result-title { font-size: 15px; }
   .result-description { font-size: 12px; line-height: 1.85; }
   .result-meta { gap: 6px 9px; font-size: 10px; }
-  .auto-sync-notice { top: 80px; }
+  .auto-sync-notice { top: 72px; right: 16px; }
   .result-meta .meta-divider { display: none; }
   .row-actions { gap: 2px; }
   .settings-layout { grid-template-columns: 1fr; gap: 23px; }
@@ -1706,12 +1705,3 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
 .trending-word { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .trending-heat { flex: none; color: rgb(var(--cyber-text-muted)); font-size: 11px; font-variant-numeric: tabular-nums; }
 @media (max-width: 700px) { .trending-list { grid-template-columns: 1fr; } }
-/* Sonner's global container is right-aligned. Login verification is a
-   page-level report, so its own fixed box is centered without moving other
-   notifications. */
-.account-verification-toast {
-  position: fixed !important;
-  top: 1rem !important;
-  left: 50% !important;
-  transform: translateX(-50%) !important;
-}
