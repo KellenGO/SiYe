@@ -13,6 +13,16 @@
 
 ## 最近交接
 
+### FOLDER-CARD-BILI-20260922 — 收藏夹卡片对齐 B站 的「一页海报 + 两层副本」
+
+- 负责人：WorkBuddy / 当前会话；工作区：`MediaCrawler-main`；分支：`master`；起始提交：`88a7185`。
+- 范围：`webui/src/index.css`、`webui/src/components/favorites/FavoritesPage.tsx`、`tests/test_webui_ui_contract.py`、`docs/features/remote-favorites-sync.md`、`docs/features/favorites-library.md`。跨平台与本机图标模式两套卡片一起改；未动后端、未动平台抓取、未动数据。
+- 交付：卡片改成「一页 16:9 海报 + 后面两层副本」——副本层与海报同宽同高，每退一层左右各内缩 8px、上移 5px，只从顶部露出一条阶梯；海报圆角 10、无描边；数量从下面那行挪到海报右下角的白色角标（底部加自下而上的暗渐变保证可读），那行只留「平台 · 只读」。顺带修三个真 bug：① 五个从未定义的 `--siye-*` 变量（`--siye-surface` / `--siye-border` / `--siye-primary` / `--siye-text` / `--siye-danger`）——其中 `border` 简写因变量无效整条降级成 `border-style: none`，**两层副本一个像素都没画出来**，这也是用户说的"没有多个文件的感觉"的直接原因；② `.remote-folder-cover` 缺 `grid-area: 1 / 1`，心形兜底图标独占一行网格、封面被压成 2.3:1（169px 宽只剩 85px 高）；③ 副本层方向写反（`translate(+7px, +8px)` 往右下摊，会压到夹名）。
+- 验证：`npm run test:search` 367 通过、`npm run build` 通过、`pytest tests/test_docs_wiki.py tests/test_webui_ui_contract.py` 54 通过（含新增 2 条守卫：CSS 幽灵变量、两套卡片几何一致）。真实渲染校验用一次性隔离脚本（临时 SQLite + TestClient + `webui/dist` + Playwright 拦 `/api`，**未提交**）：11 个构造收藏夹下卡片等宽 165px、海报 16:9=1.778、副本层内缩 8/16px 与上移 5/10px 误差 <1.5px、副本层底色非透明且深浅不同、角标白字落右下、无封面夹仍 16:9 且有底色、深色主题下副本层仍有底色、无 pageerror。截图 `build/review-folder-cards-bili.png`（整段）、`build/review-card-single.png`、`build/review-card-fallback.png`、`build/review-folder-card-vs-bili.png`（与用户给的两张截并排），`build/` 已被 gitignore。
+- 数据边界：只改视觉与一处 JSX 角标节点，未改接口、未改库、未访问平台或真实收藏库；角标文案沿用全站既有的「条」。
+- 未完成 / 待核实：未在真实 B站 数据上跑（本轮不访问账号）；未跑全量 pytest（只跑了文档与契约两个文件）。另发现一处**未改动**：图标模式的浏览偏好（`siye.favorites.local-folder-view.v1`）重新打开页面后不会直接进图标网格——`localFolderRoot` 初始为 `false`，得再点一次工具栏的「图标」；本轮只做卡片视觉，没碰这个状态初始化。
+- 交付定位：`git log --all --grep=FOLDER-CARD-BILI-20260922`。`webui/dist` 已由本轮生产构建对齐；用户手上已打包的 EXE 不会自动更新。
+
 ### LOCAL-FOLDER-GRID-20260922 — 本地收藏夹图标模式
 
 - 负责人：Codex / 当前会话；工作区：`MediaCrawler-main`；分支：`master`；起始提交：`5eb6972`。

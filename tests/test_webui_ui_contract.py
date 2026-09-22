@@ -458,3 +458,65 @@ def test_library_batch_bar_puts_show_more_on_the_right():
 
     result_tabs = (_ROOT / "components" / "search" / "ResultTabs.tsx").read_text(encoding="utf-8")
     assert 'className="btn small"' in result_tabs
+
+
+# ── CSS 变量与收藏夹卡片几何 ────────────────────────────────────────────
+
+def _css_rule(css: str, selector: str) -> str:
+    """取以 selector 开头的那条规则的大括号内容（单条、不嵌套，够用）。
+
+    必须连着行首的换行一起匹配：`.remote-folder-cover {` 也是
+    `.remote-folder-card:hover .remote-folder-cover {` 的子串。
+    """
+    _, _, tail = css.partition("\n" + selector)
+    assert tail, f"index.css 里找不到以 {selector} 开头的规则"
+    return tail.split("}", 1)[0]
+
+
+def test_css_theme_variables_are_all_defined():
+    """index.css 引用的 var(--siye-*) 必须真有定义。
+
+    变量拼错在 CSS 里不会报任何错：`background: color-mix(... var(--siye-surface) ...)`
+    整条声明在 computed-value 阶段失效（底色直接没有），而
+    `border: 1px solid var(--siye-border)` 这种简写更狠 —— 整条降级成 initial，
+    等于 border-style: none，元素一个像素都不画。
+    2026-09-22 收藏夹卡片「两层副本完全看不见」就是这个原因：
+    surface / border / primary / text / danger 五个变量当时谁都没定义。
+    只定义不使用的调色板变量（如 --siye-green）不算问题，所以只查一个方向。
+    """
+    css = (_ROOT / "index.css").read_text(encoding="utf-8")
+    defined = set(re.findall(r"^\s*(--[a-zA-Z0-9-]+)\s*:", css, re.M))
+    assert defined, "index.css 里解析不到任何自定义属性，正则或文件结构变了"
+    used = set(re.findall(r"var\(\s*(--[a-zA-Z0-9-]+)", css))
+    ghost = sorted(name for name in used if name.startswith("--siye-") and name not in defined)
+    assert not ghost, f"这些 --siye-* 只有引用、没有定义：{ghost}"
+
+
+def test_folder_cards_share_the_poster_stack_geometry():
+    """跨平台与本机两套收藏夹卡片共用同一套「海报 + 两层副本」几何。
+
+    卡片 = 顶部两张副本 + 一页海报，每退一层左右各内缩 8px、上移 5px，
+    只从顶部露出一条阶梯。两套卡片是两套类名、同一份数值：只改一份就说明它们要开始漂了。
+    """
+    css = (_ROOT / "index.css").read_text(encoding="utf-8")
+
+    for prefix in ("remote", "local"):
+        cover = _css_rule(css, f".{prefix}-folder-cover {{")
+        assert "aspect-ratio: 16 / 9" in cover, f"{prefix} 海报不再是 16:9"
+        assert "height:" not in cover, f"{prefix} 海报不该再有固定高度（会和 aspect-ratio 打架）"
+        assert "grid-area: 1 / 1" in _css_rule(css, f".{prefix}-folder-cover img"), \
+            f"{prefix} 封面图没和兜底图标叠在同一格"
+        assert "position: absolute" in _css_rule(css, f".{prefix}-folder-count {{"), \
+            f"{prefix} 数量角标必须脱离网格流，否则会给海报多加一格"
+        assert "top: 12px" in _css_rule(css, f".{prefix}-folder-stack {{"), \
+            f"{prefix} 副本层没对齐海报顶边"
+        far = _css_rule(css, f".{prefix}-folder-stack span:first-child {{")
+        near = _css_rule(css, f".{prefix}-folder-stack span:last-child {{")
+        assert "top: -10px" in far and "left: 16px" in far, f"{prefix} 最外层副本的内缩/上移变了"
+        assert "top: -5px" in near and "left: 8px" in near, f"{prefix} 近层副本的内缩/上移变了"
+
+    assert "translate(7px, 8px)" not in css, "副本层不该再往右下摊（那是旧做法）"
+
+    favorites = (_ROOT / "components" / "favorites" / "FavoritesPage.tsx").read_text(encoding="utf-8")
+    for class_name in ("remote-folder-count", "local-folder-count"):
+        assert f'className="{class_name}"' in favorites, f"{class_name} 角标没渲染出来"
