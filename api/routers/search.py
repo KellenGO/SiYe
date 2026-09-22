@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 from ..schemas.search import SearchJobRequestSchema, SearchJobResponse
 from ..schemas.favorites import FavoritesJobRequest, FavoritesJobResponse
 from ..services.favorites_job_manager import favorites_job_manager
+from ..services.remote_favorites_store import get_remote_favorites_store
 from ..services.search_job_manager import (
     search_job_manager, JobConflictError, InvalidPlatformsError,
 )
@@ -417,6 +418,19 @@ async def get_latest_favorites_job(summary: bool = False):
     if response is None:
         raise HTTPException(status_code=404, detail="暂无可恢复的收藏夹结果。")
     return response
+
+
+@search_router.get("/favorites/folders")
+async def get_remote_favorite_folders(platform: Optional[str] = None, account: Optional[str] = None):
+    """Read-only mirrored remote folders; never exposes local editable folders."""
+    return get_remote_favorites_store().folders_page(platform=platform, account=account)
+
+
+@search_router.get("/favorites/folders/{account}/{folder}")
+async def get_remote_favorite_folder_items(account: str, folder: str, offset: int = 0, limit: int = 100):
+    if offset < 0 or limit < 1 or limit > 100:
+        raise HTTPException(status_code=422, detail="分页参数无效")
+    return get_remote_favorites_store().folder_archive_page(account, folder, offset=offset, limit=limit)
 
 
 @search_router.post("/favorites/jobs/{job_id}/cancel", response_model=FavoritesJobResponse)

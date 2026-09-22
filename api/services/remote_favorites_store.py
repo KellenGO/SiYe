@@ -86,6 +86,12 @@ class RemoteFavoritesStore(RemoteSyncStateMixin, SqliteStoreBase):
             conn.execute("ALTER TABLE remote_checkpoints ADD COLUMN token TEXT")
         if "next_token" not in checkpoint_columns:
             conn.execute("ALTER TABLE remote_checkpoints ADD COLUMN next_token TEXT")
+        folder_columns = {row[1] for row in conn.execute("PRAGMA table_info(remote_folders)")}
+        if not folder_columns:
+            conn.execute("""CREATE TABLE remote_folders (
+                account TEXT NOT NULL, folder TEXT NOT NULL, platform TEXT NOT NULL, name TEXT NOT NULL,
+                observed_state TEXT NOT NULL DEFAULT 'present', last_observed_at TEXT NOT NULL,
+                last_content_complete_at TEXT, PRIMARY KEY(account, folder))""")
         self._enable_wal(conn)
 
     # ------------------------------------------------------------------ 写入

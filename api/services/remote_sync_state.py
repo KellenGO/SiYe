@@ -42,6 +42,13 @@ CREATE TABLE IF NOT EXISTS remote_memberships (
  name TEXT NOT NULL, scan TEXT NOT NULL,
  PRIMARY KEY(account, folder, content_id)
 );
+CREATE TABLE IF NOT EXISTS remote_folders (
+ account TEXT NOT NULL, folder TEXT NOT NULL, platform TEXT NOT NULL,
+ name TEXT NOT NULL, observed_state TEXT NOT NULL DEFAULT 'present',
+ last_observed_at TEXT NOT NULL, last_content_complete_at TEXT,
+ PRIMARY KEY(account, folder)
+);
+CREATE INDEX IF NOT EXISTS idx_remote_folders_platform ON remote_folders(platform, account);
 CREATE INDEX IF NOT EXISTS idx_remote_memberships_content
  ON remote_memberships(account, content_id);
 CREATE TABLE IF NOT EXISTS remote_presence (
@@ -69,6 +76,34 @@ CREATE TABLE IF NOT EXISTS remote_baseline (
 
 
 class RemoteSyncStateMixin:
+    def observe_folders(self, platform, account, folders):
+        """Persist a successfully enumerated directory without touching items."""
+        with self._conn(write=True) as conn:
+            for folder in folders:
+                conn.execute("""INSERT INTO remote_folders(account,folder,platform,name,observed_state,last_observed_at)
+                    VALUES(?,?,?,?, 'present', ?) ON CONFLICT(account,folder) DO UPDATE SET
+                    name=excluded.name, observed_state='present', last_observed_at=excluded.last_observed_at""",
+                    (account, str(folder["id"]), platform, str(folder["name"]), utc_now()))
+
+    def mark_folder_complete(self, account, folder):
+        with self._conn(write=True) as conn:
+            conn.execute("UPDATE remote_folders SET last_content_complete_at=? WHERE account=? AND folder=?",
+                         (utc_now(), account, folder))
+
+    def folders_page(self, *, platform=None, account=None):
+        where, args = ["1=1"], []
+        if platform: where.append("platform=?"); args.append(platform)
+        if account: where.append("account=?"); args.append(account)
+        with self._conn() as conn:
+            rows = conn.execute("SELECT f.*, count(DISTINCT m.content_id) AS item_count FROM remote_folders f LEFT JOIN remote_memberships m ON m.account=f.account AND m.folder=f.folder WHERE " + " AND ".join(where) + " GROUP BY f.account,f.folder ORDER BY f.platform,f.name,f.folder", args).fetchall()
+        return [dict(row) for row in rows]
+
+    def folder_archive_page(self, account, folder, *, offset=0, limit=100):
+        with self._conn() as conn:
+            total = conn.execute("SELECT count(*) FROM remote_memberships WHERE account=? AND folder=?", (account, folder)).fetchone()[0]
+            rows = conn.execute("SELECT r.* FROM remote_memberships m JOIN remote_favorites r ON r.account_key=m.account AND r.content_id=m.content_id WHERE m.account=? AND m.folder=? ORDER BY r.id DESC LIMIT ? OFFSET ?", (account, folder, limit, offset)).fetchall()
+        return {"items": [self._row_to_result(row) for row in rows], "total": total, "offset": offset, "limit": limit}
+
     def begin_scan(self, platform, account, folders, mode):
         """Resume import only; reconciliation always starts a fresh observation."""
         encoded = json.dumps(folders, sort_keys=True, ensure_ascii=False)
@@ -159,6 +194,7 @@ class RemoteSyncStateMixin:
             conn.execute("DELETE FROM remote_baseline WHERE account=? AND folder=?", (account, folder))
             conn.execute("INSERT INTO remote_baseline SELECT * FROM next_folder_baseline")
             conn.execute("DROP TABLE next_folder_baseline")
+        self.mark_folder_complete(account, folder)
 
     def finish_scan(self, account, scan, reconcile):
         with self._conn(write=True) as conn:

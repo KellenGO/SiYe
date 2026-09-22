@@ -113,7 +113,9 @@ class DouyinFavoritesSource(_Source):
     async def page(self,folder,token): raise AssertionError("unreachable")
 
 async def synchronize_favorites(source:FavoritesSource,store,mode,progress):
-    account=await source.identity(); folders=await source.folders(account); scan=store.begin_scan(source.platform,account,folders,mode)
+    account=await source.identity(); folders=await source.folders(account)
+    store.observe_folders(source.platform, account, folders)
+    scan=store.begin_scan(source.platform,account,folders,mode)
     saved=0; errors=[]; incremental=mode=="auto" and source.incremental_verified
     try:
         first_pages={}
