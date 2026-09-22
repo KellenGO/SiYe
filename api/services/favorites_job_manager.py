@@ -87,7 +87,8 @@ class _Job:
         statuses = [info.status for info in self.platforms.values()]
         success = sum(s in ("succeeded", "empty") for s in statuses)
         overall = "running" if not self.terminal() else (
-            "completed" if success == len(statuses) else "partial" if success or merged else "failed")
+            "completed" if success == len(statuses) else "partial"
+            if success or any(status == "partial" for status in statuses) or merged else "failed")
         return FavoritesJobResponse(
             job_id=self.job_id, overall=overall, created_at=self.created_at,
             completed_at=self.completed_at, platforms=self.platforms, results=merged,
@@ -263,7 +264,10 @@ class FavoritesJobManager:
                             count = event.data.get("result_count")
                             if isinstance(count, int) and count >= 0:
                                 info.result_count = count
-                        if status in ("running", "succeeded", "empty"):
+                            error_summary = event.data.get("error_summary")
+                            if isinstance(error_summary, str) and error_summary:
+                                info.error_summary = error_summary[:160]
+                        if status in ("running", "succeeded", "empty", "partial"):
                             info.status = status
                     elif event.event == "error":
                         error = event.data or {}

@@ -85,6 +85,7 @@ PlatformStatus = Literal[
     "pending",
     "running",
     "succeeded",
+    "partial",
     "empty",
     "login_required",
     "rate_limited",

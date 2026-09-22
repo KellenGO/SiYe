@@ -450,11 +450,13 @@ async def _run_favorites(job_id: str, platform: str, limit: int, sync_mode=None)
                     data={"status": "running", "account": account, "result_count": count, "phase": phase}))
 
             async def sync(client):
-                await synchronize_favorites(BilibiliFavoritesSource(client), get_remote_favorites_store(), sync_mode, progress)
+                return await synchronize_favorites(BilibiliFavoritesSource(client), get_remote_favorites_store(), sync_mode, progress)
 
             crawler.runtime_options.extra["favorites_sync"] = sync
-            await crawler.start()
-            emit_status(job_id, platform, "succeeded")
+            folder_errors = await crawler.start()
+            emit_status(job_id, platform, "partial" if folder_errors else "succeeded", {
+                "error_summary": "；".join(folder_errors)[:160] if folder_errors else None,
+            })
         else:
             await asyncio.wait_for(crawler.start(), timeout=270)
             emit_status(job_id, platform, "succeeded" if pending else "empty")

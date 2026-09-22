@@ -99,30 +99,13 @@ class RemoteSyncStateMixin:
             conn.execute("DELETE FROM remote_observed_items WHERE account=? AND folder=?", (account, folder))
             # Old memberships remain until an authoritative complete scan.
 
-    def baseline_overlap(self, account, folder, identities):
-        """本页里「和本机基线完全对得上」的最长连续段，返回 (起, 止) 位置；没有则 None。
-
-        认出一条"早就在本机"的条目只有三个条件同时成立：内容 ID 在基线里、收藏时间一致、
-        位置也接得上。任意一条对不上就在那里断开——断点之后可能藏着新增，不能据此停止翻页。
-        调用方再按段长决定停不停（见 `INCREMENTAL_STOP_RUN`）。
-        """
-        if not identities or any(stamp is None for _, stamp in identities):
-            return None
-        best = None
-        run_start = run_end = None
+    def baseline_run(self, account, folder, identities, current_run=0):
+        """返回跨页累计的连续历史命中数；基线严格限定为当前收藏夹。"""
         with self._conn() as conn:
-            for cid, stamp in identities:
-                row = conn.execute("SELECT position,favorite_time FROM remote_baseline WHERE account=? AND folder=? AND content_id=?", (account, folder, cid)).fetchone()
-                if not row or row["favorite_time"] != str(stamp):
-                    run_start = run_end = None
-                    continue
-                position = row["position"]
-                run_end = position if (run_end is not None and position == run_end + 1) else None
-                if run_end is None:
-                    run_start = run_end = position
-                if best is None or run_end - run_start > best[1] - best[0]:
-                    best = (run_start, run_end)
-        return best
+            for cid, _stamp in identities:
+                known = conn.execute("SELECT 1 FROM remote_baseline WHERE account=? AND folder=? AND content_id=?", (account, folder, cid)).fetchone()
+                current_run = current_run + 1 if known else 0
+        return current_run
 
     def head_fingerprint(self, account, folder, scan):
         with self._conn() as conn:
@@ -150,6 +133,25 @@ class RemoteSyncStateMixin:
             conn.execute("INSERT OR REPLACE INTO remote_page_observations VALUES(?,?,?,?,?)", (account, folder, scan, page, fingerprint))
             conn.execute("UPDATE remote_accounts SET version=version+1,result_count=result_count+?,updated_at=? WHERE account=?", (len(results), utc_now(), account))
 
+    def complete_folder(self, account, scan, folder, reconcile):
+        """将一个已结束收藏夹变成下一轮可用的基线，不等待其它收藏夹。"""
+        with self._conn(write=True) as conn:
+            checkpoint = conn.execute("SELECT complete FROM remote_checkpoints WHERE account=? AND folder=? AND scan=?", (account, folder, scan)).fetchone()
+            if not checkpoint or not checkpoint["complete"]:
+                raise SyncStateError("Incomplete folder")
+            conn.execute("CREATE TEMP TABLE next_folder_baseline AS SELECT * FROM remote_baseline WHERE 0")
+            conn.execute("""INSERT INTO next_folder_baseline
+                SELECT account,folder,content_id,row_number() OVER(ORDER BY section,position)-1,favorite_time
+                FROM (
+                    SELECT *,0 AS section FROM remote_observed_items WHERE account=? AND folder=?
+                    UNION ALL
+                    SELECT b.*,1 AS section FROM remote_baseline b WHERE b.account=? AND b.folder=? AND ?=0
+                    AND NOT EXISTS(SELECT 1 FROM remote_observed_items o WHERE o.account=b.account AND o.folder=b.folder AND o.content_id=b.content_id)
+                )""", (account, folder, account, folder, int(reconcile)))
+            conn.execute("DELETE FROM remote_baseline WHERE account=? AND folder=?", (account, folder))
+            conn.execute("INSERT INTO remote_baseline SELECT * FROM next_folder_baseline")
+            conn.execute("DROP TABLE next_folder_baseline")
+
     def finish_scan(self, account, scan, reconcile):
         with self._conn(write=True) as conn:
             run = conn.execute("SELECT * FROM remote_scans WHERE id=? AND account=?", (scan, account)).fetchone()
@@ -164,23 +166,6 @@ class RemoteSyncStateMixin:
             if reconcile:
                 conn.execute("DELETE FROM remote_memberships WHERE account=? AND scan<>?", (account, scan))
                 conn.execute("UPDATE remote_accounts SET last_full=? WHERE account=?", (utc_now(), account))
-            # Refresh the ordered baseline in SQLite, without loading the library
-            # into Python. Keep the unvisited suffix after an incremental stop.
-            conn.execute("CREATE TEMP TABLE next_remote_baseline AS SELECT * FROM remote_baseline WHERE 0")
-            conn.execute("""INSERT INTO next_remote_baseline
-                SELECT account,folder,content_id,
-                       row_number() OVER(PARTITION BY account,folder ORDER BY section,position)-1,
-                       favorite_time
-                FROM (
-                    SELECT *,0 AS section FROM remote_observed_items WHERE account=?
-                    UNION ALL
-                    SELECT b.*,1 AS section FROM remote_baseline b WHERE b.account=? AND ?=0
-                    AND NOT EXISTS(SELECT 1 FROM remote_observed_items o
-                        WHERE o.account=b.account AND o.folder=b.folder AND o.content_id=b.content_id)
-                )""", (account, account, int(reconcile)))
-            conn.execute("DELETE FROM remote_baseline WHERE account=?", (account,))
-            conn.execute("INSERT INTO remote_baseline SELECT * FROM next_remote_baseline")
-            conn.execute("DROP TABLE next_remote_baseline")
             conn.execute("UPDATE remote_scans SET complete=1 WHERE id=?", (scan,))
             conn.execute("UPDATE remote_accounts SET status='succeeded',version=version+1,updated_at=? WHERE account=?", (utc_now(), account))
 

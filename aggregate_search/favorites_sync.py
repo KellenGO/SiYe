@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from aggregate_search.adapters.bilibili import BilibiliAdapter
+from api.services.remote_sync_state import SyncStateError
 
 # 平台分页接口的页大小与单请求超时。落库时的位置换算也用 PAGE_SIZE，
 # 两处必须一致，所以放在这里做单一来源。
@@ -18,7 +19,7 @@ REQUEST_TIMEOUT = 30.0
 # 增量：本页里连续这么多条都能在本机基线里对上，就认定"后面都是旧的"，停止翻页。
 # 取 10 而不是"碰到第一条旧的"——重新收藏、移动收藏夹、同一秒批量收藏都会让顺序抖动，
 # 一条旧的出现在页首并不代表它后面没有新增。
-INCREMENTAL_STOP_RUN = 10
+INCREMENTAL_STOP_RUN = 5
 
 
 @dataclass
@@ -97,9 +98,9 @@ class BilibiliFavoritesSource:
             rows = []
         if not isinstance(rows, list) or len(rows) > PAGE_SIZE or (not rows and data["has_more"]):
             raise FavoritesSyncError("Invalid favorite page")
-        expected = max(0, min(PAGE_SIZE, folder["count"] - (number - 1) * PAGE_SIZE))
-        if len(rows) != expected or bool(data["has_more"]) != (number * PAGE_SIZE < folder["count"]):
-            raise FavoritesSyncError("Favorite list changed during sync")
+        # ``media_count`` 是接口给出的快照提示，不是可靠的分页协议。实测中间页
+        # 也可能少于 PAGE_SIZE 而仍有下一页，因此只以有效的 has_more 推进；重复页
+        # 和跨页重复内容仍由持久层拒绝。
         identities, results = [], []
         for row in rows:
             if not isinstance(row, dict) or not (row.get("bvid") or row.get("id")):
@@ -132,47 +133,67 @@ async def synchronize_favorites(source: FavoritesSource, store, mode, progress):
     # evidence of absence. Full reconciliation always creates a fresh scan.
     scan = store.begin_scan(source.platform, account, folders, mode)
     saved = 0
+    folder_errors = []
     first_pages = {}
     try:
-        for folder in folders:
+        for folder_index, folder in enumerate(folders, start=1):
             fid = folder["id"]
-            first = await source.page(folder, 1)
-            first_pages[fid] = first.fingerprint
-            checkpoint = store.checkpoint(account, fid)
-            number = 1
-            page = first
-            if checkpoint and checkpoint["scan"] == scan:
-                # Verify both head and last committed page before resuming.
-                head = store.head_fingerprint(account, fid, scan)
-                boundary = first if checkpoint["page"] == 1 else await source.page(folder, checkpoint["page"])
-                if head == first.fingerprint and boundary.fingerprint == checkpoint["fingerprint"]:
-                    if checkpoint["complete"]:
-                        progress(account, saved, f"已核验收藏夹：{folder['name']}")
-                        continue
-                    number = checkpoint["page"] + 1
+            try:
+                first = await source.page(folder, 1)
+                first_pages[fid] = first.fingerprint
+                checkpoint = store.checkpoint(account, fid)
+                number = 1
+                page = first
+                if checkpoint and checkpoint["scan"] == scan:
+                    # In a resumed partial job, completed folders must be read
+                    # again on the next click. Only an incomplete folder resumes
+                    # its cursor; otherwise a first import could be skipped.
+                    head = store.head_fingerprint(account, fid, scan)
+                    boundary = first if checkpoint["page"] == 1 else await source.page(folder, checkpoint["page"])
+                    if head == first.fingerprint and boundary.fingerprint == checkpoint["fingerprint"]:
+                        if checkpoint["complete"]:
+                            store.restart_folder(account, fid)
+                        else:
+                            number = checkpoint["page"] + 1
+                            page = await source.page(folder, number)
+                    else:
+                        store.restart_folder(account, fid)
+                known_run = 0
+                while True:
+                    # Consult only the baseline from before this folder's scan;
+                    # current-page writes must never create their own stop signal.
+                    if incremental:
+                        known_run = store.baseline_run(account, fid, page.identities, known_run)
+                    stop = incremental and known_run >= INCREMENTAL_STOP_RUN
+                    store.save_sync_page(source.platform, account, scan, fid, folder["name"], number,
+                                         page.fingerprint, page.results, page.complete or stop, PAGE_SIZE,
+                                         page.identities)
+                    saved += page.count
+                    progress(account, saved, f"正在保存 {folder['name']} · 第 {number} 页" + ("（检查新增）" if incremental else "（完整列表读取）"))
+                    if page.complete or stop:
+                        store.complete_folder(account, scan, fid, reconcile=mode == "full")
+                        break
+                    number += 1
                     page = await source.page(folder, number)
-                else:
-                    store.restart_folder(account, fid)
-            while True:
-                overlap = store.baseline_overlap(account, fid, page.identities) if incremental else None
-                stop = bool(overlap and overlap[1] - overlap[0] + 1 >= INCREMENTAL_STOP_RUN)
-                store.save_sync_page(source.platform, account, scan, fid, folder["name"], number,
-                                     page.fingerprint, page.results, page.complete or stop, PAGE_SIZE,
-                                     page.identities)
-                saved += page.count
-                progress(account, saved, f"正在保存 {folder['name']} · 第 {number} 页" + ("（检查新增）" if incremental else "（完整列表读取）"))
-                if page.complete or stop:
-                    break
-                number += 1
-                page = await source.page(folder, number)
+            except (FavoritesSyncError, SyncStateError):
+                # These are local pagination/data checks. Keep the diagnostic
+                # actionable without exposing response data or credentials.
+                diagnostic = f"收藏夹 {folder_index}：分页返回异常（第 {number} 页，已保存 {saved} 条）"
+                folder_errors.append(diagnostic)
+                progress(account, saved, f"{diagnostic}，继续下一个收藏夹")
+                continue
         if await source.folders(account) != folders:
             raise FavoritesSyncError("Favorite folders changed during sync")
+        if folder_errors:
+            store.sync_status(account, "partial", "；".join(folder_errors)[:160])
+            return folder_errors
         for folder in folders:
             if (await source.page(folder, 1)).fingerprint != first_pages[folder["id"]]:
                 raise FavoritesSyncError("Favorite head changed during sync")
             progress(account, saved, f"正在核验 {folder['name']}")
         store.finish_scan(account, scan, reconcile=mode == "full")
         progress(account, saved, "完整核对完成" if mode == "full" else "导入完成；旧项缺失请执行完整核对")
+        return []
     except BaseException:
         store.sync_status(account, "cancelled", "同步未完成，可手动继续；未据此判断缺失")
         raise

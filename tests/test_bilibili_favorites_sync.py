@@ -16,6 +16,7 @@ class FavoriteClient:
         self.contents = folders if folders is not None else {10: list(range(125))}
         self.calls = []
         self.fail_page = None
+        self.short_pages = set()
 
     async def get(self, *_args, **_kwargs):
         return {"mid": self.mid}
@@ -30,6 +31,8 @@ class FavoriteClient:
         if page == self.fail_page:
             raise OSError("synthetic network failure")
         rows = self.contents[fid][(page - 1) * size:page * size]
+        if (fid, page) in self.short_pages:
+            rows = rows[:-1]
         return {"medias": [{"bvid": f"BV{i}", "id": i + 1, "title": f"video-{i}",
                              "fav_time": 100000 - i, "cnt_info": {"play": 0}}
                             for i in rows], "has_more": page * size < len(self.contents[fid])}
@@ -44,7 +47,7 @@ async def sync(store, client, mode="auto", verified=True):
     """`full` = 完整重扫；`auto` = 一键同步（增量）。verified=False 用于只导入、不提前停。"""
     source = BilibiliFavoritesSource(client, interval=0)
     source.incremental_verified = verified
-    await synchronize_favorites(source, store, mode, lambda *_: None)
+    return await synchronize_favorites(source, store, mode, lambda *_: None)
 
 
 @pytest.mark.asyncio
@@ -122,15 +125,55 @@ async def test_incremental_stops_after_a_run_of_known_items(store):
 
 
 @pytest.mark.asyncio
-async def test_incremental_keeps_paging_when_known_run_is_too_short(store):
-    """命中必须"连续"且够长：页内只撞见 9 条旧内容时不能停，否则会漏掉后面的新增。"""
-    client = FavoriteClient({10: list(range(200))})
+async def test_short_middle_page_continues_and_builds_a_folder_baseline(store):
+    """B站中间页少于 20 条但 has_more 为真时，仍应保存并继续。"""
+    client = FavoriteClient({10: list(range(60)), 11: [100]})
+    client.short_pages.add((10, 2))
     await sync(store, client, "full")
-    client.contents[10] = [*range(900, 911), *range(200)]  # 11 条新的顶在最前
+    assert store.archive_page(account="bilibili:1")["total"] == 60
+    with store._conn() as conn:
+        assert conn.execute("SELECT count(*) FROM remote_baseline WHERE account=? AND folder=?", ("bilibili:1", "10")).fetchone()[0] == 59
+
+
+@pytest.mark.asyncio
+async def test_incremental_stops_after_five_known_items_and_continues_next_folder(store):
+    client = FavoriteClient({10: list(range(80)), 11: list(range(100, 130))})
+    await sync(store, client, "full")
+    client.contents[10] = [900, *range(80)]
+    client.contents[11] = [901, *range(100, 130)]
     client.calls.clear()
     await sync(store, client)
-    assert max(page for _, page in client.calls) == 2  # 第 1 页只命中 9 条，继续翻
-    assert store.archive_page()["total"] == 211
+    assert max(page for fid, page in client.calls if fid == 10) == 1
+    assert max(page for fid, page in client.calls if fid == 11) == 1
+    assert store.archive_page(account="bilibili:1")["total"] == 112
+
+
+@pytest.mark.asyncio
+async def test_known_run_crosses_pages_and_new_item_resets_it(store):
+    client = FavoriteClient({10: list(range(80))})
+    await sync(store, client, "full")
+    client.contents[10] = [*range(900, 916), *range(80)]
+    client.calls.clear()
+    await sync(store, client)
+    assert max(page for _, page in client.calls) == 2
+    # Four old rows followed by a new row must not stop; the next five old rows do.
+    client.contents[10] = [*range(4), 999, *range(4, 80)]
+    client.calls.clear()
+    await sync(store, client)
+    assert max(page for _, page in client.calls) == 1
+    assert store.archive_page(account="bilibili:1")["total"] == 97
+
+
+@pytest.mark.asyncio
+async def test_incremental_keeps_paging_when_known_run_is_too_short(store):
+    """连续命中不足五条不能停，后续页仍要读取。"""
+    client = FavoriteClient({10: list(range(200))})
+    await sync(store, client, "full")
+    client.contents[10] = [*range(900, 917), *range(200)]  # 第 1 页末尾只有 3 条旧内容
+    client.calls.clear()
+    await sync(store, client)
+    assert max(page for _, page in client.calls) == 2
+    assert store.archive_page()["total"] == 217
 
 
 @pytest.mark.asyncio
@@ -204,9 +247,34 @@ async def test_disk_failure_rolls_back_page_and_checkpoint(store, monkeypatch):
 @pytest.mark.asyncio
 async def test_duplicate_page_rejected(store):
     client = FavoriteClient({10: list(range(20)) * 2})
-    with pytest.raises(ValueError):
-        await sync(store, client, "full")
+    assert await sync(store, client, "full") == ["收藏夹 1：分页返回异常（第 2 页，已保存 20 条）"]
     assert store.archive_page()["total"] == 20
+
+
+@pytest.mark.asyncio
+async def test_one_bad_folder_does_not_block_the_next_folder(store):
+    """可预期的分页异常只影响当前收藏夹，后面的夹仍可建立基线。"""
+    client = FavoriteClient({10: list(range(20)) * 2, 11: [200, 201]})
+    errors = await sync(store, client, "full")
+    assert errors == ["收藏夹 1：分页返回异常（第 2 页，已保存 20 条）"]
+    assert store.archive_page(account="bilibili:1")["total"] == 22
+    with store._conn() as conn:
+        assert conn.execute(
+            "SELECT count(*) FROM remote_baseline WHERE account=? AND folder=?",
+            ("bilibili:1", "11"),
+        ).fetchone()[0] == 2
+
+
+@pytest.mark.asyncio
+async def test_resumed_partial_job_rechecks_completed_folders(store):
+    """局部失败留下的未完成扫描不能让下一次点击跳过其它收藏夹。"""
+    client = FavoriteClient({10: list(range(20)) * 2, 11: [200, 201]})
+    await sync(store, client, "full")
+    client.contents[10] = list(range(40))
+    client.calls.clear()
+    await sync(store, client)
+    assert (11, 1) in client.calls
+    assert store.archive_page(account="bilibili:1")["total"] == 42
 
 
 @pytest.mark.asyncio

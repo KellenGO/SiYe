@@ -125,7 +125,7 @@ class BilibiliCrawler(AbstractCrawler):
             if config.CRAWLER_TYPE == "search":
                 await self.search()
             elif config.CRAWLER_TYPE == "favorites":
-                await self.fetch_favorites()
+                return await self.fetch_favorites()
             else:
                 pass
             utils.logger.info("[BilibiliCrawler.start] Bilibili Crawler finished ...")
@@ -140,8 +140,7 @@ class BilibiliCrawler(AbstractCrawler):
         """Fetch recent items across the current user's created folders."""
         sync = (getattr(self, "runtime_options", None) and self.runtime_options.extra.get("favorites_sync"))
         if sync:
-            await sync(self.bili_client)
-            return
+            return await sync(self.bili_client)
         nav = await self.bili_client.get("/x/web-interface/nav", enable_params_sign=False)
         mid = nav.get("mid") if isinstance(nav, dict) else None
         if not mid:
