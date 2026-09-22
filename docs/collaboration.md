@@ -25,6 +25,7 @@
 - **后续（同任务追加，2026-09-22）**：落地页同步换图 —— `site/` 8 张截图全部换为打码版（shot-search 裁掉底部半条，1600×700；其余 1600×773）；`site/index.html` 首屏图换新并在 features 后新增「界面一览」区块（`.shots` 网格 + 6 张卡，含浅/深主题并排卡）；新增 CSS 已同步进 `guide.html`；guide 两处 `figure.shot` 与 `docs/使用说明.md` 图注随新图更新（账号图从「4/4 已登录」改为 2/4 实拍状态）；`og.png` 已用 `scripts/build_landing_og.py` 重新生成；`site/维护说明.md` 截图表与流程已同步。Playwright 冒烟截图确认 `#shots` 区块浅深主题与 guide 图渲染正常。
 - **后续（同任务追加之二，2026-09-22）**：修落地页 `#mobile` 区块布局 —— 两张卡片在 ≥980px 的通用三列网格里只占 2/3 宽、右侧留白，改为 `#mobile .cards` 两列铺满；按钮行 `.cta-row` 原本只有 `margin-bottom`、紧贴卡片，补 `margin-top:22px`（`.small-note` 一并到 18px）。规则加在 `.cards` 声明后，已同步进 `guide.html`（该页无 `#mobile`，仅为两份 CSS 保持一致）。实测（视口 1440）：`#mobile .cards` 与 `.cta-row` 都是 180→1260，与 `--max` 内容宽对齐，按钮上间距 22px；900px 视口下两列正常。
 - **后续（同任务追加之三，2026-09-22）**：应要求把 `index.html` 的区块底色统一为白 —— 去掉 `#features`、`#mobile`、`#faq` 三处 `class="tint"`（此前 `#mobile` 与 `#faq` 相邻两段灰底尤其扎眼）。`section.tint` 规则保留未删，想恢复某段灰底加回 class 即可；`site/维护说明.md`「改文案 / 改配色」已记这条约定。实测所有 section 背景计算值均为 `rgba(0,0,0,0)`（继承纯白 `#fff`），卡片与 FAQ 靠边框在白底上仍可分辨。
+- **后续（同任务追加之四，2026-09-22）**：把两个页面的标签页图标换成四野放大镜图标（源自 `assets/siye-icon.png`，裁掉透明边距 → 96×96 PNG → base64 内联），替掉原来那个「淡紫圆角块 + 渐变条」的占位 favicon。保持内联是为了守住「零外部请求、单文件自包含」的既有约定：实测两页 `link[rel=icon]` 为 `data:image/png`（10438 字符），页面请求非本地数为 0。`site/维护说明.md`「改文案 / 改配色」已更新（原来说网站图标与字标渐变同色、三处一起改，现已不适用；并注明 `webui/public/favicon.svg` 是无人引用的红圆残留）。
 
 ### MOBILE-CREDIT-20260922 — Android 客户端归属署名改为 MMY
 
