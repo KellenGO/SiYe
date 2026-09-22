@@ -262,6 +262,9 @@ class XiaoHongShuCrawler(AbstractCrawler):
 
     async def fetch_favorites(self) -> None:
         """Fetch a bounded slice of the logged-in account's collections."""
+        sync = (getattr(self, "runtime_options", None) and self.runtime_options.extra.get("favorites_sync"))
+        if sync:
+            return await sync(self.xhs_client)
         remaining = self._result_limit()
         detail_rows = []
         user_id = await _resolve_self_user_id(self.context_page)

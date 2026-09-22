@@ -225,7 +225,7 @@ class FavoritesJobManager:
     async def _run_platform(self, job: _Job, platform: str) -> None:
         info = job.platforms[platform]
         info.status = "running"
-        paged = platform == "bilibili" and bool(job.sync_mode)
+        paged = platform in ("bilibili", "zhihu", "xhs", "douyin") and bool(job.sync_mode)
         proc = None
         try:
             proc = await spawn_worker()
@@ -256,7 +256,7 @@ class FavoritesJobManager:
                         status = (event.data or {}).get("status")
                         if paged and isinstance(event.data, dict):
                             account = event.data.get("account")
-                            if isinstance(account, str) and account.startswith("bilibili:"):
+                            if isinstance(account, str) and account.startswith(("bilibili:", "zhihu:", "xhs:", "douyin:")):
                                 info.account = account
                             phase = event.data.get("phase")
                             if isinstance(phase, str):

@@ -200,6 +200,9 @@ class ZhihuCrawler(AbstractCrawler):
 
     async def fetch_favorites(self) -> None:
         """Fetch recent items across the current user's Zhihu collections."""
+        sync = (getattr(self, "runtime_options", None) and self.runtime_options.extra.get("favorites_sync"))
+        if sync:
+            return await sync(self.zhihu_client)
         me = await self.zhihu_client.get_current_user_info()
         token = me.get("url_token") if isinstance(me, dict) else None
         if not token:

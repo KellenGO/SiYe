@@ -439,8 +439,10 @@ async def _run_favorites(job_id: str, platform: str, limit: int, sync_mode=None)
             result_limit=limit, strict_errors=True, headless=True,
             reuse_http_client=True, light_page=True,
         )
-        if platform == "bilibili" and sync_mode:
-            from aggregate_search.favorites_sync import BilibiliFavoritesSource, synchronize_favorites
+        if platform in ("bilibili", "zhihu", "xhs", "douyin") and sync_mode:
+            from aggregate_search.favorites_sync import (
+                BilibiliFavoritesSource, DouyinFavoritesSource, XhsFavoritesSource,
+                ZhihuFavoritesSource, synchronize_favorites)
             from api.services.remote_favorites_store import get_remote_favorites_store
             from aggregate_search.protocol import emit_event
             from aggregate_search.models import WorkerEvent
@@ -449,8 +451,10 @@ async def _run_favorites(job_id: str, platform: str, limit: int, sync_mode=None)
                 emit_event(WorkerEvent(event="status", job_id=job_id, platform=platform,
                     data={"status": "running", "account": account, "result_count": count, "phase": phase}))
 
+            source_types = {"bilibili": BilibiliFavoritesSource, "zhihu": ZhihuFavoritesSource,
+                            "xhs": XhsFavoritesSource, "douyin": DouyinFavoritesSource}
             async def sync(client):
-                return await synchronize_favorites(BilibiliFavoritesSource(client), get_remote_favorites_store(), sync_mode, progress)
+                return await synchronize_favorites(source_types[platform](client), get_remote_favorites_store(), sync_mode, progress)
 
             crawler.runtime_options.extra["favorites_sync"] = sync
             folder_errors = await crawler.start()
@@ -469,7 +473,7 @@ async def _run_favorites(job_id: str, platform: str, limit: int, sync_mode=None)
         if isinstance(exc, sqlite3.Error):
             emit_error(job_id, platform, "failed", "本机收藏保存失败，请检查磁盘空间后继续同步")
         # 只认分页同步自己抛的错：别的 ValueError（代码 bug）要按原样暴露，别包装成"列表变化"。
-        elif isinstance(exc, (FavoritesSyncError, SyncStateError)) and platform == "bilibili" and sync_mode:
+        elif isinstance(exc, (FavoritesSyncError, SyncStateError)) and sync_mode:
             emit_error(job_id, platform, "failed", "收藏列表变化或返回异常，已保留进度，请稍后重新同步")
         else:
             emit_error(job_id, platform, _classify_error(exc), _safe_error_message(exc))

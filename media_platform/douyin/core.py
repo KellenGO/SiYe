@@ -290,6 +290,9 @@ class DouYinCrawler(AbstractCrawler):
 
     async def fetch_favorites(self) -> None:
         """Fetch a bounded slice of the logged-in account's collected videos."""
+        sync = (getattr(self, "runtime_options", None) and self.runtime_options.extra.get("favorites_sync"))
+        if sync:
+            return await sync(self.dy_client)
         remaining = self._result_limit()
         cursor = 0
         while remaining > 0:

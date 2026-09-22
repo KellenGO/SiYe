@@ -81,6 +81,11 @@ class RemoteFavoritesStore(RemoteSyncStateMixin, SqliteStoreBase):
         columns = {row[1] for row in conn.execute("PRAGMA table_info(remote_accounts)")}
         if "result_count" not in columns:
             conn.execute("ALTER TABLE remote_accounts ADD COLUMN result_count INTEGER NOT NULL DEFAULT 0")
+        checkpoint_columns = {row[1] for row in conn.execute("PRAGMA table_info(remote_checkpoints)")}
+        if "token" not in checkpoint_columns:
+            conn.execute("ALTER TABLE remote_checkpoints ADD COLUMN token TEXT")
+        if "next_token" not in checkpoint_columns:
+            conn.execute("ALTER TABLE remote_checkpoints ADD COLUMN next_token TEXT")
         self._enable_wal(conn)
 
     # ------------------------------------------------------------------ 写入

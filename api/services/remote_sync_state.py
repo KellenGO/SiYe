@@ -34,6 +34,7 @@ CREATE INDEX IF NOT EXISTS idx_remote_scans_account ON remote_scans(account);
 CREATE TABLE IF NOT EXISTS remote_checkpoints (
  account TEXT NOT NULL, folder TEXT NOT NULL, scan TEXT NOT NULL,
  page INTEGER NOT NULL, fingerprint TEXT NOT NULL, complete INTEGER NOT NULL,
+ token TEXT, next_token TEXT,
  PRIMARY KEY(account, folder)
 );
 CREATE TABLE IF NOT EXISTS remote_memberships (
@@ -91,6 +92,11 @@ class RemoteSyncStateMixin:
             row = conn.execute("SELECT * FROM remote_checkpoints WHERE account=? AND folder=?", (account, folder)).fetchone()
             return dict(row) if row else None
 
+    def has_baseline(self, account, folder):
+        with self._conn() as conn:
+            return conn.execute("SELECT 1 FROM remote_baseline WHERE account=? AND folder=? LIMIT 1",
+                                (account, folder)).fetchone() is not None
+
     def restart_folder(self, account, folder):
         with self._conn(write=True) as conn:
             conn.execute("DELETE FROM remote_checkpoints WHERE account=? AND folder=?", (account, folder))
@@ -100,19 +106,21 @@ class RemoteSyncStateMixin:
             # Old memberships remain until an authoritative complete scan.
 
     def baseline_run(self, account, folder, identities, current_run=0):
-        """返回跨页累计的连续历史命中数；基线严格限定为当前收藏夹。"""
+        """Return whether this page ever hit the stop run, plus its tail run."""
+        reached = False
         with self._conn() as conn:
             for cid, _stamp in identities:
                 known = conn.execute("SELECT 1 FROM remote_baseline WHERE account=? AND folder=? AND content_id=?", (account, folder, cid)).fetchone()
                 current_run = current_run + 1 if known else 0
-        return current_run
+                reached = reached or current_run >= 5
+        return reached, current_run
 
     def head_fingerprint(self, account, folder, scan):
         with self._conn() as conn:
             row = conn.execute("SELECT fingerprint FROM remote_page_observations WHERE account=? AND folder=? AND scan=? AND page=1", (account, folder, scan)).fetchone()
             return row[0] if row else None
 
-    def save_sync_page(self, platform, account, scan, folder, name, page, fingerprint, results, complete, page_size, identities=None):
+    def save_sync_page(self, platform, account, scan, folder, name, page, fingerprint, results, complete, page_size, identities=None, *, token=None, next_token=None):
         """落一页。`page_size` 由调用方给（分页大小是平台侧的事，这里不做假设）。"""
         with self._conn(write=True) as conn:
             duplicate = conn.execute("SELECT 1 FROM remote_page_observations WHERE account=? AND folder=? AND scan=? AND fingerprint=? AND page<>?", (account, folder, scan, fingerprint, page)).fetchone()
@@ -129,7 +137,7 @@ class RemoteSyncStateMixin:
                 cid = result["content_id"]
                 conn.execute("INSERT INTO remote_presence VALUES(?,?,'present',NULL) ON CONFLICT(account,content_id) DO UPDATE SET state='present',missing_batch=NULL", (account, cid))
                 conn.execute("INSERT INTO remote_memberships VALUES(?,?,?,?,?) ON CONFLICT(account,folder,content_id) DO UPDATE SET name=excluded.name,scan=excluded.scan", (account, folder, cid, name, scan))
-            conn.execute("INSERT INTO remote_checkpoints VALUES(?,?,?,?,?,?) ON CONFLICT(account,folder) DO UPDATE SET scan=excluded.scan,page=excluded.page,fingerprint=excluded.fingerprint,complete=excluded.complete", (account, folder, scan, page, fingerprint, int(complete)))
+            conn.execute("INSERT INTO remote_checkpoints(account,folder,scan,page,fingerprint,complete,token,next_token) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(account,folder) DO UPDATE SET scan=excluded.scan,page=excluded.page,fingerprint=excluded.fingerprint,complete=excluded.complete,token=excluded.token,next_token=excluded.next_token", (account, folder, scan, page, fingerprint, int(complete), json.dumps(token, ensure_ascii=False), json.dumps(next_token, ensure_ascii=False)))
             conn.execute("INSERT OR REPLACE INTO remote_page_observations VALUES(?,?,?,?,?)", (account, folder, scan, page, fingerprint))
             conn.execute("UPDATE remote_accounts SET version=version+1,result_count=result_count+?,updated_at=? WHERE account=?", (len(results), utc_now(), account))
 

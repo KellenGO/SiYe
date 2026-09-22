@@ -2,7 +2,7 @@
 
 ## 一句话
 
-把各平台收藏归档到本机 SQLite。B站不设总条数上限，逐页保存、可中断恢复；**一键同步只拉新增**
+把各平台收藏归档到本机 SQLite。B站、知乎和小红书的已接入收藏接口不设产品侧总条数上限，逐页保存、可中断恢复；**一键同步只拉新增**
 （读到本机已有的内容段就停），另有一个不显眼的「完整重扫」用来彻底对齐。其他平台仍每次最多 100 条。
 
 ## 代码入口
@@ -13,7 +13,7 @@
 | 任务编排、逐平台落库、错误 drain | `api/services/favorites_job_manager.py`（`FavoritesJobManager`） |
 | HTTP 路由（前缀 `/api/search`） | `api/routers/search.py`：`POST /favorites/jobs`、`GET /favorites/jobs/latest`、`GET /favorites/jobs/{job_id}`、`POST /favorites/jobs/{job_id}/cancel` |
 | 请求 / 响应模型 | `api/schemas/favorites.py` |
-| B站分页来源、增量停点、页大小与超时常量 | `aggregate_search/favorites_sync.py`（`BilibiliFavoritesSource`、`synchronize_favorites`、`PAGE_SIZE`、`INCREMENTAL_STOP_RUN`） |
+| 平台分页来源、增量停点、页大小与超时常量 | `aggregate_search/favorites_sync.py`（各 `*FavoritesSource`、`synchronize_favorites`、`PAGE_SIZE`、`INCREMENTAL_STOP_RUN`） |
 | 账号隔离、检查点、基线比对、取全量结果 | `api/services/remote_sync_state.py`（`RemoteSyncStateMixin`） |
 | 抓取侧（超时、分页、错误码） | `aggregate_search/worker.py` + 各平台 `media_platform/*/core.py` |
 | 前端 | `webui/src/hooks/useFavorites.ts`、`webui/src/components/favorites/FavoritesPage.tsx`、`webui/src/components/search/ResultTabs.tsx`（`pageSize`） |
