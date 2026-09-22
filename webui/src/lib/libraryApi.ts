@@ -48,6 +48,8 @@ export function setUnsaveConfirm(enabled: boolean, storage: WriteStorage | null 
 export interface LibraryTag {
   id: number;
   name: string;
+  /** 加入自建收藏夹的本机时间；仅用于本地卡片封面排序。 */
+  addedAt?: string | null;
 }
 
 export interface LibraryItem {
@@ -109,7 +111,11 @@ export function toLibraryItem(raw: unknown): LibraryItem | null {
   const tags = Array.isArray(raw.collections)
     ? raw.collections
         .filter(isRecord)
-        .map((tag) => ({ id: Number(tag.id) || 0, name: String(tag.name ?? "") }))
+        .map((tag) => ({
+          id: Number(tag.id) || 0,
+          name: String(tag.name ?? ""),
+          addedAt: typeof tag.added_at === "string" ? tag.added_at : null,
+        }))
         .filter((tag) => tag.name.length > 0)
     : [];
   return {

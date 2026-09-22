@@ -84,6 +84,11 @@ test("toLibraryItem：同一条内容可属于多个收藏夹（多对多不被�
   assert.equal(expectItem(apiItem()).collections.length, 2);
 });
 
+test("toLibraryItem：保留加入自建收藏夹时间供卡片封面排序，不借用内容发布时间", () => {
+  const item = expectItem(apiItem({ collections: [{ id: 2, name: "AI 学习", added_at: "2026-09-03T00:00:00Z" }] }));
+  assert.equal(item.collections[0].addedAt, "2026-09-03T00:00:00Z");
+});
+
 test("toLibraryItem：格式非法返回 null，不抛异常（单条坏数据不整页崩）", () => {
   assert.equal(toLibraryItem(null), null);
   assert.equal(toLibraryItem({ id: 1 }), null);

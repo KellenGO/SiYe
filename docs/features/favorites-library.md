@@ -13,9 +13,9 @@
 | 旧格式互动数据 / 元信息兼容编解码 | `api/services/favorite_snapshot.py` |
 | 请求 / 响应模型 | `api/schemas/library.py` |
 | HTTP 路由（前缀 `/api/library`） | `api/routers/library.py`，在 `api/main.py` 注册 |
-| 前端 API 层（纯函数 + axios 两段） | `webui/src/lib/libraryApi.ts` |
+| 前端 API 层（纯函数 + axios 两段） | `webui/src/lib/libraryApi.ts`、`webui/src/lib/localFolderView.ts` |
 | 前端状态与写操作 | `webui/src/hooks/useBookmarks.ts` |
-| 收藏夹界面（左列表 / 右结果） | `webui/src/components/favorites/FavoritesPage.tsx` |
+| 收藏夹界面（列表或卡片网格 / 结果） | `webui/src/components/favorites/FavoritesPage.tsx` |
 | 结果卡操作、收藏条目分组与归属编辑 | `webui/src/components/search/ResultTabs.tsx`、`webui/src/components/search/ResultTools.tsx`、`webui/src/index.css` |
 | 一批条目的归属勾选三态（聚合卡片用） | `webui/src/lib/libraryApi.ts`（`collectionMembership`） |
 | 备份导出 / 导入 | `webui/src/components/search/BookmarkBackup.tsx` |
@@ -26,7 +26,9 @@
 ## 关键决定
 
 - **一条内容可属于多个收藏夹，底层只存一份**：`UNIQUE(platform, content_id)` + 关联表。
-- 固定内置视图按「全部 → 默认收藏夹 → 稍后再看」排列，再显示自建收藏夹。
+- 固定内置视图按「全部 → 未分类 → 默认收藏夹 → 稍后再看」排列，再显示自建收藏夹。
+- **本地收藏夹可选图标模式**：默认仍是既有列表；工具栏的「列表 / 图标」只保存在本机浏览偏好，不改数据、当前收藏夹或搜索/排序条件。图标根页只浏览分类与自建夹，不在背后铺开全部内容；点卡片才进入原有纵向列表，返回恢复网格滚动位置。
+- 图标模式的自建夹封面按关联记录的「加入该夹时间」挑最近且已有缩略图的内容；内置分类没有单独关联时间时按本机收藏时间降级，绝不借用内容发布时间。卡片摘要直接从已载入本地数据计算，不请求平台或逐夹补详情；空夹、无图和图片失败统一显示占位。
 - **「已收藏」是独立状态**（`saved`）：「全部」只显示已收藏的内容，且不可编辑——收藏了就一定在，没收藏就一定不在（也不会在任何其他收藏夹里）。只挂在稍后再看上的内容不进「全部」。
 - **取消收藏 = 从本机彻底移除**（和「从本机彻底删除」是同一个动作，走同一个接口）：整条记录连备注、所有收藏夹归属一起删掉，所以它必然从「全部」消失。点之前弹一次居中确认框（456px 宽），标题「是否要取消收藏」；破坏性按钮做实底红色、默认焦点落在「取消」上（避免回车直接删），并提供「下次不再提示」（存 localStorage，勾过就不再问）。
 - **稍后再看完全独立**：只由卡片上的稍后再看按钮控制，不进归属面板，也不影响收藏状态。详见[收藏状态与稍后再看分离决策](../decisions/2026-09-21-收藏状态与稍后再看分离.md)。
@@ -62,10 +64,11 @@
 - 传了已删除的 collection_id 会让该条内容**整条**收藏失败（单条 400，批量静默跳过）。
 - 备注超 1000 字是**静默截断**，不给用户提示。
 - `LOCALAPPDATA` 不可用时才回退到应用目录；目标目录不可写会让启动明确失败，不会静默改读空库。
+- 图标模式只在根页展示夹名；内容搜索仍由进入夹后的原有结果列表负责，不能误解为按夹名搜索。切换到图标模式时，若当前已在某个夹中会留在该夹的列表，避免意外跳转。
 
 ## 测试怎么跑
 
 - 后端：`tests/test_library_store.py`、`tests/test_library_api.py`、`tests/test_library_migration.py`、`tests/test_favorite_snapshot.py`
-- 前端：`webui/tests/libraryApi.test.ts`、`webui/tests/resultLibrary.test.ts`
-- 浏览器：`scripts/favorites_ui_smoke.py`（内置收藏夹、按钮顺序、稍后再看独立性、取消收藏的居中确认框与「下次不再提示」、归属面板不含稍后再看、长名称截断与桌面/移动分组布局）
+- 前端：`webui/tests/libraryApi.test.ts`、`webui/tests/resultLibrary.test.ts`、`webui/tests/localFolderView.test.ts`
+- 浏览器：`scripts/favorites_ui_smoke.py`（内置收藏夹、列表/图标偏好、卡片进入/返回、桌面/移动网格、按钮顺序、稍后再看独立性、取消收藏的居中确认框与「下次不再提示」、归属面板不含稍后再看、长名称截断与桌面/移动分组布局）
 - 跑法（`--basetemp`、node 绝对路径）见根目录 `AGENTS.md`。

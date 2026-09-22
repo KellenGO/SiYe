@@ -737,14 +737,17 @@ class LibraryStore(SqliteStoreBase):
     def _collections_of(conn: sqlite3.Connection, item_id: int) -> List[Dict[str, Any]]:
         rows = conn.execute(
             """
-            SELECT c.id, c.name FROM item_collections ic
+            SELECT c.id, c.name, ic.added_at FROM item_collections ic
             JOIN collections c ON c.id = ic.collection_id
             WHERE ic.item_id = ?
             ORDER BY c.position ASC, c.id ASC
             """,
             (item_id,),
         ).fetchall()
-        return [{"id": int(row["id"]), "name": row["name"]} for row in rows]
+        return [
+            {"id": int(row["id"]), "name": row["name"], "added_at": row["added_at"]}
+            for row in rows
+        ]
 
     @staticmethod
     def _attach(conn: sqlite3.Connection, item_id: int, collection_ids: Sequence[int]) -> None:

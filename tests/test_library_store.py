@@ -375,6 +375,17 @@ def test_import_inline_folders_are_reused(store: LibraryStore) -> None:
     assert store.list_collections()[0]["item_count"] == 2
 
 
+def test_item_collection_includes_membership_time_for_local_folder_cover(store: LibraryStore) -> None:
+    collection = store.create_collection("封面排序")
+    store.add_item(_result(content_id="cover"), collection_ids=[collection["id"]])
+
+    tag = store.get_item("xhs", "cover")["collections"][0]
+
+    assert tag["id"] == collection["id"]
+    assert tag["name"] == "封面排序"
+    assert isinstance(tag["added_at"], str) and tag["added_at"]
+
+
 def test_invalid_collection_does_not_leave_an_unfiled_item(store: LibraryStore) -> None:
     with pytest.raises(ValueError, match="收藏夹不存在"):
         store.add_item(_result(), collection_ids=[999])

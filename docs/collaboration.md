@@ -13,6 +13,14 @@
 
 ## 最近交接
 
+### LOCAL-FOLDER-GRID-20260922 — 本地收藏夹图标模式
+
+- 负责人：Codex / 当前会话；工作区：`MediaCrawler-main`；分支：`master`；起始提交：`5eb6972`。
+- 交付：列表模式保持默认；工具栏新增可记忆的「列表 / 图标」。图标根页将全部收藏、未分类、内置分类和自建夹分开显示为封面卡片；进入后继续使用原有可编辑纵向内容列表，返回恢复网格位置。自建夹封面按已有归属的加入时间，内置分类按本机收藏时间降级；不使用内容发布时间，也不访问平台。
+- 数据边界：仅透出已有 `item_collections.added_at` 供前端排序，未迁移或重做收藏模型；本地夹仍可新建、改名、删除和编辑归属，远端镜像未改。
+- 验证：后端收藏库/API 44 通过；前端 `npm run test:search` 367 通过、`npm run build` 通过；文档守卫 52 通过；隔离 SQLite + Playwright 烟测覆盖有封面/无封面、空夹、未分类、多夹、进入/返回、390px 无横向溢出与本机偏好。截图在 `build/review-local-folder-grid.png`、`build/review-local-folder-detail.png`、`build/review-local-folder-grid-mobile.png`（构建临时产物，未提交）。未访问真实平台或真实收藏库。
+- 交付定位：`git log --all --grep=LOCAL-FOLDER-GRID-20260922`；源码与本轮 `webui/dist` 生产构建一致，已打包 EXE 不会自动更新。
+
 ### MIRROR-20260922 — B站、知乎远端收藏夹只读镜像
 
 - 负责人：Codex / 当前会话；工作区：`MediaCrawler-main`；分支：`master`；起始提交：`48724e1`。

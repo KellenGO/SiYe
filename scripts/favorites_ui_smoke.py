@@ -41,7 +41,7 @@ def main():
         app.dependency_overrides[get_library_store] = lambda: store
         client = TestClient(app)
         results = [
-            {"platform": "xhs", "content_id": "a", "title": "图文收藏测试", "url": "https://www.xiaohongshu.com/explore/a"},
+            {"platform": "xhs", "content_id": "a", "title": "图文收藏测试", "url": "https://www.xiaohongshu.com/explore/a", "cover_url": "https://covers.siye.invalid/a.svg"},
             {"platform": "bilibili", "content_id": "b", "title": "视频收藏测试", "url": "https://www.bilibili.com/video/BVtest", "content_type": "video"},
         ]
         legacy = {"version": 1, "items": [{"result": r, "note": "旧备注", "savedAt": "2026-09-01T00:00:00Z"} for r in results]}
@@ -57,7 +57,9 @@ def main():
         def route_request(route):
             req = route.request
             url = urlsplit(req.url)
-            if not req.url.startswith(origin + "/"):
+            if url.netloc == "covers.siye.invalid":
+                route.fulfill(content_type="image/svg+xml", body='<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="#7c8cff"/><circle cx="488" cy="92" r="130" fill="#37c9bd" opacity=".72"/></svg>')
+            elif not req.url.startswith(origin + "/"):
                 route.abort()
             elif url.path.startswith("/api/library/"):
                 if failures["note"] and req.method == "PATCH" and "/items/" in url.path:
@@ -205,6 +207,23 @@ def main():
                 page.get_by_role("button", name="编辑归属", exact=True).first.click()
                 page.screenshot(path=str(ROOT / "build" / "review-favorites-desktop.png"), full_page=True)
                 page.locator(".membership-card").get_by_role("button", name="完成", exact=True).click()
+                # 图标模式只浏览收藏夹；点击后仍回到原有纵向内容列表，返回时保留网格。
+                page.get_by_role("button", name="全部 2", exact=True).click()
+                page.get_by_role("button", name="图标", exact=True).click()
+                expect(page.locator(".local-folder-browser")).to_be_visible()
+                expect(page.locator(".local-folder-card")).to_have_count(6)
+                expect(page.locator(".local-folder-card").filter(has_text="跨平台学习").locator("img")).to_be_visible()
+                page.screenshot(path=str(ROOT / "build" / "review-local-folder-grid.png"), full_page=True)
+                page.locator(".local-folder-open").filter(has_text="跨平台学习").click()
+                expect(page.get_by_role("button", name="返回收藏夹", exact=True)).to_be_visible()
+                expect(page.get_by_text("视频收藏测试", exact=True)).to_be_visible()
+                page.screenshot(path=str(ROOT / "build" / "review-local-folder-detail.png"), full_page=True)
+                page.get_by_role("button", name="返回收藏夹", exact=True).click()
+                expect(page.locator(".local-folder-browser")).to_be_visible()
+                page.set_viewport_size({"width": 390, "height": 844})
+                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), "local icon grid overflow at 390px"
+                page.screenshot(path=str(ROOT / "build" / "review-local-folder-grid-mobile.png"), full_page=True)
+                page.get_by_role("button", name="列表", exact=True).click()
                 for width in (1024, 390):
                     page.set_viewport_size({"width": width, "height": 844})
                     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), f"local layout overflow at {width}"

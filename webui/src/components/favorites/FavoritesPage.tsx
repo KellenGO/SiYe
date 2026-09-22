@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import {
-  AlertTriangle, ArrowLeft, Bookmark, Check, Clock3, FolderHeart, FolderPlus, Loader2, Pencil, RefreshCw, Trash2, X,
+  AlertTriangle, ArrowLeft, Bookmark, Check, Clock3, FolderHeart, FolderPlus, Grid2X2, List, Loader2, MoreHorizontal, Pencil, RefreshCw, Trash2, X,
 } from "lucide-react";
 import { ResultTabs } from "@/components/search/ResultTabs";
 import { BookmarkBackup } from "@/components/search/BookmarkBackup";
@@ -11,6 +11,7 @@ import { parseGroupKey, resultSources } from "@/lib/resultTools";
 import type { PlatformSlug, UnifiedSearchResult } from "@/types/search";
 import { PLATFORM_COLORS, PLATFORM_LABELS, STATUS_LABELS } from "@/types/search";
 import { PLATFORM_SLUGS } from "@/lib/platformMeta";
+import { readLocalFolderView, writeLocalFolderView, type LocalFolderView } from "@/lib/localFolderView";
 
 const PLATFORMS = PLATFORM_SLUGS;
 const RECOVERY_NOTICE_PREFIX = "siye_library_recovery_notice_";
@@ -21,13 +22,18 @@ function errorMessage(error: unknown): string {
   return typeof detail === "string" ? detail : "收藏夹同步失败，请稍后重试。";
 }
 
-/** 本地收藏左侧选择：全部 / 两个内置收藏夹 / 某个自建收藏夹。 */
-type LibrarySelection = { kind: "all" } | { kind: "default" } | { kind: "watch_later" } | { kind: "collection"; id: number };
+/** 本地收藏左侧选择：全部 / 内置分类 / 某个自建收藏夹。 */
+type LibrarySelection = { kind: "all" } | { kind: "unclassified" } | { kind: "default" } | { kind: "watch_later" } | { kind: "collection"; id: number };
 type RemoteFolder = { account: string; folder: string; platform: PlatformSlug; name: string; item_count: number; cover_url?: string | null; observed_state: "present" | "not_found"; last_content_complete_at?: string | null };
 type RemoteFolderItems = { items: UnifiedSearchResult[]; total: number; offset: number; limit: number };
 
 function customCollectionLabel(name: string): string {
   return ["全部", "全部收藏", "默认收藏夹", "稍后再看"].includes(name) ? `${name}（自建）` : name;
+}
+
+function stableTime(value: string | null | undefined): number {
+  const parsed = value ? Date.parse(value) : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 interface FavoritesPageProps {
@@ -48,6 +54,8 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
   const [selected, setSelected] = useState<Set<PlatformSlug>>(() => new Set(PLATFORMS));
 
   const [selection, setSelection] = useState<LibrarySelection>({ kind: "all" });
+  const [localFolderView, setLocalFolderView] = useState<LocalFolderView>(() => readLocalFolderView());
+  const [localFolderRoot, setLocalFolderRoot] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [selectionResetKey, setSelectionResetKey] = useState(0);
   const [creating, setCreating] = useState(false);
@@ -62,12 +70,17 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
   const [remoteFolderLoading, setRemoteFolderLoading] = useState(false);
   const folderRequest = useRef(0);
   const gridScrollY = useRef(0);
+  const localGridScrollY = useRef(0);
 
   const defaultCount = useMemo(
     () => library.items.filter((item) => item.inDefault).length,
     [library.items],
   );
   const watchLaterCount = useMemo(() => library.items.filter((item) => item.watchLater).length, [library.items]);
+  const unclassifiedCount = useMemo(
+    () => library.stats?.unclassified ?? library.items.filter((item) => item.saved && !item.inDefault && !item.collections.length).length,
+    [library.stats, library.items],
+  );
   // 「全部」= 已收藏的内容；只挂在稍后再看上的不算，它有自己的视图。
   const savedCount = useMemo(
     () => library.stats?.saved_count ?? library.items.filter((item) => item.saved).length,
@@ -75,6 +88,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
   );
   const visibleItems = useMemo(() => {
     if (selection.kind === "all") return library.items.filter((item) => item.saved);
+    if (selection.kind === "unclassified") return library.items.filter((item) => item.saved && !item.inDefault && !item.collections.length);
     if (selection.kind === "default") return library.items.filter((item) => item.inDefault);
     if (selection.kind === "watch_later") return library.items.filter((item) => item.watchLater);
     return library.items.filter((item) => item.collections.some((tag) => tag.id === selection.id));
@@ -83,6 +97,25 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
   const activeCollection = selection.kind === "collection"
     ? library.collections.find((item) => item.id === selection.id) ?? null
     : null;
+  const localCardCover = (matches: typeof library.items, collectionId?: number) => {
+    const ordered = [...matches].sort((left, right) => {
+      const leftTag = collectionId === undefined ? null : left.collections.find((tag) => tag.id === collectionId);
+      const rightTag = collectionId === undefined ? null : right.collections.find((tag) => tag.id === collectionId);
+      // 自建夹优先按「加入该夹」时间；内置分类没有独立归属时间时才退回收藏时间。
+      return stableTime(rightTag?.addedAt ?? right.savedAt) - stableTime(leftTag?.addedAt ?? left.savedAt);
+    });
+    return ordered.find((item) => item.result.cover_url)?.result.cover_url ?? null;
+  };
+  const localFolderCards = useMemo(() => ({
+    all: { count: savedCount, cover: localCardCover(library.items.filter((item) => item.saved)) },
+    unclassified: { count: unclassifiedCount, cover: localCardCover(library.items.filter((item) => item.saved && !item.inDefault && !item.collections.length)) },
+    default: { count: defaultCount, cover: localCardCover(library.items.filter((item) => item.inDefault)) },
+    watchLater: { count: watchLaterCount, cover: localCardCover(library.items.filter((item) => item.watchLater)) },
+    collections: library.collections.map((collection) => ({
+      ...collection,
+      cover: localCardCover(library.items.filter((item) => item.collections.some((tag) => tag.id === collection.id)), collection.id),
+    })),
+  }), [library.items, library.collections, savedCount, unclassifiedCount, defaultCount, watchLaterCount]);
 
   // 收藏夹被删除后回到「全部」
   useEffect(() => {
@@ -251,7 +284,25 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
       ? `${defaultCount} 条默认收藏 · 点击收藏按钮可独立加入或移出`
       : selection.kind === "watch_later"
         ? `${watchLaterCount} 条稍后再看 · 不会修改平台原生收藏`
-      : `${savedCount} 条已收藏 · 收藏与备注保存在本机数据库`;
+        : selection.kind === "unclassified"
+          ? `${unclassifiedCount} 条未分类内容 · 尚未加入默认或自建收藏夹`
+        : `${savedCount} 条已收藏 · 收藏与备注保存在本机数据库`;
+
+  const setLocalView = (view: LocalFolderView) => {
+    setLocalFolderView(view);
+    writeLocalFolderView(view);
+    if (view === "icon" && selection.kind === "all") setLocalFolderRoot(true);
+    if (view === "list") setLocalFolderRoot(false);
+  };
+  const openLocalFolder = (next: LibrarySelection) => {
+    localGridScrollY.current = window.scrollY;
+    setSelection(next);
+    setLocalFolderRoot(false);
+  };
+  const closeLocalFolder = () => {
+    setLocalFolderRoot(true);
+    requestAnimationFrame(() => window.scrollTo({ top: localGridScrollY.current }));
+  };
 
   return (
     <div className="preview-container favorites-page">
@@ -262,7 +313,13 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
             <h1>留住值得再看的内容</h1>
             <p className="description">{tab === "local" ? "给有用的内容一个位置，也记下自己的想法。" : "把不同平台的收藏放在一起，慢慢阅读。"}</p>
           </div>
-          {tab === "local" && <details className="backup-details"><summary className="btn">备份管理</summary><BookmarkBackup library={library} /></details>}
+          {tab === "local" && <div className="local-heading-actions">
+            <div className="local-view-switch" role="group" aria-label="本地收藏夹浏览方式">
+              <button type="button" className={localFolderView === "list" ? "active" : ""} aria-pressed={localFolderView === "list"} onClick={() => setLocalView("list")}><List aria-hidden="true" />列表</button>
+              <button type="button" className={localFolderView === "icon" ? "active" : ""} aria-pressed={localFolderView === "icon"} onClick={() => setLocalView("icon")}><Grid2X2 aria-hidden="true" />图标</button>
+            </div>
+            <details className="backup-details"><summary className="btn">备份管理</summary><BookmarkBackup library={library} /></details>
+          </div>}
         </div>
 
         <nav className="tabs collection-switch" aria-label="收藏类型">
@@ -319,7 +376,30 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
         </div>
       )}
 
-      {tab === "local" ? (
+      {tab === "local" && localFolderView === "icon" && localFolderRoot ? (
+        <section className="local-folder-browser" aria-label="本地收藏夹图标模式">
+          <div className="local-folder-intro">
+            <div><span className="eyebrow">LOCAL FOLDERS</span><h2>本地收藏夹</h2><p>封面取最近加入该夹的已有缩略图；内置分类没有独立归属时间时按本机收藏时间排序。</p></div>
+            {creating ? <span className="library-inline-form local-folder-create"><input className="field" aria-label="新收藏夹名称" placeholder="收藏夹名称" value={newName} autoFocus maxLength={60} onChange={(event) => setNewName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void submitNewCollection(); if (event.key === "Escape") { setCreating(false); setNewName(""); } }} /><button type="button" className="icon-btn" aria-label="创建收藏夹" disabled={moving} onClick={() => void submitNewCollection()}><Check /></button><button type="button" className="icon-btn" aria-label="取消创建" onClick={() => { setCreating(false); setNewName(""); }}><X /></button></span> : <button type="button" className="btn small" onClick={() => setCreating(true)}><FolderPlus aria-hidden="true" />新建收藏夹</button>}
+          </div>
+          <section className="local-folder-section" aria-label="快捷分类"><h3>快捷分类</h3><div className="local-folder-grid">
+            {([
+              ["all", "全部收藏", Bookmark, localFolderCards.all],
+              ["unclassified", "未分类", FolderHeart, localFolderCards.unclassified],
+              ["default", "默认收藏夹", FolderHeart, localFolderCards.default],
+              ["watch_later", "稍后再看", Clock3, localFolderCards.watchLater],
+            ] as const).map(([kind, label, Icon, card]) => <article className="local-folder-card" key={kind}>
+              <button type="button" className="local-folder-open" onClick={() => openLocalFolder({ kind })}><span className="local-folder-stack" aria-hidden="true"><span /><span /></span><span className="local-folder-cover"><Icon />{card.cover && <img src={card.cover} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} />}</span><span className="local-folder-name" title={label}>{label}</span><span className="local-folder-meta"><span>本地分类</span><b>{card.count}</b></span></button>
+            </article>)}
+          </div></section>
+          <section className="local-folder-section" aria-label="自建收藏夹"><h3>自建收藏夹</h3>
+            {localFolderCards.collections.length ? <div className="local-folder-grid">{localFolderCards.collections.map((collection) => <article className="local-folder-card" key={collection.id}>
+              <button type="button" className="local-folder-open" onClick={() => openLocalFolder({ kind: "collection", id: collection.id })}><span className="local-folder-stack" aria-hidden="true"><span /><span /></span><span className="local-folder-cover"><FolderHeart />{collection.cover && <img src={collection.cover} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} />}</span><span className="local-folder-name" title={customCollectionLabel(collection.name)}>{customCollectionLabel(collection.name)}</span><span className="local-folder-meta"><span>本地收藏夹</span><b>{collection.item_count}</b></span></button>
+              <details className="local-folder-actions" onClick={(event) => event.stopPropagation()}><summary aria-label={`更多操作：${collection.name}`}><MoreHorizontal /></summary>{renaming === collection.id ? <span className="local-card-rename"><input className="field" aria-label={`重命名收藏夹 ${collection.name}`} value={renameValue} autoFocus maxLength={60} onChange={(event) => setRenameValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void submitRename(collection.id); if (event.key === "Escape") setRenaming(null); }} /><button type="button" onClick={() => void submitRename(collection.id)}><Check /></button><button type="button" onClick={() => setRenaming(null)}><X /></button></span> : <><button type="button" onClick={() => { setRenaming(collection.id); setRenameValue(collection.name); }}><Pencil />重命名</button><button type="button" className="danger" onClick={() => void library.deleteCollection(collection.id)}><Trash2 />删除</button></>}</details>
+            </article>)}</div> : <p className="local-folder-empty">还没有自建收藏夹。新建后，可在内容列表中把同一条内容放进多个收藏夹。</p>}
+          </section>
+        </section>
+      ) : tab === "local" ? (
         <div className="library-layout">
           <aside className="library-side" aria-label="收藏夹">
             <button
@@ -328,6 +408,13 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
               onClick={() => setSelection({ kind: "all" })}
             >
               <Bookmark aria-hidden="true" />全部<span>{savedCount}</span>
+            </button>
+            <button
+              type="button"
+              className={`library-side-item ${selection.kind === "unclassified" ? "active" : ""}`}
+              onClick={() => setSelection({ kind: "unclassified" })}
+            >
+              <FolderHeart aria-hidden="true" />未分类<span>{unclassifiedCount}</span>
             </button>
             <button
               type="button"
@@ -414,6 +501,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
           </aside>
 
           <div className="library-main">
+            {localFolderView === "icon" && <button type="button" className="text-link remote-folder-back" onClick={closeLocalFolder}><ArrowLeft />返回收藏夹</button>}
             {selectedKeys.length > 0 && (
               <div className="library-batch" role="status">
                 <span>已选 {selectedItemKeys.length} 条</span>
