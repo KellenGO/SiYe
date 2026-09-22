@@ -23,6 +23,7 @@
 - 交付定位：`git log --all --grep=DOC-SHOTS-20260922`。文档与图片交付，不涉及应用构建或部署。
 - 验证：人工核对打码后截图；`git status` 确认仅上述文件。未运行测试（无代码改动）。
 - **后续（同任务追加，2026-09-22）**：落地页同步换图 —— `site/` 8 张截图全部换为打码版（shot-search 裁掉底部半条，1600×700；其余 1600×773）；`site/index.html` 首屏图换新并在 features 后新增「界面一览」区块（`.shots` 网格 + 6 张卡，含浅/深主题并排卡）；新增 CSS 已同步进 `guide.html`；guide 两处 `figure.shot` 与 `docs/使用说明.md` 图注随新图更新（账号图从「4/4 已登录」改为 2/4 实拍状态）；`og.png` 已用 `scripts/build_landing_og.py` 重新生成；`site/维护说明.md` 截图表与流程已同步。Playwright 冒烟截图确认 `#shots` 区块浅深主题与 guide 图渲染正常。
+- **后续（同任务追加之二，2026-09-22）**：修落地页 `#mobile` 区块布局 —— 两张卡片在 ≥980px 的通用三列网格里只占 2/3 宽、右侧留白，改为 `#mobile .cards` 两列铺满；按钮行 `.cta-row` 原本只有 `margin-bottom`、紧贴卡片，补 `margin-top:22px`（`.small-note` 一并到 18px）。规则加在 `.cards` 声明后，已同步进 `guide.html`（该页无 `#mobile`，仅为两份 CSS 保持一致）。实测（视口 1440）：`#mobile .cards` 与 `.cta-row` 都是 180→1260，与 `--max` 内容宽对齐，按钮上间距 22px；900px 视口下两列正常。
 
 ### MOBILE-CREDIT-20260922 — Android 客户端归属署名改为 MMY
 

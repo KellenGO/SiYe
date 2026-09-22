@@ -295,6 +295,12 @@ html.dark .i-moon{display:none}
 @media (min-width:640px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (min-width:980px){.cards{grid-template-columns:repeat(3,minmax(0,1fr))}}
 .cards>*{min-width:0}
+
+/* 移动端区块只有两张卡片：宽屏按两列铺满，避免右侧空出 1/3；
+   按钮行紧跟在卡片后面，这里补上与其它区块一致的上间距。 */
+@media (min-width:980px){#mobile .cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+#mobile .cta-row{margin-top:22px}
+#mobile .small-note{margin-top:18px}
 .card h3{font-size:15.5px;font-weight:650;letter-spacing:-.2px;margin-bottom:8px}
 .card p{color:var(--secondary);font-size:13.5px;line-height:1.8}
 .card .note{margin-top:12px;padding-top:11px;border-top:1px solid var(--line);color:var(--muted);font-size:12.5px}
