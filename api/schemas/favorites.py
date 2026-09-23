@@ -9,7 +9,7 @@ from aggregate_search.models import PLATFORM_SLUGS, PlatformSlug, PlatformStatus
 
 
 class FavoritesJobRequest(BaseModel):
-    sync_mode: Optional[Literal["auto", "full"]] = None
+    sync_mode: Optional[Literal["auto", "full", "reset"]] = None
     platforms: List[PlatformSlug] = Field(default_factory=lambda: PLATFORM_SLUGS.copy(), min_length=1)
     # 每个平台的目标总量（不是单次请求量）：worker 会按平台允许的分页方式逐页读取。
     # 默认保持 20 保守取值，前端「同步收藏」显式传 100。

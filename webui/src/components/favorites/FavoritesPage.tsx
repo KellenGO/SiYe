@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import {
-  AlertTriangle, ArrowLeft, Bookmark, Check, Clock3, FolderHeart, FolderPlus, Grid2X2, List, Loader2, MoreHorizontal, Pencil, RefreshCw, Trash2, X,
+  AlertTriangle, ArrowLeft, Bookmark, Check, CircleHelp, Clock3, FolderHeart, FolderPlus, Grid2X2, List, Loader2, MoreHorizontal, Pencil, RefreshCw, Trash2, X,
 } from "lucide-react";
 import { ResultTabs } from "@/components/search/ResultTabs";
 import { BookmarkBackup } from "@/components/search/BookmarkBackup";
@@ -52,6 +52,14 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
     onTabChange?.(next);
   };
   const [selected, setSelected] = useState<Set<PlatformSlug>>(() => new Set(PLATFORMS));
+  const resetSelected = () => {
+    const platforms = [...selected];
+    if (!platforms.length || remote.busy) return;
+    const names = platforms.map((platform) => PLATFORM_LABELS[platform]).join("、");
+    if (window.confirm(`重置同步将覆盖所选平台（${names}）对应的本地跨平台收藏。不会修改平台上的收藏。是否继续？`)) {
+      void remote.sync(platforms, "reset");
+    }
+  };
 
   const [selection, setSelection] = useState<LibrarySelection>({ kind: "all" });
   const [localFolderView, setLocalFolderView] = useState<LocalFolderView>(() => readLocalFolderView());
@@ -336,11 +344,17 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
                 <i className="pd" style={{ backgroundColor: PLATFORM_COLORS[platform] }} />{PLATFORM_LABELS[platform]}<span className="check">{selected.has(platform) ? "✓" : ""}</span>
               </button>)}
             </div>
-            <p className="collection-count">
-              同步不会修改平台上的原收藏。
-              <button type="button" className="text-link" disabled={!selected.size || remote.busy}
-                onClick={() => void remote.sync([...selected], "full")}>重新同步全部</button>
-            </p>
+            <p className="collection-count">同步所选平台 / 继续：跟进平台收藏夹内容，只新增。不会修改平台上的收藏。</p>
+            <details className="remote-advanced">
+              <summary>高级操作</summary>
+              <div className="remote-advanced-content">
+                <p>重置同步：直接覆盖本地跨平台收藏。只覆盖成功重新读取的所选平台；不会修改平台上的收藏。</p>
+                <div className="remote-advanced-actions">
+                  <button type="button" className="btn" disabled={!selected.size || remote.busy} onClick={resetSelected}>重置同步</button>
+                  <a className="reset-help-link" href="#/help/advanced-reset-sync" aria-label="查看重置同步的高级功能说明" title="查看重置同步的高级功能说明"><CircleHelp aria-hidden="true" /></a>
+                </div>
+              </div>
+            </details>
           </>
         )}
       </div>

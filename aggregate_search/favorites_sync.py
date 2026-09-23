@@ -119,6 +119,23 @@ class DouyinFavoritesSource(_Source):
     async def page(self,folder,token): raise AssertionError("unreachable")
 
 async def synchronize_favorites(source:FavoritesSource,store,mode,progress):
+    if mode == "reset":
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+
+        # Read a complete platform snapshot away from the live archive. A failed,
+        # interrupted, or cancelled read never reaches the replacement transaction.
+        with TemporaryDirectory(prefix="siye-reset-", dir=store.db_path.parent) as temp:
+            staged = type(store)(Path(temp) / "staged.db")
+            errors = await _synchronize_favorites(source, staged, "full", progress)
+            if errors:
+                return errors
+            store.replace_platform_from(source.platform, staged)
+            return []
+    return await _synchronize_favorites(source,store,mode,progress)
+
+
+async def _synchronize_favorites(source:FavoritesSource,store,mode,progress):
     account=await source.identity(); folders=await source.folders(account)
     store.observe_folders(source.platform, account, folders)
     scan=store.begin_scan(source.platform,account,folders,mode)

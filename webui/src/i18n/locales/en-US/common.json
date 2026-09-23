@@ -19,7 +19,7 @@
     "searchAction": "Open search",
     "emptyPlatformPrompt": "Select at least one platform before searching — these are checkboxes, not status lights.",
     "saveTitle": "Save and organize",
-    "saveBody": "The bookmark icon on a result card adds it to local favorites, and the clock icon adds it to Watch later; neither touches what is saved on the platform itself. The favorites page has two tabs. Local favorites holds All, Default, Watch later, and your own folders, with list and icon browsing, batch management, per-item notes, and an export under Backup. Remote favorites mirrors the folders read back from the platforms you logged into: read-only, so you can pick items and save them locally, and syncing never adds, removes, or moves anything in your platform favorites.",
+    "saveBody": "Use the bookmark to save a result locally or the clock to add it to Watch Later. Local Favorites lets you organize and back up items; Cross-platform Favorites lets you view items saved on the platforms and keep selected items locally. Sync selected platforms / Continue follows platform favorites and only adds items. Reset sync replaces the local cross-platform favorites for successfully read selected platforms. Neither action changes favorites on the platforms.",
     "saveAction": "Open local favorites",
     "backToResults": "Back to results",
     "historyTitle": "Watch history",

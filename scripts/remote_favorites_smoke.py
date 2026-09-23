@@ -1,4 +1,4 @@
-"""跨平台收藏页浏览器验收：平台页签、一次 100 条 + 显示更多、增量/重新同步全部。
+"""跨平台收藏页浏览器验收：平台页签、一次 100 条 + 显示更多、增量/重置同步。
 
 Run after building webui. All external requests are blocked; no real profile is used.
 """
@@ -111,27 +111,52 @@ def main():
                 expect(page.get_by_text("小红书条目 3", exact=False).first).to_be_visible()
                 assert page.locator("article.result-row").count() == 10
 
-                # 一键同步 = 增量；重新同步全部是另一个显式动作
+                # 日常同步是主按钮；重置在可展开的高级区域内。
                 page.get_by_role("tab", name="全部").click()
                 page.screenshot(path=str(ROOT / "build/review-v1-remote-favorites.png"), full_page=False)
-                # 勾选后按钮的 accessible name 会变成「小红书 ✓」，所以按 class 定位
+                for platform in ("抖音", "B站", "知乎"):
+                    page.locator(".platform-choice").filter(has_text=platform).click()
                 xhs_choice = page.locator(".platform-choice").filter(has_text="小红书")
-                if xhs_choice.get_attribute("aria-pressed") == "false":
-                    xhs_choice.click()
+                expect(xhs_choice).to_have_attribute("aria-pressed", "true")
+                advanced = page.locator(".remote-advanced")
+                expect(advanced).not_to_have_attribute("open", "")
+                expect(page.get_by_role("button", name="重置同步", exact=True)).not_to_be_visible()
                 page.get_by_role("button", name="同步所选平台 / 继续", exact=True).click()
                 page.wait_for_timeout(400)
                 assert sync_requests[-1]["sync_mode"] == "auto", sync_requests[-1]
-                # 同步按钮会把勾选清掉，重新扫之前先确认还勾着
-                if page.locator(".platform-choice").filter(has_text="小红书").get_attribute("aria-pressed") == "false":
-                    page.locator(".platform-choice").filter(has_text="小红书").click()
-                page.get_by_role("button", name="重新同步全部", exact=True).click()
+                assert sync_requests[-1]["platforms"] == ["xhs"]
+                advanced.locator("summary").focus()
+                advanced.locator("summary").press("Enter")
+                expect(advanced).to_have_attribute("open", "")
+                expect(advanced.get_by_text("重置同步：直接覆盖本地跨平台收藏。", exact=False)).to_be_visible()
+                question = page.get_by_role("link", name="查看重置同步的高级功能说明")
+                expect(question).to_have_attribute("href", "#/help/advanced-reset-sync")
+                question.focus()
+                expect(question).to_be_focused()
+                reset = page.get_by_role("button", name="重置同步", exact=True)
+                before_reset = len(sync_requests)
+                dialogs = []
+                page.once("dialog", lambda dialog: (dialogs.append(dialog.message), dialog.dismiss()))
+                reset.click()
+                assert "覆盖所选平台" in dialogs[0]
+                assert len(sync_requests) == before_reset
+                page.once("dialog", lambda dialog: dialog.accept())
+                reset.click()
                 page.wait_for_timeout(400)
-                assert sync_requests[-1]["sync_mode"] == "full", sync_requests[-1]
-
+                assert sync_requests[-1]["sync_mode"] == "reset", sync_requests[-1]
+                assert sync_requests[-1]["platforms"] == ["xhs"]
+                page.set_viewport_size({"width": 390, "height": 844})
+                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), "Reset controls overflow on mobile"
+                page.screenshot(path=str(ROOT / "build/remote-reset-mobile.png"), full_page=True)
                 # 结果区仍是平台页签 + 排序下拉，不是归档筛选器
                 assert page.get_by_role("tablist", name="结果平台").count() == 1
                 assert page.get_by_label("归档平台").count() == 0
                 assert page.get_by_role("button", name="完整核对 B站", exact=True).count() == 0
+                question.click()
+                expect(page).to_have_url(origin + "/#/help/advanced-reset-sync")
+                expect(page.locator("#advanced-reset-sync")).to_be_visible()
+                expect(page.locator("#advanced-reset-sync")).to_be_focused()
+                page.screenshot(path=str(ROOT / "build/remote-reset-help-mobile.png"), full_page=True)
                 assert errors == [], errors
                 page.screenshot(path=str(ROOT / "build/remote-favorites-smoke.png"), full_page=True)
                 browser.close()
@@ -139,7 +164,7 @@ def main():
             server.shutdown()
             server.server_close()
             client.close()
-    print(json.dumps({"passed": ["local-cache-only", "platform-tabs", "show-more", "incremental-sync", "full-rescan", "no-archive-toolbar"]}))
+    print(json.dumps({"passed": ["local-cache-only", "platform-tabs", "show-more", "incremental-sync", "reset-confirmation", "mobile-advanced-controls", "no-archive-toolbar"]}))
 
 
 if __name__ == "__main__":

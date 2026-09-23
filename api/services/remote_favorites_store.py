@@ -9,8 +9,7 @@
 - **逐平台落库**：某个平台失败或限流，不影响其他平台已保存的数据；
 - 按 (账号, 平台, 内容ID) 去重合并，更新已有条目的信息；
 - **指标只合并、不倒退**：本次没取到的指标字段沿用本机已有的值，完整度只升不降；
-- 本次没取到的旧内容**不删除**（只刷新取到条目的 last_seen_at）——
-  "这次没出现"不等于"用户取消了收藏"；
+- 普通同步不删除本次没取到的旧内容；重置同步在完整读取成功后才替换所选平台的本机归档；
 - 不同账号分开保存（account_key），避免把两个人的收藏混在一起。
 """
 
@@ -19,11 +18,12 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+from contextlib import closing
 from typing import Any, Dict, Iterator, List, Optional, Sequence
 
 from .favorite_snapshot import decode_metrics, encode_metrics, merge_into_result
 # DEFAULT_ACCOUNT_KEY 定义在 remote_sync_state 里（mixin 自己也要用），这里重新导出保持既有引用可用。
-from .remote_sync_state import DEFAULT_ACCOUNT_KEY, RemoteSyncStateMixin, SYNC_SCHEMA
+from .remote_sync_state import DEFAULT_ACCOUNT_KEY, RemoteSyncStateMixin, SYNC_SCHEMA, SyncStateError
 from .sqlite_base import (
     RESULT_FIELDS as _RESULT_FIELDS,
     SqliteStoreBase,
@@ -276,6 +276,82 @@ class RemoteFavoritesStore(RemoteSyncStateMixin, SqliteStoreBase):
             ).rowcount
             conn.execute("DELETE FROM remote_sync_runs WHERE account_key = ?", (account_key,))
         return int(removed)
+
+    def replace_platform_from(self, platform: str, staged: "RemoteFavoritesStore") -> None:
+        """Atomically replace one platform after its staged full read has succeeded."""
+        with closing(sqlite3.connect(str(staged.db_path))) as source:
+            accounts = source.execute(
+                "SELECT account FROM remote_accounts WHERE platform=? AND status='succeeded'",
+                (platform,),
+            ).fetchall()
+            if len(accounts) != 1:
+                raise SyncStateError("Incomplete reset snapshot")
+            if source.execute("SELECT 1 FROM remote_favorites WHERE platform<>? LIMIT 1", (platform,)).fetchone():
+                raise SyncStateError("Reset snapshot spans platforms")
+
+            with self._conn(write=True) as conn:
+                previous_version = conn.execute(
+                    "SELECT COALESCE(MAX(version),0) FROM remote_accounts WHERE platform=?", (platform,),
+                ).fetchone()[0]
+                old_accounts = {row[0] for row in conn.execute(
+                    "SELECT account FROM remote_accounts WHERE platform=? UNION "
+                    "SELECT account FROM remote_folders WHERE platform=? UNION "
+                    "SELECT account_key FROM remote_favorites WHERE platform=? AND account_key<>?",
+                    (platform, platform, platform, DEFAULT_ACCOUNT_KEY),
+                ) if row[0] != DEFAULT_ACCOUNT_KEY}
+                for account in old_accounts:
+                    if conn.execute(
+                        "SELECT 1 FROM remote_favorites WHERE account_key=? AND platform<>? LIMIT 1",
+                        (account, platform),
+                    ).fetchone() or conn.execute(
+                        "SELECT 1 FROM remote_folders WHERE account=? AND platform<>? LIMIT 1",
+                        (account, platform),
+                    ).fetchone():
+                        raise SyncStateError("Archive account spans platforms")
+
+                # Historical unverified rows share the account key 'default'.
+                # Remove only their folders for this platform, never other platforms' rows.
+                legacy_folders = conn.execute(
+                    "SELECT account,folder FROM remote_folders WHERE platform=? AND account=?",
+                    (platform, DEFAULT_ACCOUNT_KEY),
+                ).fetchall()
+                if legacy_folders and conn.execute(
+                    "SELECT 1 FROM remote_favorites WHERE account_key=? AND platform<>? LIMIT 1",
+                    (DEFAULT_ACCOUNT_KEY, platform),
+                ).fetchone():
+                    raise SyncStateError("Legacy account spans platforms")
+                for account, folder in legacy_folders:
+                    if conn.execute(
+                        "SELECT 1 FROM remote_memberships m JOIN remote_favorites r "
+                        "ON r.account_key=m.account AND r.content_id=m.content_id "
+                        "WHERE m.account=? AND m.folder=? AND r.platform<>? LIMIT 1",
+                        (account, folder, platform),
+                    ).fetchone():
+                        raise SyncStateError("Legacy folder spans platforms")
+                    for table in ("remote_memberships", "remote_checkpoints", "remote_page_observations",
+                                  "remote_observed_items", "remote_baseline", "remote_folder_diagnostics"):
+                        conn.execute(f"DELETE FROM {table} WHERE account=? AND folder=?", (account, folder))
+                    conn.execute("DELETE FROM remote_folders WHERE account=? AND folder=?", (account, folder))
+
+                for account in old_accounts:
+                    for table in ("remote_memberships", "remote_folders", "remote_presence", "remote_baseline",
+                                  "remote_scans", "remote_checkpoints", "remote_page_observations",
+                                  "remote_observed_items", "remote_folder_diagnostics", "remote_accounts"):
+                        conn.execute(f"DELETE FROM {table} WHERE account=?", (account,))
+                conn.execute("DELETE FROM remote_favorites WHERE platform=?", (platform,))
+                conn.execute("DELETE FROM remote_sync_runs WHERE platform=?", (platform,))
+
+                for table in ("remote_favorites", "remote_accounts", "remote_folders", "remote_memberships",
+                              "remote_presence", "remote_baseline", "remote_folder_diagnostics"):
+                    columns = [row[1] for row in source.execute(f"PRAGMA table_info({table})") if row[1] != "id"]
+                    fields = ",".join(columns)
+                    placeholders = ",".join("?" for _ in columns)
+                    for row in source.execute(f"SELECT {fields} FROM {table}"):
+                        conn.execute(f"INSERT INTO {table} ({fields}) VALUES ({placeholders})", row)
+                conn.execute(
+                    "UPDATE remote_accounts SET version=MAX(version,?) WHERE platform=?",
+                    (previous_version + 1, platform),
+                )
 
     # ------------------------------------------------------------------ 内部
 

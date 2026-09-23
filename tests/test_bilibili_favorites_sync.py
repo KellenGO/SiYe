@@ -8,6 +8,7 @@ from aggregate_search.favorites_sync import BilibiliFavoritesSource, synchronize
 from api.schemas.favorites import FavoritesJobRequest
 from api.services.remote_favorites_store import RemoteFavoritesStore
 from api.services.favorites_job_manager import FavoritesJobManager
+from api.services.library_store import LibraryStore
 
 
 class FavoriteClient:
@@ -44,10 +45,88 @@ def store(tmp_path):
 
 
 async def sync(store, client, mode="auto", verified=True):
-    """`full` = 完整重扫；`auto` = 一键同步（增量）。verified=False 用于只导入、不提前停。"""
+    """`reset` = 成功后替换；`auto` = 一键同步（增量）；`full` 保留旧行为。"""
     source = BilibiliFavoritesSource(client, interval=0)
     source.incremental_verified = verified
     return await synchronize_favorites(source, store, mode, lambda *_: None)
+
+
+@pytest.mark.asyncio
+async def test_reset_replaces_only_selected_platform_archive(store):
+    client = FavoriteClient({10: [1, 2]})
+    await sync(store, client, "reset")
+    store.save_platform("xhs", [{"platform": "xhs", "content_id": "other"}], status="succeeded")
+    library = LibraryStore(store.db_path)
+    library.add_item({"platform": "bilibili", "content_id": "local", "title": "个人收藏", "url": "https://www.bilibili.com/video/local"})
+
+    before_version = store.archive_summary()["data_version"]
+    client.contents = {10: [2, 3]}
+    await sync(store, client, "reset")
+    assert store.archive_summary()["data_version"] != before_version
+    assert {item["result"]["content_id"] for item in store.archive_page(platform="bilibili")["items"]} == {"BV2", "BV3"}
+    assert store.archive_page(platform="xhs")["total"] == 1
+    assert library.get_item("bilibili", "local") is not None
+    with store._conn() as conn:
+        assert {row[0] for row in conn.execute("SELECT content_id FROM remote_memberships WHERE account='bilibili:1'")} == {"BV2", "BV3"}
+    client.contents = {}
+    await sync(store, client, "reset")
+    assert store.archive_page(platform="bilibili")["total"] == 0
+    assert store.archive_page(platform="xhs")["total"] == 1
+    assert library.get_item("bilibili", "local") is not None
+
+
+@pytest.mark.asyncio
+async def test_reset_failure_and_cancellation_keep_original_archive(store):
+    client = FavoriteClient({10: list(range(30))})
+    await sync(store, client, "reset")
+    original = {item["result"]["content_id"] for item in store.archive_page()["items"]}
+
+    client.contents = {10: list(range(100, 130))}
+    client.fail_page = 2
+    with pytest.raises(OSError):
+        await sync(store, client, "reset")
+    assert {item["result"]["content_id"] for item in store.archive_page()["items"]} == original
+
+    async def cancelled(_fid, page, _size):
+        if page == 2:
+            raise asyncio.CancelledError()
+        return await FavoriteClient({10: list(range(100, 130))}).get_favorite_folder_contents(10, page, _size)
+
+    client.fail_page = None
+    client.get_favorite_folder_contents = cancelled
+    with pytest.raises(asyncio.CancelledError):
+        await sync(store, client, "reset")
+    assert {item["result"]["content_id"] for item in store.archive_page()["items"]} == original
+
+    client = FavoriteClient({10: list(range(20)) * 2})
+    assert await sync(store, client, "reset")
+    assert {item["result"]["content_id"] for item in store.archive_page()["items"]} == original
+
+
+@pytest.mark.asyncio
+async def test_reset_replaces_older_account_of_selected_platform(store):
+    await sync(store, FavoriteClient({10: [1]}, mid=1), "reset")
+    store.save_platform("xhs", [{"platform": "xhs", "content_id": "other"}], status="succeeded")
+    await sync(store, FavoriteClient({10: [2]}, mid=2), "reset")
+    assert store.archive_page(account="bilibili:1")["total"] == 0
+    assert {item["result"]["content_id"] for item in store.archive_page(platform="bilibili")["items"]} == {"BV2"}
+    assert store.archive_page(platform="xhs")["total"] == 1
+
+
+@pytest.mark.asyncio
+async def test_reset_refuses_shared_legacy_account_without_changing_archive(store):
+    from api.services.remote_sync_state import SyncStateError
+
+    store.save_platform("bilibili", [{"platform": "bilibili", "content_id": "old"}], status="succeeded")
+    store.save_platform("xhs", [{"platform": "xhs", "content_id": "other"}], status="succeeded")
+    store.observe_folders("bilibili", "default", [{"id": "legacy", "name": "旧收藏夹"}])
+
+    with pytest.raises(SyncStateError, match="Legacy account spans platforms"):
+        await sync(store, FavoriteClient({10: [1]}), "reset")
+    assert store.archive_page(platform="bilibili")["total"] == 1
+    assert store.archive_page(platform="xhs")["total"] == 1
+    with store._conn() as conn:
+        assert conn.execute("SELECT 1 FROM remote_folders WHERE account='default' AND folder='legacy'").fetchone()
 
 
 @pytest.mark.asyncio

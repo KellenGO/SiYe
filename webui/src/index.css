@@ -746,6 +746,13 @@ html.dark .search-submit { color: #101525; }
 @media (max-width: 620px) { .remote-folder-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 30px 12px; } .remote-folder-intro, .remote-folder-title { align-items: flex-start; flex-direction: column; gap: 8px; } }
 .remote-heading { align-items: center; margin-bottom: 0 !important; }
 .remote-heading h2 { margin: 0; color: var(--siye-ink); font-size: 18px; font-weight: 600; }
+.remote-advanced { margin-top: 10px; color: var(--siye-secondary); font-size: 12px; }
+.remote-advanced > summary { width: fit-content; cursor: pointer; color: var(--siye-ink); font-weight: 600; }
+.remote-advanced > summary:focus-visible, .reset-help-link:focus-visible { outline: 2px solid var(--siye-brand); outline-offset: 3px; border-radius: 4px; }
+.remote-advanced-content { max-width: 480px; padding: 10px 0 0; line-height: 1.7; }
+.remote-advanced-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+.reset-help-link { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; color: var(--siye-brand); }
+.reset-help-link svg { width: 18px; height: 18px; }
 .local-heading-actions { display: flex; align-items: center; gap: 10px; }
 .local-view-switch { display: inline-flex; padding: 3px; border: 1px solid var(--siye-line); border-radius: 9px; background: var(--siye-soft); }
 .local-view-switch button { display: inline-flex; align-items: center; gap: 5px; padding: 6px 9px; border-radius: 6px; color: var(--siye-muted); font-size: 12px; }
@@ -912,6 +919,7 @@ html.dark .search-submit { color: #101525; }
 .help-grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 24px; }
 .help-section { min-width: 0; padding: 25px 27px; border: 1px solid var(--siye-line); border-radius: 14px; }
 .help-section h2 { margin: 0 0 20px; color: var(--siye-ink); font-size: 16px; font-weight: 600; }
+.help-section h3 { margin: 0 0 10px; color: var(--siye-ink); font-size: 14px; font-weight: 600; }
 .help-section p, .help-section ol { color: var(--siye-secondary); font-size: 13px; line-height: 1.9; }
 .help-section ol { margin: 0; padding-left: 19px; }
 .help-section li + li { margin-top: 12px; }

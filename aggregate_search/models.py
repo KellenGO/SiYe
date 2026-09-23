@@ -219,7 +219,7 @@ class WorkerRequest(BaseModel):
 
     job_id: str
     mode: Literal["search", "login", "favorites"]
-    sync_mode: Optional[Literal["auto", "full"]] = None
+    sync_mode: Optional[Literal["auto", "full", "reset"]] = None
     platform: PlatformSlug
     keyword: str = ""
     limit: int = 10

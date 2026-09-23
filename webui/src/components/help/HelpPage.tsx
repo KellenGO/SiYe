@@ -25,6 +25,17 @@ export function HelpPage({ onShowDisclaimer, onStartGuide }: HelpPageProps) {
       .catch(() => { /* 取不到就不显示，帮助页其余内容照常可用 */ })
     return () => { cancelled = true }
   }, [])
+  useEffect(() => {
+    const focusAdvancedHelp = () => {
+      if (window.location.hash !== '#/help/advanced-reset-sync') return
+      const section = document.getElementById('advanced-reset-sync')
+      section?.scrollIntoView({ block: 'start' })
+      section?.focus({ preventScroll: true })
+    }
+    window.addEventListener('hashchange', focusAdvancedHelp)
+    focusAdvancedHelp()
+    return () => window.removeEventListener('hashchange', focusAdvancedHelp)
+  }, [])
   return (
     <div className="preview-container help-page">
       <div className="page-heading">
@@ -88,13 +99,21 @@ export function HelpPage({ onShowDisclaimer, onStartGuide }: HelpPageProps) {
             <li><strong>搜索结果</strong>每个平台一个状态块，失败的会说明原因并可以单独重试；上方可切「综合 / 最新 / 互动最多」排序，排序旁的输入框只在当前结果里按关键词筛选。结果不够时点列表底部的「继续搜索」再多取一批。</li>
             <li><strong>结果卡片</strong>点标题打开原文；书签收藏到本地；钟表加入「稍后再看」；也可以给单条内容写备注。这些操作都不会改动平台里的原始收藏。</li>
             <li><strong>本地收藏</strong>「全部」「默认收藏夹」「稍后再看」和自建收藏夹；可选列表或图标两种浏览方式；支持批量管理、写备注；「备份管理」可导出备份。</li>
-            <li><strong>跨平台收藏</strong>查看你在各平台收藏过的内容，可以按收藏夹浏览，也可以挑内容另存到本地。四野只读取这些内容，不会添加、删除或移动平台里的收藏。</li>
+            <li><strong>跨平台收藏</strong>查看你在各平台收藏过的内容，也可以挑内容另存到本地。「同步所选平台 / 继续」只新增；高级操作中的「重置同步」覆盖所选且成功读取平台的本机跨平台收藏。两者都不会改动平台里的收藏。</li>
             <li><strong>观看历史</strong>自动记录你点开看过的内容，只保存在这台电脑上，可以随时删除。</li>
             <li><strong>设置 · 搜索设置</strong>每个平台每次搜索取多少条（默认 20 条）。条数越大越慢，也更容易遇到平台限制。</li>
             <li><strong>设置 · 账号与登录</strong>扫码登录是主路径；「从浏览器同步」需要浏览器扩展，是可选加速；也可以在这里验证登录状态或移除登录。</li>
             <li><strong>设置 · 外观与首页</strong>8 种主题色，浅色与深色各自记忆；首页模式可选「极简」或「实用」；最近搜索与热搜可分别开关。</li>
             <li><strong>顶栏</strong>左边是首页 / 收藏 / 历史 / 设置；右边显示本地服务与登录状态（点开可看各平台上次验证时间）、深浅色切换和帮助入口。</li>
           </ol>
+        </section>
+
+        <section className="help-section wide" id="advanced-reset-sync" tabIndex={-1}>
+          <h2>高级功能说明</h2>
+          <h3>重置同步</h3>
+          <p><strong>同步所选平台 / 继续：跟进平台收藏夹内容，只新增。</strong>日常使用这个按钮，已存的跨平台收藏会保留。</p>
+          <p className="mt-3"><strong>重置同步：直接覆盖本地跨平台收藏。</strong>本机记录与平台列表明显不一致，或想重新建立所选平台的本机记录时使用。先选择平台，展开「高级操作」，点击「重置同步」并确认。取消确认不会改数据，开始后仍可取消。</p>
+          <p className="mt-3">只有所选且成功完整读取的平台会被覆盖。未选、读取失败或未登录平台的旧记录会保留；个人「本地收藏」也不会删除。两种操作都不会在平台上添加、删除或移动收藏。</p>
         </section>
 
         <SupportDiagnostics />

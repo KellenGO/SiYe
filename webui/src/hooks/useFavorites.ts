@@ -5,9 +5,9 @@ import type { FavoritesJobResponse, PlatformSlug } from "@/types/search";
 
 /**
  * 一键同步走 `auto`（增量：读到本机已有的内容就停，不用每次重拉全部）；
- * 「完整重扫」走 `full`（从头翻到尾，并重建收藏夹归属）。
+ * 「重置同步」走 `reset`（完整读取成功后替换所选平台的本机归档）；`full` 留给旧调用兼容。
  */
-export type FavoritesSyncMode = "auto" | "full";
+export type FavoritesSyncMode = "auto" | "full" | "reset";
 
 function isNotFound(error: unknown): boolean {
   return (error as { response?: { status?: number } })?.response?.status === 404;

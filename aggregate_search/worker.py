@@ -459,24 +459,28 @@ async def _run_favorites(job_id: str, platform: str, limit: int, sync_mode=None)
             crawler.runtime_options.extra["favorites_sync"] = sync
             folder_errors = await crawler.start()
             emit_status(job_id, platform, "partial" if folder_errors else "succeeded", {
-                "error_summary": "；".join(folder_errors)[:160] if folder_errors else None,
+                "error_summary": (("；".join(folder_errors) + ("；本机原有跨平台收藏已保留" if sync_mode == "reset" else ""))[:160]
+                                  if folder_errors else None),
             })
         else:
             await asyncio.wait_for(crawler.start(), timeout=270)
             emit_status(job_id, platform, "succeeded" if pending else "empty")
     except asyncio.TimeoutError:
-        emit_error(job_id, platform, "timed_out", "收藏夹同步超时")
+        emit_error(job_id, platform, "timed_out", "收藏夹同步超时；本机原有跨平台收藏已保留" if sync_mode == "reset" else "收藏夹同步超时")
     except Exception as exc:
         import sqlite3
         from aggregate_search.favorites_sync import FavoritesSyncError
         from api.services.remote_sync_state import SyncStateError
         if isinstance(exc, sqlite3.Error):
-            emit_error(job_id, platform, "failed", "本机收藏保存失败，请检查磁盘空间后继续同步")
+            emit_error(job_id, platform, "failed", "重置未完成，本机原有跨平台收藏已保留；请检查磁盘空间后重试" if sync_mode == "reset" else "本机收藏保存失败，请检查磁盘空间后继续同步")
         # 只认分页同步自己抛的错：别的 ValueError（代码 bug）要按原样暴露，别包装成"列表变化"。
         elif isinstance(exc, (FavoritesSyncError, SyncStateError)) and sync_mode:
-            emit_error(job_id, platform, "failed", "收藏列表变化或返回异常，已保留进度，请稍后重新同步")
+            emit_error(job_id, platform, "failed", "重置未完成，本机原有跨平台收藏已保留；请稍后重试" if sync_mode == "reset" else "收藏列表变化或返回异常，已保留进度，请稍后重新同步")
         else:
-            emit_error(job_id, platform, _classify_error(exc), _safe_error_message(exc))
+            message = _safe_error_message(exc)
+            if sync_mode == "reset":
+                message = f"{message}；本机原有跨平台收藏已保留"
+            emit_error(job_id, platform, _classify_error(exc), message)
     finally:
         for result in pending.values():
             if result.metrics_status == "pending":
