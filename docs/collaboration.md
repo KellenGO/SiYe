@@ -8,6 +8,8 @@
 
 | 任务 ID | 负责人/会话 | 工作区 / 分支 / 起始 HEAD | 修改范围 | 状态与下一步 | 更新时间 |
 |---|---|---|---|---|---|
+| V1-UI-AUDIT-20260923 | Codex / 当前会话 | `MediaCrawler-main` / `master` / `810b03b` | 只读检查：按钮行为、布局溢出、数量边界与响应式；不取得代码写入权 | 只读：运行隔离 UI 审计并报告发现 | 2026-09-23 |
+| ONBOARD-PAGES-20260923 | WorkBuddy / 当前会话 | `MediaCrawler-main` / `master` / `810b03b` | `webui/src/lib/{onboarding,searchExperience}.ts`、`webui/src/hooks/useOnboarding.ts`、`webui/src/components/help/{GettingStarted,HelpPage}.tsx`、`webui/src/index.css`、两个 locale 的 `common.json`、`webui/tests/onboarding.test.ts`、`webui/tests/searchExperience.test.ts`、`tests/test_webui_ui_contract.py`、`scripts/getting_started_smoke.py`、相关 docs | 进行中：教程扩为 7 步逐页导览、帮助页加「页面与功能一览」、修正平台偏好空数组语义 | 2026-09-23 |
 本表不表示所有外部会话都已登记。初始化时仅核实主工作区状态；其他工作区和会话仍需按开工流程核实。
 
 ## 最近交接

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import {
-  GUIDE_PREFERENCE_KEY, GUIDE_ROUTES, GUIDE_SESSION_KEY,
+  GUIDE_PREFERENCE_KEY, GUIDE_SESSION_KEY, GUIDE_STEPS,
   initialGuideState, writeGuidePreference, type GuideState,
 } from "@/lib/onboarding";
 
@@ -17,9 +17,9 @@ export function useOnboarding() {
     setStep(next);
   };
   const goTo = (next: number) => {
-    if (!Number.isInteger(next) || next < 0 || next >= GUIDE_ROUTES.length) return;
+    if (!Number.isInteger(next) || next < 0 || next >= GUIDE_STEPS.length) return;
     change(next);
-    window.location.hash = GUIDE_ROUTES[next];
+    window.location.hash = GUIDE_STEPS[next].route;
     window.scrollTo({ top: 0 });
   };
   const dismiss = (permanent: boolean, completed = false) => {

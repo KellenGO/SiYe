@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ArrowRight, Check, Compass } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { GUIDE_ROUTES, type GuideState } from "@/lib/onboarding";
+import { GUIDE_STEPS, type GuideState } from "@/lib/onboarding";
 
 interface GettingStartedProps {
   step: GuideState;
@@ -13,36 +13,31 @@ export function GettingStarted({ step, onGoTo, onDismiss }: GettingStartedProps)
   const { t } = useTranslation();
   const [neverAgain, setNeverAgain] = useState(false);
   if (step === null) return null;
-  const steps = [
-    { title: t("onboarding.connectTitle"), description: t("onboarding.connectBody"), action: t("onboarding.connectAction") },
-    { title: t("onboarding.searchTitle"), description: t("onboarding.searchBody"), action: t("onboarding.searchAction") },
-    { title: t("onboarding.saveTitle"), description: t("onboarding.saveBody"), action: t("onboarding.saveAction") },
-    { title: t("onboarding.helpTitle"), description: t("onboarding.helpBody"), action: t("onboarding.helpAction") },
-  ];
-  const current = step >= 0 ? steps[step] : null;
+  const total = GUIDE_STEPS.length;
+  const current = step >= 0 ? GUIDE_STEPS[step] : null;
   return (
     <section className="getting-started" aria-label={t("onboarding.label")}>
       <div className="guide-heading">
         <span className="guide-symbol" aria-hidden="true"><Compass /></span>
         <div>
-          <p className="guide-eyebrow">{current ? t("onboarding.progress", { current: step + 1, total: steps.length }) : t("onboarding.welcome")}</p>
-          <h2>{current?.title ?? t("onboarding.title")}</h2>
+          <p className="guide-eyebrow">{current ? t("onboarding.progress", { current: step + 1, total }) : t("onboarding.welcome")}</p>
+          <h2>{current ? t(`onboarding.${current.key}Title`) : t("onboarding.title")}</h2>
         </div>
       </div>
-      <p className="guide-description" aria-live="polite">{current?.description ?? t("onboarding.description")}</p>
+      <p className="guide-description" aria-live="polite">{current ? t(`onboarding.${current.key}Body`) : t("onboarding.description")}</p>
       {current && <nav className="guide-steps" aria-label={t("onboarding.steps")}>
-        {steps.map((item, index) => <button key={GUIDE_ROUTES[index]} type="button" aria-current={step === index ? "step" : undefined}
-          onClick={() => onGoTo(index)}><span>{index + 1}</span>{item.title}</button>)}
+        {GUIDE_STEPS.map((item, index) => <button key={item.key} type="button" aria-current={step === index ? "step" : undefined}
+          onClick={() => onGoTo(index)}><span>{index + 1}</span>{t(`onboarding.${item.key}Title`)}</button>)}
       </nav>}
       <div className="guide-footer">
         <div className="button-row">
           {!current ? <button type="button" className="btn primary" onClick={() => onGoTo(0)}>{t("onboarding.start")}<ArrowRight /></button> : <>
-            <button type="button" className="btn" onClick={() => onGoTo(step)}>{current.action}</button>
+            <button type="button" className="btn" onClick={() => onGoTo(step)}>{t(`onboarding.${current.key}Action`)}</button>
             {step > 0 && <button type="button" className="btn ghost" onClick={() => onGoTo(step - 1)}>{t("onboarding.previous")}</button>}
-            <button type="button" className="btn primary" onClick={() => step === steps.length - 1 ? onDismiss(true, true) : onGoTo(step + 1)}>
-              {step === steps.length - 1 ? <>{t("onboarding.finish")}<Check /></> : <>{t("onboarding.next")}<ArrowRight /></>}
+            <button type="button" className="btn primary" onClick={() => step === total - 1 ? onDismiss(true, true) : onGoTo(step + 1)}>
+              {step === total - 1 ? <>{t("onboarding.finish")}<Check /></> : <>{t("onboarding.next")}<ArrowRight /></>}
             </button>
-            {step === 2 && <button type="button" className="btn ghost" onClick={() => { window.location.hash = "#/search"; }}>{t("onboarding.backToResults")}</button>}
+            {current.key === "save" && <button type="button" className="btn ghost" onClick={() => onGoTo(2)}>{t("onboarding.backToResults")}</button>}
           </>}
         </div>
         <div className="guide-dismiss">
