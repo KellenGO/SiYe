@@ -13,6 +13,46 @@
 
 ## 最近交接
 
+### ONBOARD-HIGHLIGHT-20260923 — 教程加「跟着目标走」的框选高亮 + 右下角常驻退出
+
+- 负责人：WorkBuddy / 当前会话；工作区：`MediaCrawler-main`；分支：`master`；起始提交：`534b359`。
+- 缘起：用户提出教程需要强调的地方不够明显，希望在"让用户勾平台"时把全局变暗、给「搜索范围」加高亮框；
+  并明确三点：**不要锁交互**（只给提示）、**框选位置要精确**（鼠标滚动、控件上移时跟着走，"像缩在一个图层里"）、
+  **右下角要有随时能退出教程的入口**（避免用户不按教程交互后卡住）。先只读核对给出可行性分层，用户拍板后再实施。
+- 修订既有结论：同日 `2026-09-23-教程扩为逐页导览.md` 曾把遮罩高亮作为 C 选项否掉
+  （"把边看边操作变成被动点击，风险与收益不成比例"）。当时的判断把"铺遮罩"和"拦点击"当成一件事；
+  这次拆开，只做压暗 + 框选 + 提示，**高亮层 `pointer-events: none`**，所以是缩小范围后的重开，不是推翻。
+  新决策见 `docs/decisions/2026-09-23-教程高亮框选.md`。
+- 范围：`webui/src/lib/onboarding.ts`（`GuideStep.highlight` + `guideHighlight`）、
+  `webui/src/components/search/SearchBar.tsx`（`data-tour="search-scope"` 锚点）、
+  `webui/src/components/help/GettingStarted.tsx`（卡片改为 `card` 变量 + 浮层放它外面）、
+  新增 `webui/src/components/help/{GuideSpotlight,GuideExit}.tsx`、`webui/src/index.css`（`--siye-scrim` 深浅两套 +
+  浮层样式 + 卡片抬到遮罩之上）、两个 locale 的 `common.json`（`homeHint` / `exit`）、
+  `webui/tests/onboarding.test.ts`、`tests/test_webui_ui_contract.py`、`scripts/getting_started_smoke.py`、
+  `docs/{index.md}`、`docs/features/getting-started.md`、`CHANGELOG.md`。未动后端、未动平台抓取、未动数据。
+- 交付：① 「认识首页」这一步压暗页面其余部分、把「搜索范围」那一行框出来（比目标外扩 6px），
+  旁边贴一句提示；位置按视口坐标实算并在 `scroll` / `resize` / 尺寸变化时重算。② 右下角常驻「退出教程」
+  （语义等同「这次跳过」，只影响当前标签页），与 `.scroll-top` 上下错开。③ 压暗色 `--siye-scrim` 深浅各一值。
+- 顺带修掉一个**静默失效的守卫**：`tests/test_webui_ui_contract.py` 原来用只认 `key` + `route` 的严格正则解析
+  `GUIDE_STEPS`，步骤对象一旦新增字段，那一步就会从解析结果里消失 —— 守卫还在，但已经不管它了
+  （实测：加 `highlight` 后旧正则只解析出 6 步）。正则已放宽，并新增两条守卫：带 `highlight` 的步骤必须有
+  `<key>Hint` 文案、锚点 `data-tour="..."` 必须在组件里真实存在。
+- 验证：`npm run test:search` **372** 通过（新增高亮声明用例）、`npm run build` 通过、`npm run lint` exit 0；
+  pytest `tests/test_webui_ui_contract.py` + `tests/test_docs_wiki.py` **59** 通过（新增 1 条锚点/文案守卫）；
+  `scripts/getting_started_smoke.py` PASS，新增断言：框与目标偏移精确为 `[-6,-6,12,12]`、滚动 220px 后仍精确、
+  换深色主题与换 390px 视口后仍精确、**透过压暗层点得到平台勾选框**（证明没锁交互）、
+  滚 600px 后退出入口仍在原位且可点、点退出后浮层全部消失且刷新仍关着。
+  复核截图三张：`build/getting-started-review/{spotlight-light,spotlight-dark,spotlight-mobile}.png`。
+  未访问真实平台与真实收藏。
+- 截图复核发现并修掉一处：压暗层一开始把指令卡片也压暗了，里面可点的按钮看起来像禁用态 ——
+  现在 `.has-onboarding .getting-started` 抬到遮罩之上。
+- 交付定位：`git log --all --grep=ONBOARD-HIGHLIGHT-20260923`。`webui/dist` 是忽略产物，本地已重建、不进提交；
+  已打包的 EXE 不会自动更新，需要重新打包。
+- 未完成 / 待核实：① 未跑全量 pytest（只跑了文档与界面契约两个文件）。② 高亮只做了「认识首页」一处，
+  其余六步是整页导览；再加一处只需在 `GUIDE_STEPS` 补 `highlight` + 目标补 `data-tour` + 两份 `Hint` 文案。
+  ③ 窄屏下「收藏夹归属」会员弹层是 fixed 铺底的，退出入口层级比它高会浮在其上（刻意取舍）。
+  ④ 与 `V1-UI-AUDIT-20260923` 的观测重叠仍待按新版本重跑。
+
 ### V1-UI-AUDIT-20260923 — V1.0 按钮、布局与数量边界审计
 
 - 负责人：Codex / 当前会话；只读审计；工作区：`MediaCrawler-main`；起始提交：`810b03b`，结束时主分支已由另一会话前进到 `9ead7dc`。后者未修改本审计发现涉及的收藏页、历史页、全局提示或布局样式，结论仍适用。
