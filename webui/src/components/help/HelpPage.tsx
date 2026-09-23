@@ -60,14 +60,18 @@ export function HelpPage({ onShowDisclaimer, onStartGuide }: HelpPageProps) {
 
         <section className="help-section">
           <h2>从浏览器同步登录（可选）</h2>
-          <p>如果你已经在 Chrome / Edge 里登录过这些平台，装一次扩展就能把登录状态直接同步过来。</p>
-          <ol>
-            <li>打开 <code>chrome://extensions</code>，Edge 使用 <code>edge://extensions</code>。</li>
-            <li>开启“开发者模式”，点击“加载已解压的扩展程序”。</li>
-            <li>安装版选择四野安装目录里的 <code>browser_extension</code>；便携版选择解压目录里的同名文件夹。</li>
-            <li>刷新四野页面，然后到「设置 · 账号与登录」点「从浏览器同步」。</li>
-          </ol>
-          <p className="mt-3">这是可选加速方式：不装扩展也能用扫码登录，两者可以混用。</p>
+          <p>不安装扩展也可以用四野内置扫码登录。</p>
+          <details className="help-extension-details mt-3">
+            <summary>已经在 Chrome / Edge 登录？展开查看免扫码同步方法（可选）</summary>
+            <p>如果你已经在 Chrome / Edge 里登录过这些平台，装一次扩展就能把登录状态同步到这台电脑上的四野。</p>
+            <ol>
+              <li>打开 <code>chrome://extensions</code>，Edge 使用 <code>edge://extensions</code>。</li>
+              <li>开启“开发者模式”，点击“加载已解压的扩展程序”。</li>
+              <li>安装版选择 <code>%LOCALAPPDATA%\Programs\SiYe\browser_extension</code>；便携版选择解压目录里的 <code>SiYe/browser_extension/</code>。</li>
+              <li>刷新四野页面，然后到「设置 · 账号与登录」点「从浏览器同步」。</li>
+            </ol>
+            <p className="mt-3">扩展只用于把你浏览器里已有的登录状态交给本机四野，不读取其他数据，也不上传到外部服务器。两种登录方式可以混用。</p>
+          </details>
         </section>
 
         <section className="help-section">
@@ -84,7 +88,7 @@ export function HelpPage({ onShowDisclaimer, onStartGuide }: HelpPageProps) {
             <li><strong>搜索结果</strong>每个平台一个状态块，失败的会说明原因并可以单独重试；上方可切「综合 / 最新 / 互动最多」排序，排序旁的输入框只在当前结果里按关键词筛选。结果不够时点列表底部的「继续搜索」再多取一批。</li>
             <li><strong>结果卡片</strong>点标题打开原文；书签收藏到本地；钟表加入「稍后再看」；也可以给单条内容写备注。这些操作都不会改动平台里的原始收藏。</li>
             <li><strong>本地收藏</strong>「全部」「默认收藏夹」「稍后再看」和自建收藏夹；可选列表或图标两种浏览方式；支持批量管理、写备注；「备份管理」可导出备份。</li>
-            <li><strong>跨平台收藏</strong>从已登录平台读取收藏夹（只读镜像），可以按收藏夹浏览，也可以挑内容再保存到本地。同步不会添加、删除或移动平台里的收藏。</li>
+            <li><strong>跨平台收藏</strong>查看你在各平台收藏过的内容，可以按收藏夹浏览，也可以挑内容另存到本地。四野只读取这些内容，不会添加、删除或移动平台里的收藏。</li>
             <li><strong>观看历史</strong>自动记录你点开看过的内容，只保存在这台电脑上，可以随时删除。</li>
             <li><strong>设置 · 搜索设置</strong>每个平台每次搜索取多少条（默认 20 条）。条数越大越慢，也更容易遇到平台限制。</li>
             <li><strong>设置 · 账号与登录</strong>扫码登录是主路径；「从浏览器同步」需要浏览器扩展，是可选加速；也可以在这里验证登录状态或移除登录。</li>

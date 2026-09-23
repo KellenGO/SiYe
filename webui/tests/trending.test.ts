@@ -72,10 +72,16 @@ test("标签页：四个平台都在，并标出谁有词", () => {
   assert.deepEqual(tabs.map((tab) => tab.status), ["unavailable", "ok", "failed", "ok"]);
 });
 
-test("还没拿到数据时四个标签都在（status 记 missing）", () => {
+test("还没拿到数据时小红书仍标暂不可用，其余标签为 missing", () => {
   const tabs = trendingTabs(undefined);
   assert.equal(tabs.length, 4);
-  assert.ok(tabs.every((tab) => tab.status === "missing" && !tab.hasWords));
+  assert.equal(tabs[0].status, "unavailable");
+  assert.ok(tabs.slice(1).every((tab) => tab.status === "missing" && !tab.hasWords));
+});
+
+test("小红书能力边界不依赖单次响应状态", () => {
+  const tabs = trendingTabs(toTrendingSnapshot({ platforms: { xhs: { status: "failed", words: [] } } }));
+  assert.equal(tabs[0].status, "unavailable");
 });
 
 test("默认选中第一个有词的平台", () => {

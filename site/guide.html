@@ -584,24 +584,6 @@ figure.todo .d{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.7}
       <figcaption>扫码登录后的样子：连上的平台显示「可用」，还没连的（如图中的小红书）点「扫码登录」再连 —— 不用等四个平台全部登录。</figcaption>
     </figure>
 
-    <!-- ========== 可选：扩展同步 ========== -->
-    <h2>可选：用浏览器扩展同步登录状态</h2>
-    <p>
-      如果你平时就在 Chrome 或 Edge 里登录着这些平台，可以装一次四野的浏览器扩展，
-      把你浏览器里现成的登录状态直接同步过来，省掉四次扫码。这是<strong>可选加速方式</strong>：
-      不装扩展也能用扫码登录，两者可以混用，互不影响。
-    </p>
-    <ol>
-      <li>浏览器地址栏输入 <code>chrome://extensions</code>（Edge 是 <code>edge://extensions</code>）回车；</li>
-      <li>打开右上角的<strong>「开发者模式」</strong>；</li>
-      <li>点<strong>「加载已解压的扩展程序」</strong>，安装版选择 <code>%LOCALAPPDATA%\Programs\SiYe\browser_extension</code>；便携版选择解压目录里的 <code>SiYe/browser_extension/</code>；</li>
-      <li>回到四野页面，打开<strong>「账号与登录」</strong>，点平台卡片的<strong>「从浏览器同步」</strong>。</li>
-    </ol>
-    <div class="callout">
-      <b>什么时候值得装？</b>你已经在浏览器里登录过这几个平台、想省掉扫码的时候。
-      它只做一件事：把你浏览器里已有的会话交给本机的四野，不读取其他数据，也不上传任何东西。
-    </div>
-
     <!-- ========== 安装 ========== -->
     <h2>下载与启动</h2>
     <ol>
@@ -654,8 +636,8 @@ figure.todo .d{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.7}
     <p>
       结果页左上角有<strong>「← 返回首页」</strong>：回首页<strong>不会清掉</strong>这次搜索，
       首页上的<strong>「查看上次搜索」</strong>能再切回来，两个页面可以来回看。
-      首页还有<strong>热搜卡片</strong>：按平台切换看各平台当前的热词，点一条就直接用当前勾选的平台搜它
-      （只在进入软件时取一次，之后点「刷新」更新）。
+      首页还有<strong>热搜卡片</strong>：可以切换看抖音、B站和知乎的热词，点一条就直接用当前勾选的平台搜它
+      （只在进入软件时取一次，之后点「刷新」更新）。小红书标签会提前标出「暂不可用」，点开可看原因。
     </p>
 
     <h3>某个平台没搜到会说明原因</h3>
@@ -674,12 +656,29 @@ figure.todo .d{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.7}
     <ul>
       <li><strong>收藏、稍后再看与备注</strong>：结果卡右侧依次是「收藏」「稍后再看」和可选的「展开」。前两个按钮互不影响；在「本地收藏」可查看「全部／默认收藏夹／稍后再看」、编辑其他归属并加备注（最多 1000 字，上限 500 条）。</li>
       <li><strong>导出</strong>：点「导出 / 复制」，可以导出 CSV（Excel 打开中文不乱码）、Markdown，或批量复制原文链接。不勾选就导出当前全部，勾选了只导出选中的。</li>
-      <li><strong>跨平台收藏</strong>：把你在各平台已经收藏过的内容拉到一页里统一看（每次每平台最多取 100 条，实际数量取决于平台返回；只读，不会改动平台收藏）。旧归档保留，也可取消正在进行的同步。</li>
+      <li><strong>跨平台收藏</strong>：查看你在各平台收藏过的内容。四野只读取这些内容，不会添加、删除或移动平台里的收藏；需要保留的内容也可以另存到本地收藏。旧内容保留，也可取消正在进行的同步。</li>
     </ul>
     <div class="callout warn">
       <b>收藏存在本机</b>：数据落在 <code>%LOCALAPPDATA%\SiYe\data\library.db</code>，清除浏览器数据、换浏览器、升级版本或更换解压目录都不会丢。新版会自动合并旧程序目录里的收藏库，并保留旧文件。
       想额外留一份副本，可在「本地收藏 → 备份管理」里点
       <b>「导出全部收藏」</b>下载 JSON，之后用「导入收藏备份」恢复。备份包含本地收藏、收藏夹归属和备注，不包含平台登录资料。
+    </div>
+
+    <!-- ========== 可选：扩展同步 ========== -->
+    <h2>可选进阶：用浏览器扩展同步登录状态</h2>
+    <p>
+      如果你平时就在 Chrome 或 Edge 里登录着这些平台，可以装一次四野的浏览器扩展，
+      把你浏览器里现成的登录状态同步到本机四野，省掉扫码。<strong>不安装扩展也可以用四野内置扫码登录</strong>，两者可以混用。
+    </p>
+    <ol>
+      <li>浏览器地址栏输入 <code>chrome://extensions</code>（Edge 是 <code>edge://extensions</code>）回车；</li>
+      <li>打开右上角的<strong>「开发者模式」</strong>；</li>
+      <li>点<strong>「加载已解压的扩展程序」</strong>，安装版选择 <code>%LOCALAPPDATA%\Programs\SiYe\browser_extension</code>；便携版选择解压目录里的 <code>SiYe/browser_extension/</code>；</li>
+      <li>回到四野页面，打开<strong>「账号与登录」</strong>，点平台卡片的<strong>「从浏览器同步」</strong>。</li>
+    </ol>
+    <div class="callout">
+      <b>什么时候值得装？</b>你已经在浏览器里登录过这几个平台、想省掉扫码的时候。
+      它只做一件事：把你浏览器里已有的会话交给本机的四野，不读取其他数据，也不上传任何东西。
     </div>
 
     <!-- ========== FAQ ========== -->

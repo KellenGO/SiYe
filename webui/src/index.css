@@ -922,6 +922,10 @@ html.dark .search-submit { color: #101525; }
 .steps li::before { content: "0" counter(steps); position: absolute; left: 0; top: 2px; color: var(--siye-muted); font-size: 11px; }
 .steps strong { display: block; color: var(--siye-ink); font-weight: 500; }
 .help-section .button-row { margin-top: 18px; }
+.help-extension-details { min-width: 0; }
+.help-extension-details > summary { cursor: pointer; color: var(--siye-ink); font-size: 14px; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
+.help-extension-details > summary:focus-visible { outline: 2px solid var(--siye-brand); outline-offset: 4px; border-radius: 3px; }
+.help-extension-details[open] > summary { margin-bottom: 14px; }
 
 footer { width: calc(100% - 80px); margin: 0 auto !important; padding: 22px 0 74px; border-top: 1px solid var(--siye-line) !important; color: var(--siye-muted); font-size: 11px; }
 .home-route footer { margin-top: 36px !important; padding-top: 36px; }
@@ -1814,6 +1818,9 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
 .trending-tab:hover { background: rgb(var(--cyber-bg-tertiary)); }
 .trending-tab.active { color: rgb(var(--brand-ink)); background: rgb(var(--brand-soft)); font-weight: 600; }
 .trending-tab.muted { color: rgb(var(--cyber-text-muted)); }
+.trending-tab.unavailable { color: rgb(var(--cyber-text-secondary)); border: 1px dashed rgb(var(--cyber-text-muted)); }
+.trending-tab:focus-visible { outline: 2px solid var(--siye-brand); outline-offset: 2px; }
+.trending-unavailable-badge { font-size: 10px; line-height: 1.2; white-space: nowrap; color: rgb(var(--cyber-text-secondary)); }
 .trending-panel-body { min-height: 132px; margin-top: 12px; }
 .trending-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 18px; margin: 0; padding: 0; list-style: none; }
 .trending-list button {

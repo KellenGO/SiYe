@@ -107,8 +107,8 @@ export function trendingTabs(snapshot: TrendingSnapshot | undefined): TrendingTa
     const info = snapshot?.platforms[platform];
     return {
       platform,
-      status: info?.status ?? "missing",
-      hasWords: (info?.words.length ?? 0) > 0,
+      status: platform === "xhs" ? "unavailable" : info?.status ?? "missing",
+      hasWords: platform !== "xhs" && (info?.words.length ?? 0) > 0,
     };
   });
 }

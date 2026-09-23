@@ -46,7 +46,7 @@ export function TrendingBoard({ onPick }: TrendingBoardProps) {
 
   const activeTab = tabs.find((tab) => tab.platform === active) ?? tabs[0];
   const info = activeTab ? snapshot?.platforms[activeTab.platform] : undefined;
-  const words = topWords(info?.words ?? []);
+  const words = topWords(activeTab?.platform === "xhs" ? [] : info?.words ?? []);
   const activeTime = snapshot
     ? Object.values(snapshot.platforms).find((item) => item?.activeTime)?.activeTime ?? null
     : null;
@@ -66,24 +66,29 @@ export function TrendingBoard({ onPick }: TrendingBoardProps) {
         {tabs.map((tab) => (
           <button
             key={tab.platform}
+            id={`trending-tab-${tab.platform}`}
             type="button"
             role="tab"
             aria-selected={activeTab?.platform === tab.platform}
+            aria-controls="trending-panel-content"
             className={`trending-tab${activeTab?.platform === tab.platform ? " active" : ""}${
-              tab.hasWords ? "" : " muted"
+              tab.status === "unavailable" ? " unavailable" : tab.hasWords ? "" : " muted"
             }`}
             onClick={() => setActive(tab.platform)}
           >
             <i className="pd" style={{ backgroundColor: PLATFORM_COLORS[tab.platform] }} aria-hidden="true" />
             {PLATFORM_LABELS[tab.platform]}
+            {tab.status === "unavailable" && <span className="trending-unavailable-badge">{t("trending.unavailableBadge")}</span>}
           </button>
         ))}
       </div>
 
-      <div role="tabpanel" className="trending-panel-body">
-        {loading && !snapshot && <p className="secondary text-[13px]">{t("trending.loading")}</p>}
-        {!loading && error && !snapshot && <p className="secondary text-[13px]">{t("trending.failed")}</p>}
-        {snapshot && words.length === 0 && (
+      <div id="trending-panel-content" role="tabpanel" aria-labelledby={`trending-tab-${activeTab?.platform ?? "xhs"}`} className="trending-panel-body">
+        {activeTab?.platform !== "xhs" && loading && !snapshot && <p className="secondary text-[13px]">{t("trending.loading")}</p>}
+        {activeTab?.platform !== "xhs" && !loading && error && !snapshot && <p className="secondary text-[13px]">{t("trending.failed")}</p>}
+        {activeTab?.platform === "xhs" ? (
+          <p className="secondary text-[13px]">{t("trending.xhsUnavailable")}</p>
+        ) : snapshot && words.length === 0 && (
           <p className="secondary text-[13px]">
             {info?.message || (info?.status === "failed" ? t("trending.failed") : t("trending.empty"))}
           </p>

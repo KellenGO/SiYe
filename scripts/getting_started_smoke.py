@@ -94,6 +94,13 @@ def main():
                     data, status = {}, 200
                     if path == "/api/health":
                         data = health
+                    elif path == "/api/trending":
+                        data = {"platforms": {
+                            "xhs": {"status": "unavailable", "words": []},
+                            "douyin": {"status": "ok", "words": [{"rank": 1, "word": "抖音测试热词"}]},
+                            "bilibili": {"status": "ok", "words": [{"rank": 1, "word": "B站测试热词"}]},
+                            "zhihu": {"status": "ok", "words": [{"rank": 1, "word": "知乎测试热词"}]},
+                        }}
                     elif path == "/api/search/accounts":
                         data = {"accounts": [account]}
                     elif path == "/api/search/favorites/jobs/latest":
@@ -345,6 +352,38 @@ def main():
                 page.reload()
                 expect(guide).to_have_count(0)
 
+                extension = page.locator(".help-extension-details")
+                expect(extension).not_to_have_attribute("open", "")
+                expect(page.get_by_text("不安装扩展也可以用四野内置扫码登录。", exact=True)).to_be_visible()
+                expect(extension.get_by_text("开发者模式")).not_to_be_visible()
+                page.screenshot(path=output / "help-extension-collapsed-mobile.png", full_page=True)
+                summary = extension.locator("summary")
+                summary.focus()
+                summary.press("Enter")
+                expect(extension).to_have_attribute("open", "")
+                expect(extension.get_by_text("开发者模式")).to_be_visible()
+                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), "Help mobile overflow"
+                page.screenshot(path=output / "help-extension-expanded-mobile.png", full_page=True)
+                summary.press("Enter")
+                expect(extension).not_to_have_attribute("open", "")
+
+                page.goto(origin + "/#/")
+                page.get_by_role("button", name="返回首页", exact=True).click()
+                xhs_trending = page.get_by_role("tab", name="小红书 暂不可用")
+                expect(xhs_trending).to_be_visible()
+                expect(page.get_by_role("tab", name="抖音")).to_be_visible()
+                expect(page.get_by_role("tab", name="B站")).to_be_visible()
+                expect(page.get_by_role("tab", name="知乎")).to_be_visible()
+                xhs_trending.focus()
+                xhs_trending.press("Enter")
+                expect(xhs_trending).to_have_attribute("aria-selected", "true")
+                expect(page.get_by_role("tabpanel").get_by_text("目前暂未接入小红书热搜，其他平台仍可使用。", exact=True)).to_be_visible()
+                page.screenshot(path=output / "trending-unavailable-mobile.png", full_page=True)
+                page.get_by_role("tab", name="抖音").click()
+                expect(page.get_by_text("抖音测试热词", exact=True)).to_be_visible()
+                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), "Trending mobile overflow"
+                page.goto(origin + "/#/help")
+
                 page.set_viewport_size({"width": 1440, "height": 1050})
                 page.wait_for_timeout(500)
                 page.screenshot(path=output / "help-v1.png", full_page=True)
@@ -378,7 +417,8 @@ def main():
                   "keyword picks preserve platforms, seven tutorial steps (accounts/home/search/save/history/"
                   "appearance/help), spotlight tracks the search-scope row while scrolling without "
                   "blocking clicks, floating exit stays put, back-to-results, reload, mobile, "
-                  "diagnostics copy/download/offline; no real platform requests")
+                  "optional extension details, trending unavailable badge, diagnostics copy/download/offline; "
+                  "no real platform requests")
     finally:
         server.shutdown()
         server.server_close()

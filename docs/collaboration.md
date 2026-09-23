@@ -12,6 +12,13 @@
 
 ## 最近交接
 
+### V1-UX-COPY-20260923 — 收藏说明、热搜可用性与可选扩展步骤
+
+- 负责人：Codex / 当前会话；主工作区 `MediaCrawler-main`，`master`，起始 HEAD `a32e19c`，起始状态干净。已核对当前任务表和相关近期交接，无重叠的进行中写入。
+- 交付：跨平台收藏的可见说明改为只读取、不会改动平台收藏、可另存本地；小红书热搜标签在数据返回前就显示「暂不可用」，仍可点击看原因；帮助页原生折叠区默认收起可选扩展步骤，扫码登录在前。使用说明和网页指南把扩展移到快速开始之后，并同步热搜、收藏口径。修改范围限于对应界面、样式、文案、两份指南、三份功能 wiki、前端热搜用例、隔离浏览器烟测和更新记录；未动观看历史、登录、同步、抓取或热搜后端逻辑。
+- 验证：`npm run test:search` 373/373，通过；`npm run build` 通过，`webui/dist` 已按本次源码重建；pytest `tests/test_webui_ui_contract.py`、`tests/test_docs_wiki.py`、`tests/test_trending.py` 76/76，通过（全新项目内 basetemp）；`scripts/getting_started_smoke.py` 在隔离 Edge 下通过，覆盖 390px 折叠/键盘操作、热搜标签/原因、其他平台模拟热词与无横向溢出；`git diff --check` 通过。烟测仅用临时库与模拟响应，没有访问真实账号、收藏或平台内容。
+- 未做：未跑全量后端 pytest、未用真实平台账号验收；本任务不涉及这两项行为。源码与本地 `webui/dist` 一致，已打包 EXE 尚未重建。提交定位：`git log --all --grep=V1-UX-COPY-20260923`；已集成到主工作区 `master`，修改范围释放。
+
 ### V1-UI-FIXES-20260923 — V1 窄屏、按钮遮挡与长列表修复
 
 - 负责人：Codex / 当前会话；隔离 worktree `codex/v1-ui-fixes`，起始提交 `668b28e`；功能提交 `4dc83de`，合入最新主线后的提交 `4eb872a`，已快进集成到 `master`。
