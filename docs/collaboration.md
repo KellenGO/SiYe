@@ -13,6 +13,46 @@
 
 ## 最近交接
 
+### ONBOARD-HIGHLIGHT-20260923 — 教程加「跟着目标走」的框选高亮 + 右下角常驻退出
+
+- 负责人：WorkBuddy / 当前会话；工作区：`MediaCrawler-main`；分支：`master`；起始提交：`534b359`。
+- 缘起：用户提出教程需要强调的地方不够明显，希望在"让用户勾平台"时把全局变暗、给「搜索范围」加高亮框；
+  并明确三点：**不要锁交互**（只给提示）、**框选位置要精确**（鼠标滚动、控件上移时跟着走，"像缩在一个图层里"）、
+  **右下角要有随时能退出教程的入口**（避免用户不按教程交互后卡住）。先只读核对给出可行性分层，用户拍板后再实施。
+- 修订既有结论：同日 `2026-09-23-教程扩为逐页导览.md` 曾把遮罩高亮作为 C 选项否掉
+  （"把边看边操作变成被动点击，风险与收益不成比例"）。当时的判断把"铺遮罩"和"拦点击"当成一件事；
+  这次拆开，只做压暗 + 框选 + 提示，**高亮层 `pointer-events: none`**，所以是缩小范围后的重开，不是推翻。
+  新决策见 `docs/decisions/2026-09-23-教程高亮框选.md`。
+- 范围：`webui/src/lib/onboarding.ts`（`GuideStep.highlight` + `guideHighlight`）、
+  `webui/src/components/search/SearchBar.tsx`（`data-tour="search-scope"` 锚点）、
+  `webui/src/components/help/GettingStarted.tsx`（卡片改为 `card` 变量 + 浮层放它外面）、
+  新增 `webui/src/components/help/{GuideSpotlight,GuideExit}.tsx`、`webui/src/index.css`（`--siye-scrim` 深浅两套 +
+  浮层样式 + 卡片抬到遮罩之上）、两个 locale 的 `common.json`（`homeHint` / `exit`）、
+  `webui/tests/onboarding.test.ts`、`tests/test_webui_ui_contract.py`、`scripts/getting_started_smoke.py`、
+  `docs/{index.md}`、`docs/features/getting-started.md`、`CHANGELOG.md`。未动后端、未动平台抓取、未动数据。
+- 交付：① 「认识首页」这一步压暗页面其余部分、把「搜索范围」那一行框出来（比目标外扩 6px），
+  旁边贴一句提示；位置按视口坐标实算并在 `scroll` / `resize` / 尺寸变化时重算。② 右下角常驻「退出教程」
+  （语义等同「这次跳过」，只影响当前标签页），与 `.scroll-top` 上下错开。③ 压暗色 `--siye-scrim` 深浅各一值。
+- 顺带修掉一个**静默失效的守卫**：`tests/test_webui_ui_contract.py` 原来用只认 `key` + `route` 的严格正则解析
+  `GUIDE_STEPS`，步骤对象一旦新增字段，那一步就会从解析结果里消失 —— 守卫还在，但已经不管它了
+  （实测：加 `highlight` 后旧正则只解析出 6 步）。正则已放宽，并新增两条守卫：带 `highlight` 的步骤必须有
+  `<key>Hint` 文案、锚点 `data-tour="..."` 必须在组件里真实存在。
+- 验证：`npm run test:search` **372** 通过（新增高亮声明用例）、`npm run build` 通过、`npm run lint` exit 0；
+  pytest `tests/test_webui_ui_contract.py` + `tests/test_docs_wiki.py` **59** 通过（新增 1 条锚点/文案守卫）；
+  `scripts/getting_started_smoke.py` PASS，新增断言：框与目标偏移精确为 `[-6,-6,12,12]`、滚动 220px 后仍精确、
+  换深色主题与换 390px 视口后仍精确、**透过压暗层点得到平台勾选框**（证明没锁交互）、
+  滚 600px 后退出入口仍在原位且可点、点退出后浮层全部消失且刷新仍关着。
+  复核截图三张：`build/getting-started-review/{spotlight-light,spotlight-dark,spotlight-mobile}.png`。
+  未访问真实平台与真实收藏。
+- 截图复核发现并修掉一处：压暗层一开始把指令卡片也压暗了，里面可点的按钮看起来像禁用态 ——
+  现在 `.has-onboarding .getting-started` 抬到遮罩之上。
+- 交付定位：`git log --all --grep=ONBOARD-HIGHLIGHT-20260923`。`webui/dist` 是忽略产物，本地已重建、不进提交；
+  已打包的 EXE 不会自动更新，需要重新打包。
+- 未完成 / 待核实：① 未跑全量 pytest（只跑了文档与界面契约两个文件）。② 高亮只做了「认识首页」一处，
+  其余六步是整页导览；再加一处只需在 `GUIDE_STEPS` 补 `highlight` + 目标补 `data-tour` + 两份 `Hint` 文案。
+  ③ 窄屏下「收藏夹归属」会员弹层是 fixed 铺底的，退出入口层级比它高会浮在其上（刻意取舍）。
+  ④ 与 `V1-UI-AUDIT-20260923` 的观测重叠仍待按新版本重跑。
+
 ### V1-UI-AUDIT-20260923 — V1.0 按钮、布局与数量边界审计
 
 - 负责人：Codex / 当前会话；只读审计；工作区：`MediaCrawler-main`；起始提交：`810b03b`，结束时主分支已由另一会话前进到 `9ead7dc`。后者未修改本审计发现涉及的收藏页、历史页、全局提示或布局样式，结论仍适用。
@@ -21,15 +61,37 @@
 - 数据边界：全部检查使用模拟接口、临时数据和拦截网络，没有读取真实账号、收藏或平台内容。截图在 `build/review-local-folder-grid-mobile.png`、`build/ui-audit/favorites-local-320.png`、`build/ui-audit/settings-accounts-320.png`；临时审计脚本已删除。
 - 本任务只报告、不修改产品代码。建议修复顺序：长列表分页/渐进渲染 → 移动端 toast 与标题操作区避让 → 图标偏好恢复 → 320px 设置导航可见性。
 
-### ONBOARD-PAGES-20260923 — 新手教程扩为七步逐页导览
+### PLATFORM-PREF-MEMORY-20260923 — 平台勾选严格按上次选择记住（含零勾选）
 
+- 负责人：WorkBuddy / 当前会话；工作区：`MediaCrawler-main`；分支：`master`；起始提交：`b9753d7`。
+- 缘起：用户重申设计意图 ——「新手教程时四个平台都不勾、由用户自己勾，以后的勾选按上一次的记忆」。
+  先做只读核对（隔离浏览器逐条读 `localStorage`）：首次进入 `[]`、勾小红书后刷新仍是小红书、
+  首页↔搜索页往返不回退全选 —— 这三点在 `ONBOARD-PAGES-20260923` 之后已经成立；
+  但**取消到零不落地**：存储留旧值，刷新后被取消的平台自己勾回来。
+- 范围：`webui/src/lib/searchExperience.ts`（`platform_pref_set` 与两处注释）、
+  `webui/tests/searchExperience.test.ts`（用例 ⑭）、`scripts/getting_started_smoke.py`（两条常驻断言）、
+  `docs/features/{search-experience,getting-started}.md`、`docs/decisions/2026-09-23-平台偏好空数组语义.md`（追加「同日补充」）、
+  `CHANGELOG.md`。未动后端、未动抓取、未动数据。
+- 交付：偏好规则收敛成**「偏好 = 用户最后一次勾的样子，含一个都不勾」**。原来的"至少保留一个平台"
+  不变量被删除 —— 它让存储与界面分叉（界面零勾选、存储留着旧值），并且在平台搜索失败被自动取消勾选
+  之后会让这些平台在刷新时"复活"，与刚展示给用户的"已自动取消勾选"提示相反。
+- 验证：`npm run test:search` 371 通过（用例 ⑭ 改为断言空集落地，并补"零偏好写回再读仍是零"）；
+  `npm run build` 通过（dist 已更新）；`scripts/getting_started_smoke.py` 通过，新增"勾选跨刷新被记住"
+  与"取消到零仍是零"两条断言。另有一条临时隔离脚本逐条打印各步的存储值（`.tmp_platform_pref_check.py`，
+  已删除）。未跑全量 pytest。未访问真实平台与真实收藏。
+- 交付定位：`git log --all --grep=PLATFORM-PREF-MEMORY-20260923`。`webui/dist` 是忽略产物
+  （`webui/.gitignore`），本地已重建，不进提交；已打包的 EXE 不会自动更新，需要重新打包。
+- 待核实：① 旧的"至少留一个平台"规则是 `ONBOARD-PAGES-20260923` 之前某次会话加的（测试里带注释说明用意），
+  本次按用户口径推翻；若当时另有原因，需要在本条下面补记。② 未跑全量 pytest。
+
+### ONBOARD-PAGES-20260923 — 新手教程扩为七步逐页导览
 - 负责人：WorkBuddy / 当前会话；工作区：`MediaCrawler-main`；分支：`master`；起始提交：`810b03b`。
 - 范围：`webui/src/lib/{onboarding,searchExperience}.ts`、`webui/src/hooks/useOnboarding.ts`、`webui/src/components/help/{GettingStarted,HelpPage}.tsx`、两个 locale 的 `common.json`、`webui/tests/{onboarding,searchExperience}.test.ts`、`tests/test_webui_ui_contract.py`、`scripts/getting_started_smoke.py`、`docs/{index.md,使用说明.md}`、`docs/features/{getting-started,search-experience}.md`、新增两条 decisions、`CHANGELOG.md`、`site/guide.html`。未动后端、未动平台抓取、未动数据。
 - 交付：① 教程从四步改成七步「一步一页」（连接平台 → 首页 → 搜索与结果 → 收藏与整理 → 观看历史 → 外观与个性化 → 帮助与反馈），每步文案升级为"这一页是什么 + 能做什么"；步骤来源收敛成 `GUIDE_STEPS`（key + route），步数校验按长度动态。② 帮助页新增「页面与功能一览」（10 条逐页速查），教程页脚指向它。③ 修掉搜索页平台勾选「往返一次就变全选」：`parsePlatformPref` 对显式空数组返回空集，零勾选在刷新/切页后保持。取舍见 `docs/decisions/2026-09-23-教程扩为逐页导览.md`、`docs/decisions/2026-09-23-平台偏好空数组语义.md`。
 - 为什么②③与①同船：教程文案承诺「平台默认一个都不勾，由你亲手勾」，不同期修掉那个往返副作用就是发布了假承诺；两处行为改动落在互不相干的文件上。
 - 验证：前端 `npm run test:search` 371 通过（新增 4 条：步骤数边界、步骤路由、空偏好往返、空数组语义）、`npm run build` 通过；pytest `tests/test_docs_wiki.py` + `tests/test_webui_ui_contract.py` 58 通过（新增 2 条守卫：每步中英文案齐全、帮助页速查与教程互相指得到）；`scripts/getting_started_smoke.py` 通过——隔离 SQLite + TestClient + `webui/dist` + Playwright 拦 `/api`，覆盖许可前隐藏、七步全程与每步 URL、平台零勾选、回搜索结果、跳过、重开、刷新恢复、390px 窄屏 + 深色主题、诊断复制/下载/离线。未访问真实平台与真实收藏。截图在 `build/getting-started-review/`（构建产物，未提交）。
 - 交付定位：`git log --all --grep=ONBOARD-PAGES-20260923`。源码与本轮 `webui/dist` 生产构建一致；已打包的 EXE 不会自动更新，需要重新打包。
-- 未完成 / 待核实：① 未跑全量 pytest（只跑了文档与界面契约两个文件；平台偏好改动同时被前端 371 条用例覆盖）。② 教程的第 7 步只是把用户带到帮助页，没有做页内锚点高亮（help page 已有 `id="pages"`，将来要跳转可直接用）。③ `docs/使用说明.md` 与 `site/guide.html` 的正文已同步为"七步"，但 `site/index.html` 未提及教程步数，未改。④ 与本表里 Codex 的只读 UI 审计（`V1-UI-AUDIT-20260923`）有观测重叠：它审的是改动前的构建，结论需要按新版本重跑。
+- 未完成 / 待核实：① 未跑全量 pytest（只跑了文档与界面契约两个文件；平台偏好改动同时被前端 371 条用例覆盖）。② 教程的第 7 步只是把用户带到帮助页，没有做页内锚点高亮（help page 已有 `id="pages"`，将来要跳转可直接用）。③ `docs/使用说明.md` 与 `site/guide.html` 的正文已同步为"七步"；`site/index.html` 复核后确认它只写「应用内提供可跳过的新手引导」、不含步数，无需改。④ `docs/plans/2026-09-18-更新方向与难度评估.md` 的第 1 条已加「已实施（2026-09-23）」状态说明，避免 `GUIDE_ROUTES` / `^[0-3]$` 这两个已不存在的符号继续被当成现状。⑤ 与本表里 Codex 的只读 UI 审计（`V1-UI-AUDIT-20260923`）有观测重叠：它审的是改动前的构建，结论需要按新版本重跑。
 
 ### V1-PUBLIC-COPY-20260923 — V1.0 面向普通用户的界面文案
 

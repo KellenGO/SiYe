@@ -198,6 +198,9 @@
   --siye-green: #168568;
   --siye-amber: #98621e;
   --siye-red: #bf4958;
+  /* 教程高亮框四周的压暗色。深色主题不能照搬这一层：背景本来就黑，
+     同样的透明度会把目标区一起压下去，所以两边各配一个值。 */
+  --siye-scrim: rgb(23 43 61 / 0.42);
 }
 
 html.dark {
@@ -214,6 +217,7 @@ html.dark {
   --siye-green: #67c9a6;
   --siye-amber: #e0b477;
   --siye-red: #ef8b97;
+  --siye-scrim: rgb(3 5 10 / 0.62);
 }
 
 /* ============================================================
@@ -1753,6 +1757,20 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
   .guide-steps button { padding: 5px 7px; }
   .getting-started .btn { white-space: normal; }
 }
+
+/* 指令卡片不算「被压暗的内容」：它里面还有可点的按钮，压暗会让它们看起来像禁用态。
+   教程进行中把卡片抬到遮罩之上，只让页面内容退到后面。 */
+.has-onboarding .getting-started { position: relative; z-index: 91; }
+/* 教程高亮框：中间挖空、四周压暗。压暗靠一层超大 box-shadow 铺满视口，
+   所以不需要额外的遮罩元素；整层 pointer-events: none —— 它只是提示、不锁交互，
+   高亮区域和页面其它地方都照样能点。位置由 GuideSpotlight 按视口坐标实算。 */
+.guide-spotlight { position: fixed; z-index: 90; pointer-events: none; border-radius: 10px; box-shadow: 0 0 0 1.5px var(--siye-brand), 0 0 0 100vmax var(--siye-scrim); }
+/* 跟着高亮框走的那句短提示：卡片被滚出视口后，它就是唯一的说明。 */
+.guide-spotlight-hint { position: fixed; z-index: 91; margin: 0; padding: 9px 12px; border: 1px solid var(--siye-line-strong); border-radius: 9px; background: var(--siye-bg); color: var(--siye-secondary); font-size: 12.5px; line-height: 1.7; box-shadow: 0 12px 30px #20294526; pointer-events: none; }
+/* 常驻退出入口：教程不锁交互，用户滚到别处也得有出口。
+   右下角已经被「返回顶部」（.scroll-top）占着，所以和它上下错开。 */
+.guide-exit { position: fixed; right: 24px; bottom: 76px; z-index: 92; box-shadow: 0 12px 30px #20294533; }
+@media (max-width: 700px) { .guide-exit { right: 14px; bottom: 66px; } }
 
 /* 搜索失败提示：顶部居中、自动消失，用品牌蓝而不是告警色（它不是错误，是"这次没搜到"）。 */
 [data-sonner-toast].siye-toast-info {

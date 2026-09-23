@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { ArrowRight, Check, Compass } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { GUIDE_STEPS, type GuideState } from "@/lib/onboarding";
+import { GUIDE_STEPS, guideHighlight, type GuideState } from "@/lib/onboarding";
+import { GuideExit } from "./GuideExit";
+import { GuideSpotlight } from "./GuideSpotlight";
 
 interface GettingStartedProps {
   step: GuideState;
@@ -17,7 +19,12 @@ export function GettingStarted({ step, onGoTo, onDismiss }: GettingStartedProps)
   const current = step >= 0 ? GUIDE_STEPS[step] : null;
   /** 收藏那一步的「回搜索结果」要跳回搜索步骤本身（而不是直接改地址）。 */
   const searchStep = GUIDE_STEPS.findIndex((item) => item.key === "search");
-  return (
+  /** 这一步要高亮页面上的哪个元素；没有就只讲不指。 */
+  const highlight = current ? guideHighlight(current) : undefined;
+  const highlightHint = current ? t(`onboarding.${current.key}Hint`) : "";
+  /** 卡片本体。两个浮层刻意放在它外面：提示文案对读屏是隐藏的，
+      混进 aria-label 这块 region 只会给地标添噪音。 */
+  const card = (
     <section className="getting-started" aria-label={t("onboarding.label")}>
       <div className="guide-heading">
         <span className="guide-symbol" aria-hidden="true"><Compass /></span>
@@ -49,5 +56,14 @@ export function GettingStarted({ step, onGoTo, onDismiss }: GettingStartedProps)
       </div>
       <p className="guide-footnote">{t("onboarding.replayHint")}</p>
     </section>
+  );
+  return (
+    <>
+      {card}
+      {/* 两个浮层都是 fixed 定位，DOM 位置不影响呈现。卡片被滚出视口后它们仍在：
+          提示跟着高亮走，退出入口一直够得着（教程不锁交互，用户可能滚到任何地方）。 */}
+      {highlight && <GuideSpotlight selector={highlight} hint={highlightHint} />}
+      <GuideExit label={t("onboarding.exit")} onExit={() => onDismiss(neverAgain)} />
+    </>
   );
 }

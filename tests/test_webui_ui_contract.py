@@ -605,6 +605,26 @@ def test_public_ui_does_not_expose_developer_jargon():
 # ── 新手教程：逐页导览（2026-09-23 扩为七步）─────────────────────────────
 
 
+def _guide_steps():
+    """解析 `GUIDE_STEPS` 里的每一步（key / route / 可选 highlight）。
+
+    字段用宽松匹配：只认 `key` + `route` 的严格写法在步骤对象新增字段时，
+    会把那一步静默漏出解析范围 —— 守卫看起来还在，实际已经不管它了。
+    """
+    source = (_ROOT / "lib" / "onboarding.ts").read_text(encoding="utf-8")
+    block = source.split("export const GUIDE_STEPS", 1)[1].split("] as const", 1)[0]
+    steps = []
+    for literal in re.findall(r"\{[^{}]*\}", block):
+        key = re.search(r'key:\s*"(\w+)"', literal)
+        route = re.search(r'route:\s*"([^"]+)"', literal)
+        if not key or not route:
+            continue
+        highlight = re.search(r"highlight:\s*'([^']+)'", literal)
+        steps.append({"key": key.group(1), "route": route.group(1),
+                      "highlight": highlight.group(1) if highlight else None})
+    return steps
+
+
 def test_onboarding_steps_have_copy_in_every_locale():
     """教程每一步都要有标题 / 正文 / 按钮文案，且每种语言都写全。
 
@@ -612,19 +632,42 @@ def test_onboarding_steps_have_copy_in_every_locale():
     `t("ns.key")` 字面量的那条守卫看不到它们，所以这里按 `GUIDE_STEPS` 的 key
     回查 locale —— 加一步而忘了写文案，会在这一步被抓住。
     """
-    onboarding = (_ROOT / "lib" / "onboarding.ts").read_text(encoding="utf-8")
-    steps = re.findall(r'\{\s*key:\s*"(\w+)",\s*route:\s*"([^"]+)"\s*\}', onboarding)
+    steps = _guide_steps()
     assert len(steps) >= 4, f"没解析出教程步骤：{steps}"
-    assert len({key for key, _ in steps}) == len(steps), "步骤 key 重复"
-    assert all(route.startswith("#/") for _, route in steps), "每一步都要落到一个真实页面"
-    assert "#/help" in {route for _, route in steps}, "能重开教程的帮助页应当还在链路里"
+    assert len({step["key"] for step in steps}) == len(steps), "步骤 key 重复"
+    assert all(step["route"].startswith("#/") for step in steps), "每一步都要落到一个真实页面"
+    assert "#/help" in {step["route"] for step in steps}, "能重开教程的帮助页应当还在链路里"
 
     for name in sorted(p.name for p in _LOCALES.iterdir() if p.is_dir()):
         keys = _locale_keys(name)
-        missing = [f"onboarding.{key}{suffix}"
-                   for key, _ in steps for suffix in ("Title", "Body", "Action")
-                   if f"onboarding.{key}{suffix}" not in keys]
+        missing = [f"onboarding.{step['key']}{suffix}"
+                   for step in steps for suffix in ("Title", "Body", "Action")
+                   if f"onboarding.{step['key']}{suffix}" not in keys]
         assert not missing, f"{name} 缺少教程文案：{missing}"
+
+
+def test_onboarding_highlight_steps_point_at_real_anchors():
+    """带高亮的步骤：锚点必须真实存在，提示文案两种语言都要有。
+
+    高亮框按 `data-tour` 锚点找目标。锚点被改名或删掉时，只有跑 Playwright
+    的冒烟脚本才会发现 —— 那条链路慢、还要装浏览器，所以再加一道静态守卫，
+    让普通 `pytest` 就能抓住这类漂移。
+    """
+    highlighted = [step for step in _guide_steps() if step["highlight"]]
+    assert highlighted, "没有步骤声明 highlight 时 GuideSpotlight 是死代码"
+
+    bundle = "\n".join(path.read_text(encoding="utf-8")
+                       for path in (_ROOT / "components").rglob("*.tsx"))
+
+    for step in highlighted:
+        anchor = re.fullmatch(r'\[data-tour="([a-z][\w-]*)"\]', step["highlight"])
+        assert anchor, f"步骤 {step['key']} 的高亮目标不是 data-tour 锚点：{step['highlight']}"
+        name = anchor.group(1)
+        assert f'data-tour="{name}"' in bundle, \
+            f"步骤 {step['key']} 指向的锚点 data-tour=\"{name}\" 在组件里找不到"
+        for locale in sorted(p.name for p in _LOCALES.iterdir() if p.is_dir()):
+            assert f"onboarding.{step['key']}Hint" in _locale_keys(locale), \
+                f"{locale} 缺少高亮提示文案：onboarding.{step['key']}Hint"
 
 
 def test_help_page_carries_the_page_by_page_tour():

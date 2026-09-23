@@ -246,7 +246,9 @@ export function SearchBar({
 
       {/* 平台选择：浅色胶囊。每颗胶囊右边的 ⟳ 是"单独获取这个平台"，
           用于只补/只更新某一个平台的结果，不重跑其它平台（见 SearchPage.handleRetry）。 */}
-      <div className="scope search-scope">
+      {/* data-tour 是教程高亮框的锚点，被 lib/onboarding.ts 的 GUIDE_STEPS 引用；
+          教程改指向别的元素时，记得两边一起改。 */}
+      <div className="scope search-scope" data-tour="search-scope">
         <span className="scope-label">{t("search.scope")}</span>
         {ALL_PLATFORMS.map((p) => {
           const isSelected = selectedPlatforms.has(p);

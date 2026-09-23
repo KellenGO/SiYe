@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { GUIDE_PREFERENCE_KEY, GUIDE_SESSION_KEY, GUIDE_STEPS, initialGuideState, writeGuidePreference, type GuideStorage } from "../src/lib/onboarding.js";
+import { GUIDE_PREFERENCE_KEY, GUIDE_SESSION_KEY, GUIDE_STEPS, guideHighlight, initialGuideState, writeGuidePreference, type GuideStorage } from "../src/lib/onboarding.js";
 
 function storage(): GuideStorage {
   const values = new Map<string, string>();
@@ -60,4 +60,24 @@ test("每一步都落到一个真实页面，key 不重复", () => {
     assert.ok(step.key.length > 0);
   }
   assert.equal(new Set(GUIDE_STEPS.map((step) => step.key)).size, GUIDE_STEPS.length);
+});
+
+test("高亮框只指向 data-tour 锚点，没声明的步骤不产生浮层", () => {
+  const highlighted = GUIDE_STEPS.filter((step) => guideHighlight(step) !== undefined);
+  // 一条都没有的话 GuideSpotlight 就是死代码，别再留着它。
+  assert.ok(highlighted.length > 0, "至少要有一个步骤声明 highlight");
+  for (const step of highlighted) {
+    const selector = guideHighlight(step);
+    // 用 data-tour 而不是 class：锚点是教程和页面之间的显式契约，
+    // 顺带让 pytest 那条守卫能静态核对它真的存在。
+    assert.ok(
+      /^\[data-tour="[a-z][a-z0-9-]*"\]$/.test(String(selector)),
+      `步骤 ${step.key} 的高亮目标要写成 [data-tour="..."]，现在是 ${selector}`,
+    );
+  }
+  for (const step of GUIDE_STEPS) {
+    if (guideHighlight(step) === undefined) {
+      assert.ok(!("highlight" in step), `步骤 ${step.key} 声明了高亮却没被识别出来`);
+    }
+  }
 });

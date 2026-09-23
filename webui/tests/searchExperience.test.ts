@@ -1146,7 +1146,7 @@ test("⑬ reset 清除任务与展示；历史与平台偏好保留", () => {
   assert.deepEqual(state.platformPref, pref); // 平台偏好保留
 });
 
-test("⑭ 历史删除/清空走 reducer；platform_pref_set 过滤非法且空集保持已落地偏好", () => {
+test("⑭ 历史删除/清空走 reducer；platform_pref_set 过滤非法且空集照常落地", () => {
   const history = [h("a", ["xhs"], "2026-07-01T00:00:00.000Z"), h("b", ["douyin"], "2026-07-02T00:00:00.000Z")];
   const state = initState(history, ["xhs"]);
   const removed = step(state, { type: "history_remove", index: 0 });
@@ -1156,12 +1156,14 @@ test("⑭ 历史删除/清空走 reducer；platform_pref_set 过滤非法且空�
   // 测试防御性过滤：事件类型声明为合法 slug，测试用断言注入非法值。
   const prefSet = step(state, { type: "platform_pref_set", platforms: ["xhs", "bogus", "xhs", "zhihu"] as PlatformSlug[] });
   assert.deepEqual(prefSet.platformPref, ["xhs", "zhihu"]); // 过滤非法 + 去重
-  // 新规则：首次进入（readPlatformPref 无存储值）才允许空集；偏好一旦落地
-  // （这里初始为 ["xhs"]），reducer 的 platform_pref_set 仍维持"至少一个平台"
-  // —— 传入空集时保留已落地的原偏好，避免把已有偏好清空。UI 层始终允许手动
-  // 取消到零，只是提交时统一提示"先选平台"（见 SearchBar）。
+  // 偏好 = 用户最后一次的勾选，空集也落地。留过一次就会让存储与界面分叉：
+  // 用户把平台全取消、刷新后又被自动勾回来（那是用户没做过的动作）。
   const prefEmpty = step(state, { type: "platform_pref_set", platforms: [] });
-  assert.deepEqual(prefEmpty.platformPref, ["xhs"]); // 空集保持已落地偏好（至少一个平台）
+  assert.deepEqual(prefEmpty.platformPref, []); // 取消到零 → 零就是最后一次选择
+  // 零偏好写回存储再读：仍是零，不因为"没有平台"而回退全选。
+  const storage = new MemoryStorage();
+  writePlatformPref(storage, prefEmpty.platformPref);
+  assert.deepEqual(readPlatformPref(storage), []);
 });
 
 test("⑭b readPlatformPref 无存储值：首次进入允许零勾选（返回空集）", () => {

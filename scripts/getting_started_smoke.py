@@ -127,6 +127,34 @@ def main():
                 expect(guide).to_have_count(0)
                 page.close()
 
+                # 右下角退出入口：教程不锁交互，用户滚到别处也得关得掉，
+                # 而且它和「这次跳过」一样只影响当前标签页。
+                page = context.new_page()
+                page.goto(origin)
+                guide = page.get_by_role("region", name="新手引导")
+                expect(guide).to_be_visible()
+                exit_button = page.get_by_role("button", name="退出教程", exact=True)
+                expect(exit_button).to_be_visible()
+                # 撑高页面后往下滚：卡片被顶出视口，退出入口必须还在原位。
+                page.evaluate("document.body.style.paddingBottom = '2000px'")
+                before_exit = exit_button.bounding_box()
+                page.mouse.wheel(0, 600)
+                page.wait_for_timeout(300)
+                assert page.evaluate("scrollY") > 0, "页面向下滚动失败，退出入口这条没验到"
+                card_box = guide.bounding_box()
+                assert not card_box or card_box["y"] + card_box["height"] < 0, \
+                    f"教程卡片还在视口里，这条没验到：{card_box}"
+                after_exit = exit_button.bounding_box()
+                assert abs(after_exit["y"] - before_exit["y"]) < 2, (before_exit, after_exit)
+                exit_button.click()
+                expect(guide).to_have_count(0)
+                expect(page.locator(".guide-exit")).to_have_count(0)
+                expect(page.locator(".guide-spotlight")).to_have_count(0)
+                # 只影响当前标签页：刷新仍是关着的（session），但换个标签页还会出现。
+                page.reload()
+                expect(guide).to_have_count(0)
+                page.close()
+
                 page = context.new_page()
                 page.goto(origin)
                 guide = page.get_by_role("region", name="新手引导")
@@ -146,6 +174,66 @@ def main():
                 expect(page).to_have_url(origin + "/#/")
                 expect(guide.get_by_role("heading", name="认识首页", exact=True)).to_be_visible()
                 expect(guide.get_by_text("默认一个都不勾", exact=False)).to_be_visible()
+
+                # 高亮框要严丝合缝套住「搜索范围」那一行（比目标外扩 6px），
+                # 而且滚轮一动就跟着走 —— 这正是这一步存在的理由。
+                expect(page.locator('[data-tour="search-scope"]')).to_be_visible()
+                expect(page.locator(".guide-spotlight")).to_have_count(1)
+                hint = page.get_by_text("搜索范围：想搜哪几个平台", exact=False)
+                expect(hint).to_be_visible()
+
+                def spotlight_offset():
+                    """高亮框相对目标元素的偏移，四舍五入到整像素。"""
+                    return page.evaluate(
+                        """() => {
+  const box = document.querySelector(".guide-spotlight").getBoundingClientRect();
+  const row = document.querySelector('[data-tour="search-scope"]').getBoundingClientRect();
+  return [Math.round(box.top - row.top), Math.round(box.left - row.left),
+          Math.round(box.width - row.width), Math.round(box.height - row.height)];
+}"""
+                    )
+
+                assert spotlight_offset() == [-6, -6, 12, 12], spotlight_offset()
+                # 撑高页面，保证滚轮真的能滚 —— 否则「跟随滚动」这条会空过。
+                page.evaluate("document.body.style.paddingBottom = '1500px'")
+                page.mouse.wheel(0, 220)
+                page.wait_for_timeout(300)
+                assert page.evaluate("scrollY") > 0, "页面向下滚动失败，跟随滚动这条没验到"
+                assert spotlight_offset() == [-6, -6, 12, 12], spotlight_offset()
+                # 卡片（在页面顶部）已经滚出视口，提示气泡仍跟着高亮框在眼前。
+                expect(hint).to_be_visible()
+                # 退出入口是 fixed：卡片滚没了它也得在原处，用户才关得掉。
+                exit_box = page.get_by_role("button", name="退出教程", exact=True).bounding_box()
+                assert exit_box and 0 <= exit_box["y"] < page.evaluate("innerHeight"), exit_box
+                page.evaluate("document.body.style.paddingBottom = ''")
+                page.evaluate("window.scrollTo(0, 0)")
+                page.wait_for_timeout(300)
+                assert spotlight_offset() == [-6, -6, 12, 12], spotlight_offset()
+
+                # 高亮层不锁交互：压暗层是 pointer-events: none，透过它照样点得到勾选框。
+                # 哪天有人把它改成拦点击，这里的 click 会直接以 "intercepts pointer events" 失败。
+                home_xhs = page.get_by_role("button", name="小红书", exact=True)
+                home_xhs.click()
+                expect(home_xhs).to_have_attribute("aria-pressed", "true")
+                home_xhs.click()
+                expect(home_xhs).to_have_attribute("aria-pressed", "false")
+
+                # 复核截图 + 主题/缩放后的贴合：换主题、换视口都要重新测量。
+                page.screenshot(path=output / "spotlight-light.png", full_page=True)
+                page.evaluate("localStorage.setItem('mediacrawler_theme', 'dark')")
+                page.reload()
+                page.wait_for_timeout(400)
+                assert spotlight_offset() == [-6, -6, 12, 12], spotlight_offset()
+                page.screenshot(path=output / "spotlight-dark.png", full_page=True)
+                page.set_viewport_size({"width": 390, "height": 844})
+                page.wait_for_timeout(400)
+                assert spotlight_offset() == [-6, -6, 12, 12], spotlight_offset()
+                page.screenshot(path=output / "spotlight-mobile.png", full_page=True)
+                page.evaluate("localStorage.setItem('mediacrawler_theme', 'light')")
+                page.set_viewport_size({"width": 1440, "height": 1050})
+                page.reload()
+                page.wait_for_timeout(400)
+
                 guide.get_by_role("button", name="下一步", exact=True).click()
                 expect(page).to_have_url(origin + "/#/search")
                 expect(guide.get_by_role("heading", name="搜索与结果", exact=True)).to_be_visible()
@@ -164,6 +252,27 @@ def main():
                 for button in (douyin_button, bilibili_button, zhihu_button):
                     expect(button).to_have_attribute("aria-pressed", "false")
                 assert json.loads(page.evaluate("localStorage.getItem('aggregate_search_platform_pref')")) == ["xhs"]
+
+                # 勾选要按上一次的记忆恢复：刷新后仍是"只勾小红书"，不回退全选。
+                page.reload()
+                page.wait_for_timeout(300)
+                expect(xhs_button).to_have_attribute("aria-pressed", "true")
+                for button in (douyin_button, bilibili_button, zhihu_button):
+                    expect(button).to_have_attribute("aria-pressed", "false")
+                assert json.loads(page.evaluate("localStorage.getItem('aggregate_search_platform_pref')")) == ["xhs"]
+
+                # 取消到零也是一种"上一次的选择"：零勾选必须落地，刷新后不能自己勾回来。
+                xhs_button.click()
+                expect(xhs_button).to_have_attribute("aria-pressed", "false")
+                assert json.loads(page.evaluate("localStorage.getItem('aggregate_search_platform_pref')")) == []
+                page.reload()
+                page.wait_for_timeout(300)
+                for button in (xhs_button, douyin_button, bilibili_button, zhihu_button):
+                    expect(button).to_have_attribute("aria-pressed", "false")
+                assert json.loads(page.evaluate("localStorage.getItem('aggregate_search_platform_pref')")) == []
+                # 复原成"只勾小红书"，后面的历史词与收藏步骤按原样继续。
+                xhs_button.click()
+                expect(xhs_button).to_have_attribute("aria-pressed", "true")
 
                 before_search = len([item for item in mutations if item[1] == "/api/search/jobs"])
                 search.focus()
@@ -265,9 +374,11 @@ def main():
                 context.close()
                 browser.close()
             print("PASS: consent, skip, never again, restart, zero platform pre-selection, "
+                  "platform picks remembered across reload, zero picked stays zero, "
                   "keyword picks preserve platforms, seven tutorial steps (accounts/home/search/save/history/"
-                  "appearance/help), back-to-results, reload, mobile, diagnostics copy/download/offline; "
-                  "no real platform requests")
+                  "appearance/help), spotlight tracks the search-scope row while scrolling without "
+                  "blocking clicks, floating exit stays put, back-to-results, reload, mobile, "
+                  "diagnostics copy/download/offline; no real platform requests")
     finally:
         server.shutdown()
         server.server_close()
