@@ -223,6 +223,8 @@ def main():
                 page.set_viewport_size({"width": 390, "height": 844})
                 assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), "local icon grid overflow at 390px"
                 page.screenshot(path=str(ROOT / "build" / "review-local-folder-grid-mobile.png"), full_page=True)
+                page.reload()
+                expect(page.locator(".local-folder-browser")).to_be_visible()
                 page.get_by_role("button", name="列表", exact=True).click()
                 for width in (1024, 390):
                     page.set_viewport_size({"width": width, "height": 844})
@@ -299,6 +301,11 @@ def main():
                 expect(page.get_by_text("暂时无法搜索", exact=True)).to_have_count(0)
                 expect(page.get_by_text("历史搜索要求登录", exact=True)).to_have_count(0)
                 page.screenshot(path=str(ROOT / "build" / "review-account-wording.png"), full_page=True)
+                page.set_viewport_size({"width": 320, "height": 844})
+                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), "settings navigation overflow at 320px"
+                expect(page.locator(".settings-nav button")).to_have_count(3)
+                page.screenshot(path=str(ROOT / "build" / "review-settings-mobile-320.png"), full_page=True)
+                page.set_viewport_size({"width": 1440, "height": 1000})
                 page.get_by_role("button", name="扫码登录", exact=True).click()
                 expect(page.get_by_text("测试等待扫码", exact=True)).to_be_visible()
                 page.evaluate("location.hash = '#/'")
@@ -307,6 +314,26 @@ def main():
                 assert login_polls, "scan login polling stopped when leaving accounts"
                 page.evaluate("location.hash = '#/settings/accounts'")
                 expect(page.get_by_text("测试扫码已完成", exact=True)).to_be_visible()
+
+                # ── 500 条真实上限：首屏只渲染 100 条，继续时每次再放 100 条 ──
+                bulk = [
+                    {
+                        "result": {
+                            "platform": "xhs",
+                            "content_id": f"boundary-{index:03d}",
+                            "title": f"边界收藏 {index:03d}",
+                            "url": f"https://www.xiaohongshu.com/explore/boundary-{index:03d}",
+                        }
+                    }
+                    for index in range(500)
+                ]
+                assert store.add_items(bulk) == {"added": 500, "updated": 0, "skipped": 0}
+                page.evaluate("location.hash = '#/favorites/local'")
+                expect(page.locator(".saved-result-item")).to_have_count(100)
+                expect(page.locator(".library-batch-bar")).to_contain_text("已显示 100 / 500 条")
+                page.get_by_role("button", name="显示更多", exact=True).click()
+                expect(page.locator(".saved-result-item")).to_have_count(200)
+                expect(page.locator(".library-batch-bar")).to_contain_text("已显示 200 / 500 条")
                 assert not errors, errors
                 browser.close()
         finally:

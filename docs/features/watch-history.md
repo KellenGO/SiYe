@@ -25,7 +25,7 @@
 - 同一内容（platform, content_id）只存一份：再次观看只更新 last_viewed_at 与 view_count，不重复插入。
 - 只保留最近 1000 条，写入时按 last_viewed_at 滚动淘汰最旧的。
 - 记录是**静默**的：前端 fire-and-forget（见 `recordView`），失败被吞掉，绝不阻塞或延迟跳转；数据只在本机，不上传。
-- 历史页复用 `ResultTabs` 渲染卡片，新增 `disableSort`（严格按最近浏览倒序）与 `onDeleteItem`（单条删除）；不做「暂停记录」开关。
+- 历史页复用 `ResultTabs` 渲染卡片，新增 `disableSort`（严格按最近浏览倒序）与 `onDeleteItem`（单条删除）；最多 1000 条记录每批只渲染 100 条，不做「暂停记录」开关。
 
 ## 已知坑 / 边界
 

@@ -460,6 +460,43 @@ def test_library_batch_bar_puts_show_more_on_the_right():
     assert 'className="btn small"' in result_tabs
 
 
+def test_all_bounded_long_lists_render_in_batches():
+    """搜索、收藏和历史记录都可能到数百条，不应一次把全部卡片塞进 DOM。"""
+    component_paths = (
+        _ROOT / "components" / "search" / "SearchPage.tsx",
+        _ROOT / "components" / "favorites" / "FavoritesPage.tsx",
+        _ROOT / "components" / "history" / "HistoryPage.tsx",
+    )
+    for path in component_paths:
+        source = path.read_text(encoding="utf-8")
+        assert "pageSize={100}" in source, f"{path.name} 没有按 100 条分批渲染"
+
+
+def test_mobile_favorites_actions_and_notifications_do_not_cover_each_other():
+    """窄屏收藏页操作区允许换行；通知移到底部，避免挡住页面右上角按钮。"""
+    css = (_ROOT / "index.css").read_text(encoding="utf-8")
+    app = (_ROOT / "App.tsx").read_text(encoding="utf-8")
+
+    assert ".collection-heading .page-heading { flex-direction: column; }" in css
+    assert ".local-heading-actions { width: 100%; justify-content: flex-start; flex-wrap: wrap; }" in css
+    assert 'compactNotifications ? "bottom-center" : "top-right"' in app
+    assert "matchMedia('(max-width: 700px)')" in app
+
+
+def test_icon_view_restores_its_folder_root_after_reload():
+    """用户选择图标视图后，刷新应回到文件夹根页，而不是误开列表页。"""
+    favorites = (_ROOT / "components" / "favorites" / "FavoritesPage.tsx").read_text(encoding="utf-8")
+    assert 'useState(() => localFolderView === "icon")' in favorites
+
+
+def test_very_narrow_settings_navigation_wraps_instead_of_clipping():
+    """320px 等极窄窗口下，设置导航改为两列，不能依赖被遮住的横向滚动。"""
+    css = (_ROOT / "index.css").read_text(encoding="utf-8")
+    narrow = css.split("@media (max-width: 340px)", 1)[1]
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr))" in narrow
+    assert "overflow-x: visible" in narrow
+
+
 # ── CSS 变量与收藏夹卡片几何 ────────────────────────────────────────────
 
 def _css_rule(css: str, selector: str) -> str:

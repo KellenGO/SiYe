@@ -483,6 +483,7 @@ export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateA
             onSortModeChange={setSortMode}
             library={library}
             fetchedAt={fetchedAt}
+            pageSize={100}
           />
         </div>
       )}

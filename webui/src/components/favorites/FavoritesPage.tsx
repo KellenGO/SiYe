@@ -55,7 +55,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
 
   const [selection, setSelection] = useState<LibrarySelection>({ kind: "all" });
   const [localFolderView, setLocalFolderView] = useState<LocalFolderView>(() => readLocalFolderView());
-  const [localFolderRoot, setLocalFolderRoot] = useState(false);
+  const [localFolderRoot, setLocalFolderRoot] = useState(() => localFolderView === "icon");
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [selectionResetKey, setSelectionResetKey] = useState(0);
   const [creating, setCreating] = useState(false);
@@ -549,6 +549,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
                 onSelectionChange={setSelectedKeys}
                 selectionToolLabel="批量管理"
                 selectionResetKey={selectionResetKey}
+                pageSize={100}
               />
             ) : (
               <div className="empty">

@@ -60,6 +60,15 @@ function App() {
   const [viewMode, setViewMode] = useState<ViewMode>(initialRoute.view)
   const [settingsSection, setSettingsSection] = useState<SettingsSection>(initialRoute.settings)
   const [accountsVisited, setAccountsVisited] = useState(initialRoute.view === 'accounts')
+  const [compactNotifications, setCompactNotifications] = useState(
+    () => window.matchMedia('(max-width: 700px)').matches,
+  )
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 700px)')
+    const sync = () => setCompactNotifications(media.matches)
+    media.addEventListener('change', sync)
+    return () => media.removeEventListener('change', sync)
+  }, [])
   useEffect(() => {
     if (viewMode === 'accounts') setAccountsVisited(true)
   }, [viewMode])
@@ -172,9 +181,9 @@ function App() {
       {/* 列表长了要一键回顶：固定在右侧空白处，滚过一屏才出现 */}
       {licenseAccepted && !showDisclaimer && <ScrollToTopButton />}
 
-      {/* 普通通知默认在右上；登录复核的单条位置由其自身样式控制。 */}
+      {/* 窄屏的顶部空间留给导航和页面操作；普通通知移到底部，避免挡住按钮。 */}
       <Toaster
-        position="top-right"
+        position={compactNotifications ? "bottom-center" : "top-right"}
         toastOptions={{
           className: 'glass-panel text-cyber-text-primary',
           style: {

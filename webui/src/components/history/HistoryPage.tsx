@@ -75,6 +75,7 @@ export function HistoryPage() {
           overall="completed"
           platforms={PLATFORMS}
           disableSort
+          pageSize={100}
           onDeleteItem={(result) => void handleDelete(resultKey(result))}
         />
       ) : (

@@ -784,7 +784,13 @@ html.dark .search-submit { color: #101525; }
 .local-card-rename { display: flex; width: 210px; align-items: center; gap: 4px; padding: 32px 3px 3px; }
 .local-card-rename .field { min-width: 0; flex: 1; padding: 6px; font-size: 12px; }
 .local-card-rename button { width: 25px; padding: 5px; }
-@media (max-width: 620px) { .local-heading-actions { width: 100%; justify-content: space-between; } .local-folder-intro { align-items: flex-start; flex-direction: column; gap: 12px; } .local-folder-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 30px 12px; } }
+@media (max-width: 620px) {
+  .collection-heading .page-heading { flex-direction: column; }
+  .local-heading-actions { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
+  .local-view-switch button { white-space: nowrap; }
+  .local-folder-intro { align-items: flex-start; flex-direction: column; gap: 12px; }
+  .local-folder-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 30px 12px; }
+}
 .backup-details { position: relative; }
 .backup-details > summary { list-style: none; cursor: pointer; }
 .backup-details > summary::-webkit-details-marker { display: none; }
@@ -1025,6 +1031,18 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
   footer > div { align-items: flex-start !important; gap: 10px; }
   .empty { padding: 47px 13px; }
   .empty p { font-size: 12px; }
+}
+
+@media (max-width: 340px) {
+  .settings-nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow-x: visible;
+  }
+  .settings-nav button {
+    min-width: 0;
+    justify-content: center;
+  }
 }
 
 /* ============================
