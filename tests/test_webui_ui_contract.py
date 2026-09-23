@@ -546,3 +546,20 @@ def test_local_favorites_has_no_unclassified_view():
     favorites = (_ROOT / "components" / "favorites" / "FavoritesPage.tsx").read_text(encoding="utf-8")
     assert "未分类" not in favorites, "「未分类」又回到界面文案里了"
     assert '"unclassified"' not in favorites, "「未分类」的选中态/筛选分支又回来了"
+
+
+def test_public_ui_does_not_expose_developer_jargon():
+    """V1.0 日常界面不再把实现名词和排障字段直接丢给普通用户。"""
+    favorites = (_ROOT / "components" / "favorites" / "FavoritesPage.tsx").read_text(encoding="utf-8")
+    accounts = (_ROOT / "components" / "accounts" / "AccountsPage.tsx").read_text(encoding="utf-8")
+    help_page = (_ROOT / "components" / "help" / "HelpPage.tsx").read_text(encoding="utf-8")
+    health = (_ROOT / "lib" / "environmentHealth.ts").read_text(encoding="utf-8")
+    scan_login = (_ROOT / "lib" / "scanLogin.ts").read_text(encoding="utf-8")
+
+    for phrase in ("读取接口可返回", "不限产品侧", "本机镜像", "只读镜像", "旧镜像", "本机数据库", ">完整重扫<"):
+        assert phrase not in favorites, f"收藏页重新出现开发者文案：{phrase}"
+    for phrase in ("本地 API 未", "playwright install chromium", "浏览器后端：", "排查诊断", "错误码：", "协议 v2", "标记判定", "登录标记："):
+        assert phrase not in accounts, f"账号页重新出现开发者文案：{phrase}"
+    for phrase in ("后端不可用", "前后端版本", "重新构建", "Playwright", "Redis"):
+        assert phrase not in health, f"启动提示重新出现开发者文案：{phrase}"
+    assert "四野后端" not in accounts + help_page + scan_login

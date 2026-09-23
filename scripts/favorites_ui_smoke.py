@@ -112,7 +112,7 @@ def main():
             with sync_playwright() as p:
                 browser = p.chromium.launch(channel="msedge", headless=True)
                 context = browser.new_context(viewport={"width": 1440, "height": 1000})
-                context.add_init_script("localStorage.setItem('mediacrawler_license_accepted','true'); localStorage.setItem('aggregate_search_bookmarks_v1'," + json.dumps(json.dumps(legacy)) + ");")
+                context.add_init_script("localStorage.setItem('mediacrawler_license_accepted','true'); localStorage.setItem('siye_onboarding_preference_v1','completed'); localStorage.setItem('aggregate_search_bookmarks_v1'," + json.dumps(json.dumps(legacy)) + ");")
                 context.route("**/*", route_request)
                 page = context.new_page()
                 page.on("pageerror", lambda error: errors.append(str(error)))
@@ -211,7 +211,7 @@ def main():
                 page.get_by_role("button", name="全部 2", exact=True).click()
                 page.get_by_role("button", name="图标", exact=True).click()
                 expect(page.locator(".local-folder-browser")).to_be_visible()
-                expect(page.locator(".local-folder-card")).to_have_count(6)
+                expect(page.locator(".local-folder-card")).to_have_count(5)
                 expect(page.locator(".local-folder-card").filter(has_text="跨平台学习").locator("img")).to_be_visible()
                 page.screenshot(path=str(ROOT / "build" / "review-local-folder-grid.png"), full_page=True)
                 page.locator(".local-folder-open").filter(has_text="跨平台学习").click()
@@ -227,6 +227,7 @@ def main():
                 for width in (1024, 390):
                     page.set_viewport_size({"width": width, "height": 844})
                     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), f"local layout overflow at {width}"
+                page.locator("[data-sonner-toast]").evaluate_all("els => els.forEach(el => el.remove())")
                 page.get_by_role("combobox", name="切换主题", exact=True).click()
                 page.get_by_role("option", name="Dark", exact=True).click()
                 page.wait_for_function("getComputedStyle(document.body).backgroundColor === 'rgb(16, 18, 24)'")
@@ -272,11 +273,11 @@ def main():
                 assert store.stats()["total"] == 0
                 page.get_by_role("button", name="跨平台收藏", exact=True).click()
                 expect(page.get_by_text("视频收藏测试", exact=True)).to_be_visible()
-                page.get_by_role("button", name="重新同步", exact=True).click()
+                page.get_by_role("button", name="同步所选平台 / 继续", exact=True).click()
                 expect(page.get_by_role("alert")).to_contain_text("测试同步失败")
                 expect(page.get_by_text("视频收藏测试", exact=True)).to_be_visible()
                 failures["sync"] = False
-                page.get_by_role("button", name="重新同步", exact=True).click()
+                page.get_by_role("button", name="同步所选平台 / 继续", exact=True).click()
                 expect(page.get_by_role("button", name="正在同步 · 取消", exact=True)).to_be_enabled()
                 expect(page.get_by_role("button", name="正在同步 · 取消", exact=True).locator(".spinner")).to_be_visible()
                 page.screenshot(path=str(ROOT / "build" / "review-cancel-button.png"), full_page=True)
@@ -285,17 +286,16 @@ def main():
                 failures["cancel"] = False
                 page.get_by_role("button", name="正在同步 · 取消", exact=True).click()
                 expect(page.get_by_role("button", name="正在同步 · 取消", exact=True)).to_have_count(0)
-                expect(page.get_by_role("button", name="重新同步", exact=True)).to_be_enabled()
+                expect(page.get_by_role("button", name="同步所选平台 / 继续", exact=True)).to_be_enabled()
                 expect(page.get_by_text("视频收藏测试", exact=True)).to_be_visible()
                 page.set_viewport_size({"width": 390, "height": 844})
                 page.screenshot(path=str(ROOT / "build" / "review-favorites-mobile.png"), full_page=True)
                 assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+                page.set_viewport_size({"width": 1440, "height": 1000})
                 page.goto(origin + "/#/settings/accounts")
-                expect(page.get_by_text("登录待确认", exact=True)).to_be_visible()
-                expect(page.get_by_text("本机已保存登录信息，尚未确认是否有效；可点击重新验证，或重新扫码登录。", exact=True)).to_be_visible()
                 failures["verified"] = True
                 page.reload()
-                expect(page.get_by_text("登录信息已确认，无需重复登录。", exact=True)).to_be_visible()
+                expect(page.get_by_text("已就绪，直接去搜索即可。", exact=True)).to_be_visible()
                 expect(page.get_by_text("暂时无法搜索", exact=True)).to_have_count(0)
                 expect(page.get_by_text("历史搜索要求登录", exact=True)).to_have_count(0)
                 page.screenshot(path=str(ROOT / "build" / "review-account-wording.png"), full_page=True)

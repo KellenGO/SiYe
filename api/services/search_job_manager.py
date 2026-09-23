@@ -583,7 +583,7 @@ class SearchJobManager:
                 await self._remove_proc(job, proc)
                 await self.supervisor.stop_worker(platform, kill=True)
                 job.set_platform_status(platform, "timed_out",
-                                        error_summary="搜索超时，已终止平台 worker")
+                                        error_summary="搜索超时，请稍后重试")
                 return
             try:
                 done_received = bool(stdout_task.result())
@@ -622,12 +622,13 @@ class SearchJobManager:
                 # 只有"读到 done 但退出码非 0"或"没报终态又没 done"才算 failed。
                 reported_ok = current is not None and current.status in ("succeeded", "empty")
                 if (not done_received and not reported_ok) or (done_received and proc.returncode != 0):
+                    logger.warning(
+                        "[search] %s process ended unexpectedly: exit=%s done=%s",
+                        platform, proc.returncode, done_received,
+                    )
                     job.set_platform_status(
                         platform, "failed",
-                        error_summary=(
-                            f"worker exited with code {proc.returncode}"
-                            if not done_received else
-                            f"worker exited with code {proc.returncode} after done"))
+                        error_summary="搜索未正常完成，请重试")
                     return
 
             current = job.platforms_state.get(platform)
@@ -644,10 +645,11 @@ class SearchJobManager:
             elif not (current and current.status in ("succeeded", "empty")):
                 # 同前：报过终态的保住，只有"什么都没报又没 done"才算 failed。
                 job.set_platform_status(platform, "failed",
-                                        error_summary="no done event from worker")
+                                        error_summary="搜索未正常完成，请重试")
         except Exception as e:
+            logger.warning("[search] %s supervisor failed: %s", platform, type(e).__name__)
             job.set_platform_status(platform, "failed",
-                                    error_summary=_safe_error_summary(str(e)))
+                                    error_summary="搜索未正常完成，请重试")
         finally:
             if stdout_task is not None:
                 if not stdout_task.done():
@@ -729,21 +731,24 @@ class SearchJobManager:
                 return
 
             if done_received and exit_code != 0:
+                logger.warning("[search] %s process exited with code %s", platform, exit_code)
                 job.set_platform_status(platform, "failed",
-                                       error_summary=f"Worker exited with code {exit_code}")
+                                       error_summary="搜索未正常完成，请重试")
             elif not done_received:
                 # worker 已经明确报过终态（succeeded/empty）、只是最后那行 done 没读到
                 # （进程退得太快、管道先关）—— 保留用户已经拿到的结果，绝不翻成 failed。
                 if not (current and current.status in ("succeeded", "empty")):
+                    logger.warning("[search] %s process ended without completion event: exit=%s", platform, exit_code)
                     job.set_platform_status(platform, "failed",
-                                           error_summary=f"exit {exit_code}, no done event")
+                                           error_summary="搜索未正常完成，请重试")
             elif current and current.status == "running":
                 job.set_platform_status(
                     platform,
                     "succeeded" if job.platform_results.get(platform) else "empty")
 
         except Exception as e:
-            job.set_platform_status(platform, "failed", error_summary=_safe_error_summary(str(e)))
+            logger.warning("[search] %s process failed: %s", platform, type(e).__name__)
+            job.set_platform_status(platform, "failed", error_summary="搜索未正常完成，请重试")
         finally:
             # Cancel reader tasks if still running
             for t in (stdout_task, stderr_task):

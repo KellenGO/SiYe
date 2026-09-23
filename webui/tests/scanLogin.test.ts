@@ -216,9 +216,9 @@ test("scanLoginErrorMessage：422 提示平台不支持", () => {
   assert.ok(!msg.includes("Invalid platform"));
 });
 
-test("scanLoginErrorMessage：没有 response（网络/后端未启动）给可操作提示", () => {
+test("scanLoginErrorMessage：没有 response（网络/应用未启动）给可操作提示", () => {
   const msg = scanLoginErrorMessage(new Error("Network Error"));
-  assert.ok(msg.includes("本地服务"));
+  assert.ok(msg.includes("重新启动应用"));
 });
 
 test("scanLoginErrorMessage：其他 HTTP 状态带状态码但不含敏感内容", () => {

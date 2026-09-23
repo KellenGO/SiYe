@@ -11,8 +11,6 @@ import {
   accountSearchVerdict,
   accountActionHint,
   accountCardStatusLabel,
-  diagnosticAccountStateLabel,
-  diagnosticSearchModeLabel,
   accountUsageHint,
   accountOperationLabel,
   summarizeAccounts,
@@ -66,32 +64,11 @@ const LOGIN_TONE_TEXT: Record<ScanLoginTone, string> = {
   bad: "text-danger",
 };
 
-const SYNC_STAGE_TEXT: Record<string, string> = {
-  profile_import: "导入 Cookie",
-  verification: "验证会话",
-  completed: "已完成",
-};
-
 const PLATFORM_LOGIN_URLS: Record<string, string> = {
   xhs: "https://www.xiaohongshu.com",
   douyin: "https://www.douyin.com",
   bilibili: "https://www.bilibili.com",
   zhihu: "https://www.zhihu.com",
-};
-
-/** 与后端 LOGIN_MARKER_NAMES 一致的白名单标记名（仅用于展示布尔值）。 */
-const LOGIN_MARKERS: Record<string, string[]> = {
-  xhs: ["web_session"],
-  douyin: ["LOGIN_STATUS", "sessionid", "sessionid_ss"],
-  bilibili: ["SESSDATA", "DedeUserID"],
-  zhihu: ["z_c0", "d_c0"],
-};
-
-const BACKEND_TEXT: Record<string, string> = {
-  chrome: "Chrome",
-  edge: "Edge",
-  playwright_chromium: "Playwright Chromium",
-  custom: "自定义浏览器",
 };
 
 /** 卡片主结论徽章（可用 / 不可用 / 验证中），只用现有 token 色。 */
@@ -342,7 +319,7 @@ export function AccountsPage({ activeSection, onSectionChange, onNavigateHelp }:
           setBusyPlatform(platform, "");
           const msg = `扩展 ${Math.round(SYNC_RESPONSE_TIMEOUT_MS / 1000)} 秒未响应。`
             + "请确认：1) 扩展已加载并启用；2) 已刷新本页（扩展注入后需刷新一次）；"
-            + "3) 后端验证会话最长约 30 秒，若仍在验证可稍等后查看账号卡片诊断。"
+            + "3) 四野确认登录状态最多需要约 30 秒，若仍在验证可稍后查看账号卡片。"
             + "也可以改用该平台的「扫码登录」。";
           if (!silent) toast.error(msg);
           return {
@@ -355,11 +332,9 @@ export function AccountsPage({ activeSection, onSectionChange, onNavigateHelp }:
         // 格式不兼容、会话导入失败或正在搜索不能同步等）。
         if (!result.success) {
           setBusyPlatform(platform, "");
-          const counts = typeof result.received_cookie_count === "number"
-            ? `（读取 ${result.received_cookie_count} 条）` : "";
           const code = result.safe_error_code;
           const isSearchConflict = code === "search_in_progress";
-          const msg = `同步失败${counts}：${result.safe_message || code || "未知错误"}`;
+          const msg = `同步失败：${result.safe_message || "请稍后重试"}`;
           if (!silent) toast.error(msg);
           return {
             platform, kind: "failed", success: false, verified: false,
@@ -373,18 +348,14 @@ export function AccountsPage({ activeSection, onSectionChange, onNavigateHelp }:
         // （unavailable 等场景绝不显示"同步成功且登录验证通过"。）
         if (result.verified && result.status === "connected" && !result.safe_error_code) {
           setBusyPlatform(platform, "");
-          const counts = typeof result.received_cookie_count === "number"
-            ? `（读取 ${result.received_cookie_count} 条 / 接受 ${result.accepted_cookie_count ?? "?"} 条）` : "";
-          if (!silent) toast.success(`同步成功且登录验证通过。${counts}`);
+          if (!silent) toast.success("同步成功，登录状态已确认。");
           return { platform, kind: "verified", success: true, verified: true };
         }
-        const importedCounts = typeof result.received_cookie_count === "number"
-          ? `（读取 ${result.received_cookie_count} 条 / 接受 ${result.accepted_cookie_count ?? "?"} 条）` : "";
         // 有界验证超时，验证仍在后台进行：busy 保持 "verifying"，直到账号
         // 轮询看到终态（见上面的 busy 清理 effect）。
         if (result.status === "verifying") {
           setBusyPlatform(platform, "verifying");
-          const msg = `会话已导入，仍在后台验证 ${importedCounts}。可在本卡片查看诊断，或稍后点击"重新验证"确认结果。`;
+          const msg = "登录信息已同步，正在确认是否可用。可稍后点击“重新验证”查看结果。";
           if (!silent) toast.info(msg);
           return { platform, kind: "verifying", success: true, verified: false, safeMessage: msg };
         }
@@ -404,7 +375,7 @@ export function AccountsPage({ activeSection, onSectionChange, onNavigateHelp }:
         // 明确未登录（expired / unverified）：已导入但未确认登录，这不是
         // 失败 —— 公开搜索仍可尝试。
         setBusyPlatform(platform, "");
-        const msg = `会话已导入，但尚未确认账号登录。你仍可以尝试搜索；如搜索需要登录，再重新同步。${importedCounts}`;
+        const msg = "登录信息已同步，但尚未确认是否可用。你可以先尝试搜索；如仍需登录，再重新同步。";
         if (!silent) toast.info(msg);
         return {
           platform, kind: "imported", success: true, verified: false,
@@ -420,12 +391,12 @@ export function AccountsPage({ activeSection, onSectionChange, onNavigateHelp }:
         const msg = resp?.data?.safe_message || resp?.data?.detail;
         const finalMsg = msg
           ? `同步请求失败：${msg}`
-          : "同步请求失败，请确认本地 API 已启动后刷新页面重试。";
+          : "同步请求失败，请确认四野仍在运行后刷新页面重试。";
         if (!silent) toast.error(finalMsg);
         return {
           platform, kind: "failed", success: false, verified: false,
           safeErrorCode: code || (status === 409 ? "conflict" : "sync_request_failed"),
-          safeMessage: msg || "同步请求失败，请确认本地 API 已启动",
+          safeMessage: msg || "同步请求失败，请确认四野仍在运行",
           ...(status === 409 && code === "search_in_progress"
             ? { blockQueue: "search_in_progress" as const } : {}),
         };
@@ -449,7 +420,7 @@ export function AccountsPage({ activeSection, onSectionChange, onNavigateHelp }:
       const msg = resp?.data?.safe_message || resp?.data?.detail;
       toast.error(msg
         ? `验证请求失败：${msg}`
-        : "验证请求失败，请确认本地 API 已启动后刷新页面重试。");
+        : "验证请求失败，请确认四野仍在运行后刷新页面重试。");
     } finally {
       // 验证完成（含后台验证进行中）后立即刷新账号缓存。
       invalidateAccounts(queryClient);
@@ -472,7 +443,7 @@ export function AccountsPage({ activeSection, onSectionChange, onNavigateHelp }:
     } catch (e) {
       const resp = (e as { response?: { status?: number; data?: { safe_message?: string; detail?: string } } }).response;
       const msg = resp?.data?.safe_message || resp?.data?.detail;
-      toast.error(msg ? `清除失败：${msg}` : "清除失败，请确认本地 API 已启动。");
+      toast.error(msg ? `清除失败：${msg}` : "清除失败，请确认四野仍在运行。");
     } finally {
       setBusyPlatform(platform, "");
       // 删除完成后立即刷新账号缓存。
@@ -716,19 +687,17 @@ export function AccountsPage({ activeSection, onSectionChange, onNavigateHelp }:
         <Plug className="w-3.5 h-3.5 inline mr-1.5" />
         {extensionState === "checking" && "正在检测浏览器扩展…（可选，不装也能用扫码登录）"}
         {extensionState === "connected"
-          && `扩展已安装并连接（v${extensionVersion || "?"}，协议 v2）· 可用「从浏览器同步」快速复用登录状态`}
+          && `扩展已连接${extensionVersion ? `（v${extensionVersion}）` : ""} · 可用「从浏览器同步」复用登录状态`}
         {extensionState === "outdated"
           && `扩展版本过旧${extensionVersion ? `（检测到 v${extensionVersion}）` : ""}，请在 edge://extensions 点击"重新加载"后刷新本页；也可以直接用扫码登录`}
         {extensionState === "not-installed" && "未安装扩展（可选加速）。不装也可以直接点平台卡片的「扫码登录」"}
-        {apiRunning === false && " · 本地 API 未运行"}
+        {apiRunning === false && " · 四野服务未连接"}
       </div>
 
       {/* 本机浏览器不可用：搜索第一道关卡（全局），四个平台都搜不了 */}
       {browserAvailable === false && (
         <div className="mb-3 px-3.5 py-2.5 rounded-lg bg-danger-soft border border-danger/40 text-sm text-danger">
-          本机浏览器不可用：四个平台现在都无法搜索。请安装 Chrome / Edge，或执行
-          <code className="mx-1 px-1 py-0.5 rounded bg-cyber-bg-tertiary border border-cyber-border-subtle text-cyber-text-secondary">playwright install chromium</code>
-          后刷新本页。
+          没有找到可用的浏览器，四个平台现在都无法搜索。请安装 Chrome 或 Edge，然后重新启动四野。
         </div>
       )}
 
@@ -759,7 +728,7 @@ export function AccountsPage({ activeSection, onSectionChange, onNavigateHelp }:
               <button type="button" className="btn ghost small" disabled>重新验证</button>
               <button type="button" className="btn ghost small" onClick={() => openOfficial(platform)}>前往登录 <ExternalLink /></button>
             </div>
-            <details><summary>诊断与其他方式</summary><div className="diagnostic">本地 API 未连接，暂时无法读取诊断信息。</div></details>
+            <details><summary>更多信息</summary><div className="diagnostic">四野服务未连接，暂时无法读取账号状态。</div></details>
           </article>
         ))}
         {(accounts || []).map((acc) => {
@@ -767,11 +736,6 @@ export function AccountsPage({ activeSection, onSectionChange, onNavigateHelp }:
           const name = PLATFORM_LABELS[acc.platform as keyof typeof PLATFORM_LABELS] || acc.platform;
           const color = PLATFORM_COLORS[acc.platform as keyof typeof PLATFORM_COLORS] || "#4ca4dc";
           const diagnostic = acc.diagnostic;
-          const snippetLabel = diagnostic?.snippet_available === true
-            ? "简介可用"
-            : diagnostic?.snippet_available === false
-              ? "简介暂不可用"
-              : "简介状态未知";
           // 扫码登录（方案 A 主路径）该平台的状态。
           const loginJob = loginJobs[acc.platform];
           const loginBusy = isScanLoginActive(loginJob?.status);
@@ -832,7 +796,6 @@ export function AccountsPage({ activeSection, onSectionChange, onNavigateHelp }:
                     <div className="text-cyber-text-primary font-semibold">本机状态</div>
                     <div>账号状态：{accountCardStatusLabel(acc)}</div>
                     <div>本机登录信息：{acc.profile_exists ? "已保存" : "不存在"}</div>
-                    <div>浏览器后端：{acc.browser_backend ? (BACKEND_TEXT[acc.browser_backend] || acc.browser_backend) : "未知"}</div>
                     {acc.verified && (
                       <div>最近验证于 {acc.last_verified_at ? new Date(acc.last_verified_at).toLocaleString("zh-CN") : "本次会话"}</div>
                     )}
@@ -854,45 +817,19 @@ export function AccountsPage({ activeSection, onSectionChange, onNavigateHelp }:
                       <div className="text-warn">提示：{acc.safe_message}</div>
                     )}
 
-                    {diagnostic && (
+                    {diagnostic && (diagnostic.user_message || diagnostic.recommended_action) && (
                       <div className="pt-2 mt-2 border-t border-cyber-border-subtle space-y-1">
-                        <div className="text-cyber-text-primary font-semibold">排查诊断</div>
-                        <p className="text-cyber-text-muted">以下为历史记录，仅供排查，不代表此刻一定能搜到。</p>
-                        <div>记录路径：{diagnosticSearchModeLabel(diagnostic.search_mode)}</div>
-                        <div>账号状态：{diagnosticAccountStateLabel(diagnostic.account_state)}</div>
-                        <div>备用路径：{diagnostic.fallback_active ? "正在使用" : "未启用"}</div>
-                        <div>简介能力：{snippetLabel}</div>
-                        <div>诊断记录：{diagnostic.user_message || "暂无记录"}</div>
-                        <div>记录中的建议：{diagnostic.recommended_action || "无"}</div>
+                        <div className="text-cyber-text-primary font-semibold">最近状态</div>
+                        {diagnostic.user_message && <div>{diagnostic.user_message}</div>}
+                        {diagnostic.recommended_action && <div>建议：{diagnostic.recommended_action}</div>}
                       </div>
                     )}
                     {lastDiag[acc.platform] && (
                       <div className={`${diagnostic ? "pt-2 mt-2 border-t border-cyber-border-subtle space-y-1" : "space-y-1"}`}>
-                        <div className="text-cyber-text-primary font-semibold">最近一次同步细节</div>
-                        <div>
-                          阶段：{SYNC_STAGE_TEXT[lastDiag[acc.platform].sync_stage] || lastDiag[acc.platform].sync_stage || "—"}
-                          {" · "}读取 {lastDiag[acc.platform].received_cookie_count ?? "—"} 条
-                          {" / 接受 "}{lastDiag[acc.platform].accepted_cookie_count ?? "—"} 条
-                          {" / 跳过 "}{lastDiag[acc.platform].skipped_cookie_count ?? "—"} 条
-                        </div>
-                        <div>
-                          登录标记：
-                          {(LOGIN_MARKERS[acc.platform] || []).map((m) => {
-                            const v = lastDiag[acc.platform].login_marker_presence?.[m];
-                            return v === undefined ? null : `${m} ${v ? "✓" : "✗"}`;
-                          }).filter(Boolean).join(" · ") || "—"}
-                        </div>
-                        <div>
-                          标记判定（启发式，非登录结论）：{lastDiag[acc.platform].required_cookie_present === null
-                            ? "—" : lastDiag[acc.platform].required_cookie_present ? "有" : "无"}
-                          {" · 已验证（真实验证）："}{lastDiag[acc.platform].verified ? "是" : "否"}
-                        </div>
-                        {lastDiag[acc.platform].safe_error_code && (
-                          <div>
-                            错误码：{lastDiag[acc.platform].safe_error_code}
-                            {lastDiag[acc.platform].safe_message && ` · ${lastDiag[acc.platform].safe_message}`}
-                          </div>
-                        )}
+                        <div className="text-cyber-text-primary font-semibold">最近一次同步</div>
+                        <div>{lastDiag[acc.platform].verified
+                          ? "登录状态已确认，可以开始使用。"
+                          : lastDiag[acc.platform].safe_message || "尚未确认登录状态，可稍后重新验证。"}</div>
                       </div>
                     )}
                   </div>

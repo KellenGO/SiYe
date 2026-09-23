@@ -289,7 +289,7 @@ class FavoritesJobManager:
                 await asyncio.gather(stderr_task, return_exceptions=True)
             await terminate_worker(proc, grace=5)
             if not done and info.status == "running":
-                info.status, info.error_summary = "failed", "平台 worker 未正常结束"
+                info.status, info.error_summary = "failed", "同步未正常完成，请重试"
             elif info.status == "running":
                 info.status = "succeeded" if job.items[platform] else "empty"
         except asyncio.TimeoutError:

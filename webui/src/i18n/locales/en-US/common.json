@@ -45,7 +45,7 @@
     "downloadFailed": "Download failed. You can select and copy the report below.",
     "feedback": "Report a problem",
     "preview": "Diagnostic report preview",
-    "snapshotHint": "This is a local snapshot, not a live platform check. unavailable means a read failed; empty means no record; null means unknown. Recent search records may be empty after restarting."
+    "snapshotHint": "This report reflects the app state when it was created and does not contact any platform. Some fields may be empty; please also describe what you were doing when the issue occurred."
   },
   "status": {
     "active": "ACTIVE",

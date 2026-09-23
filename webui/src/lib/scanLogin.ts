@@ -155,7 +155,7 @@ export function scanLoginErrorMessage(err: unknown): string {
   })?.response;
   const detail = resp?.data?.safe_message || resp?.data?.detail;
   if (!resp || resp.status === undefined) {
-    return "无法连接本地服务，请确认四野后端已启动后刷新页面重试。";
+    return "无法连接四野，请重新启动应用并刷新页面后重试。";
   }
   if (resp.status === 409) {
     // 后端 409 的三种来源：搜索进行中 / 已有登录在进行 / 其他账号操作进行中。

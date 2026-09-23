@@ -245,7 +245,7 @@ export function buildBulkBlockedMessage(reason: BulkSyncBlockReason | undefined)
     case "extension_outdated":
       return "扩展版本过旧，已停止后续同步。请在扩展管理页点击“重新加载”后刷新本页；也可以改用「扫码登录」。";
     case "api_unavailable":
-      return "本地 API 不可用，已停止后续同步。请确认后端已启动后重试。";
+      return "四野服务未连接，已停止后续同步。请重新启动应用后再试。";
     case "search_in_progress":
       return "搜索正在进行，暂时不能同步账号，已停止后续同步。请等待搜索完成后重试。";
     default:

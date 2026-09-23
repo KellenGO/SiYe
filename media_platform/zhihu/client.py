@@ -107,13 +107,13 @@ class ZhiHuClient(ReusableHttpClientMixin, AbstractApiClient):
                 # 403 = 风控/验证码拦截（不一定是未登录），固定安全文案，
                 # 绝不含响应体。
                 exc = ForbiddenError(response.text)
-                exc.safe_message = "知乎接口请求被拒绝（可能是风控或验证码），请稍后重试"
+                exc.safe_message = "知乎暂时拒绝访问（可能需要验证），请稍后重试"
                 raise exc
             elif response.status_code == 404:  # Content without comments also returns 404
                 return {}
 
             exc = DataFetchError(response.text)
-            exc.safe_message = "知乎接口请求失败，请稍后重试"
+            exc.safe_message = "知乎暂时无法访问，请稍后重试"
             raise exc
 
         if return_response:
@@ -123,13 +123,13 @@ class ZhiHuClient(ReusableHttpClientMixin, AbstractApiClient):
             if data.get("error"):
                 utils.logger.error(f"[ZhiHuClient.request] Request error: {data}")
                 exc = DataFetchError(data.get("error", {}).get("message"))
-                exc.safe_message = "知乎接口请求失败，请稍后重试"
+                exc.safe_message = "知乎暂时无法访问，请稍后重试"
                 raise exc
             return data
         except json.JSONDecodeError:
             utils.logger.error(f"[ZhiHuClient.request] Request error: {response.text}")
             exc = DataFetchError(response.text)
-            exc.safe_message = "知乎接口请求失败，请稍后重试"
+            exc.safe_message = "知乎暂时无法访问，请稍后重试"
             raise exc
 
     async def get(self, uri: str, params=None, **kwargs) -> Union[Response, Dict, str]:

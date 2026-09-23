@@ -67,7 +67,7 @@ export function HistoryPage() {
         <div className="empty" role="status">
           <div className="empty-symbol"><Loader2 className="spinner" /></div>
           <h2>正在读取本机历史</h2>
-          <p>观看历史保存在本机数据库，清缓存或换浏览器都不会丢。</p>
+          <p>观看历史保存在本机，清理浏览器缓存也不会丢。</p>
         </div>
       ) : results.length ? (
         <ResultTabs

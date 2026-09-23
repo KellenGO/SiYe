@@ -41,7 +41,7 @@ export function HelpPage({ onShowDisclaimer, onStartGuide }: HelpPageProps) {
           <p>{t("onboarding.helpIntro")}</p>
           <div className="button-row"><button type="button" className="btn" onClick={onStartGuide}>{t("onboarding.restart")}</button></div>
           <ol className="steps">
-            <li><strong>启动本机服务</strong>保持四野后端运行，网页会自动检查连接状态。</li>
+            <li><strong>打开四野</strong>保持应用运行，页面会自动检查连接状态。</li>
             <li><strong>登录平台账号</strong>到「设置 · 账号与登录」，点任意平台的「扫码登录」，用手机 App 扫一下即可。</li>
             <li><strong>开始聚合搜索</strong>输入关键词、选择平台，已返回的内容可以边搜边看。</li>
             <li><strong>收藏与整理</strong>保存到本地收藏，添加备注，或导出一份备份。</li>
@@ -59,12 +59,12 @@ export function HelpPage({ onShowDisclaimer, onStartGuide }: HelpPageProps) {
         </section>
 
         <section className="help-section">
-          <h2>用浏览器扩展同步（可选）</h2>
+          <h2>从浏览器同步登录（可选）</h2>
           <p>如果你已经在 Chrome / Edge 里登录过这些平台，装一次扩展就能把登录状态直接同步过来。</p>
           <ol>
             <li>打开 <code>chrome://extensions</code>，Edge 使用 <code>edge://extensions</code>。</li>
             <li>开启“开发者模式”，点击“加载已解压的扩展程序”。</li>
-            <li>选择项目中的 <code>browser_extension</code> 文件夹。</li>
+            <li>安装版选择四野安装目录里的 <code>browser_extension</code>；便携版选择解压目录里的同名文件夹。</li>
             <li>刷新四野页面，然后到「设置 · 账号与登录」点「从浏览器同步」。</li>
           </ol>
           <p className="mt-3">这是可选加速方式：不装扩展也能用扫码登录，两者可以混用。</p>

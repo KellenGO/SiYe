@@ -25,17 +25,19 @@ test("正常环境不显示启动警告", () => {
 });
 
 test("后端不可用显示明确提示", () => {
-  assert.equal(environmentHealthWarning(false), "本地后端不可用，请先启动后端服务。");
+  assert.equal(environmentHealthWarning(false), "四野服务未连接，请重新启动应用。");
 });
 
 test("浏览器不可用显示安装提示", () => {
   const warning = environmentHealthWarning({ ...healthy, browser_available: false });
   if (!warning) throw new Error("expected browser warning");
-  assert.ok(warning.includes("浏览器不可用"));
+  assert.ok(warning.includes("没有找到可用的浏览器"));
+  assert.ok(!warning.includes("playwright"));
 });
 
 test("版本不匹配显示重建提示", () => {
   const warning = environmentHealthWarning({ ...healthy, version_match: false });
   if (!warning) throw new Error("expected version warning");
-  assert.ok(warning.includes("版本不匹配"));
+  assert.ok(warning.includes("应用文件版本不一致"));
+  assert.ok(!warning.includes("重新构建"));
 });

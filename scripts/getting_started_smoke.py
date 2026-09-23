@@ -214,6 +214,8 @@ def main():
                 expect(guide).to_have_count(0)
 
                 page.set_viewport_size({"width": 1440, "height": 1050})
+                page.wait_for_timeout(500)
+                page.screenshot(path=output / "help-v1.png", full_page=True)
                 before_diagnostics = len(mutations)
                 page.get_by_role("button", name="复制诊断信息", exact=True).click()
                 report = page.get_by_label("诊断报告预览")

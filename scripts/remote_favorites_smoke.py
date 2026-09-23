@@ -1,4 +1,4 @@
-"""跨平台收藏页（V0.3 形态）的浏览器验收：平台页签、一次 100 条 + 显示更多、增量/完整重扫。
+"""跨平台收藏页浏览器验收：平台页签、一次 100 条 + 显示更多、增量/重新同步全部。
 
 Run after building webui. All external requests are blocked; no real profile is used.
 """
@@ -90,13 +90,13 @@ def main():
                 browser = p.chromium.launch(channel="msedge", headless=True)
                 context = browser.new_context(viewport={"width": 1440, "height": 960},
                                               permissions=["clipboard-read", "clipboard-write"])
-                context.add_init_script("localStorage.setItem('mediacrawler_license_accepted','true')")
+                context.add_init_script("localStorage.setItem('mediacrawler_license_accepted','true'); localStorage.setItem('siye_onboarding_preference_v1','completed')")
                 context.route("**/*", route_request)
                 page = context.new_page()
                 page.on("pageerror", lambda error: errors.append(str(error)))
                 page.goto(origin + "/#/favorites/remote")
                 # 打开页面只读本机缓存，不发同步请求
-                expect(page.get_by_text("本机已保存 140 条", exact=False)).to_be_visible()
+                expect(page.get_by_text("已保存 140 条收藏", exact=False)).to_be_visible()
                 assert sync_requests == []
 
                 # 平台页签直接点着切（V0.3 的用法）
@@ -111,8 +111,9 @@ def main():
                 expect(page.get_by_text("小红书条目 3", exact=False).first).to_be_visible()
                 assert page.locator("article.result-row").count() == 10
 
-                # 一键同步 = 增量；完整重扫是另一个显式动作
+                # 一键同步 = 增量；重新同步全部是另一个显式动作
                 page.get_by_role("tab", name="全部").click()
+                page.screenshot(path=str(ROOT / "build/review-v1-remote-favorites.png"), full_page=False)
                 # 勾选后按钮的 accessible name 会变成「小红书 ✓」，所以按 class 定位
                 xhs_choice = page.locator(".platform-choice").filter(has_text="小红书")
                 if xhs_choice.get_attribute("aria-pressed") == "false":
@@ -123,7 +124,7 @@ def main():
                 # 同步按钮会把勾选清掉，重新扫之前先确认还勾着
                 if page.locator(".platform-choice").filter(has_text="小红书").get_attribute("aria-pressed") == "false":
                     page.locator(".platform-choice").filter(has_text="小红书").click()
-                page.get_by_role("button", name="完整重扫", exact=True).click()
+                page.get_by_role("button", name="重新同步全部", exact=True).click()
                 page.wait_for_timeout(400)
                 assert sync_requests[-1]["sync_mode"] == "full", sync_requests[-1]
 

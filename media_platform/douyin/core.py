@@ -83,7 +83,7 @@ def _classify_douyin_search_response(posts_res: Dict) -> Optional[str]:
     if not isinstance(posts_res, dict):
         raise DataFetchError(
             "抖音搜索返回了无法识别的响应", stage="search_list",
-            safe_message="抖音搜索接口暂时不可用，请稍后重试")
+            safe_message="抖音搜索暂时不可用，请稍后重试")
     status_code = _safe_status_code(posts_res.get("status_code"))
     data = posts_res.get("data")
     if status_code == 0:
@@ -92,7 +92,7 @@ def _classify_douyin_search_response(posts_res: Dict) -> Optional[str]:
             return "empty" if not data else None
         raise DataFetchError(
             "抖音搜索返回了异常响应", stage="search_list", platform_code=0,
-            safe_message="抖音搜索接口暂时不可用，请稍后重试")
+            safe_message="抖音搜索暂时不可用，请稍后重试")
     # casefold：大小写不敏感匹配风控特征（"CAPTCHA required" / "Verify
     # now" 等英文文案大小写不一）。status_code 已规范化 —— bool/非法
     # 字符串为 None，不匹配任何已知码。
@@ -107,7 +107,7 @@ def _classify_douyin_search_response(posts_res: Dict) -> Optional[str]:
     raise DataFetchError(
         "抖音搜索接口返回错误", stage="search_list",
         platform_code=status_code,
-        safe_message="抖音搜索接口暂时不可用，请稍后重试")
+        safe_message="抖音搜索暂时不可用，请稍后重试")
 
 
 class DouYinCrawler(AbstractCrawler):

@@ -194,7 +194,7 @@ class TestResidentSupervisor:
         """worker 硬崩溃（无 done）→ 平台 failed；下次搜索自动重建新进程。"""
         first = await _run_to_completion(manager, _req("__crash_7__"))
         assert first.platforms["xhs"].status == "failed"
-        assert "7" in (first.platforms["xhs"].error_summary or "")
+        assert first.platforms["xhs"].error_summary == "搜索未正常完成，请重试"
         # crash 后 submit 会丢弃旧 worker（returncode=7 已置位）。
         second = await _run_to_completion(manager, _req("__result_1__"))
         assert second.platforms["xhs"].status == "succeeded"
@@ -211,7 +211,7 @@ class TestResidentSupervisor:
         assert elapsed < 30, (
             f"未捕获异常必须在短时间内失败（实际 {elapsed:.1f}s），"
             "不能等待 WORKER_TIMEOUT_SECONDS")
-        assert "exited with code" in (first.platforms["xhs"].error_summary or "")
+        assert first.platforms["xhs"].error_summary == "搜索未正常完成，请重试"
 
         second = await _run_to_completion(manager, _req("__result_1__"))
         assert second.platforms["xhs"].status == "succeeded"
@@ -226,15 +226,14 @@ class TestResidentSupervisor:
                             "MAX_REQUESTS_PER_WORKER", 1)
         first = await _run_to_completion(manager, _req("__exit_3__"))
         assert first.platforms["xhs"].status == "failed"
-        assert "after done" in (first.platforms["xhs"].error_summary or "")
-        assert "3" in (first.platforms["xhs"].error_summary or "")
+        assert first.platforms["xhs"].error_summary == "搜索未正常完成，请重试"
 
     @pytest.mark.asyncio
     async def test_no_done_exit0_is_failed(self, manager):
         """Round 16.1 严格语义: 无 done + exit0 → failed。"""
         first = await _run_to_completion(manager, _req("__no_done_exit0__"))
         assert first.platforms["xhs"].status == "failed"
-        assert "code 0" in (first.platforms["xhs"].error_summary or "")
+        assert first.platforms["xhs"].error_summary == "搜索未正常完成，请重试"
 
     @pytest.mark.asyncio
     async def test_reused_worker_flag(self, manager):

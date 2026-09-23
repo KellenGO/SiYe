@@ -413,7 +413,7 @@ export function accountActionHint(
   verdict: SearchVerdict,
 ): string {
   if (verdict.kind === "unavailable" && verdict.reason === "浏览器不可用") {
-    return "先安装 Chrome / Edge，或执行 playwright install chromium 后刷新本页。";
+    return "请安装 Chrome 或 Edge，然后重新启动四野。";
   }
   if (verdict.kind === "pending") {
     return "正在确认登录状态，稍后回来查看结果。";

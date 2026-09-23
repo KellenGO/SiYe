@@ -25,6 +25,7 @@
   否则前端轮询会把 Playwright driver 反复拉起来。
 - **诊断文案是"安全"的**：只暴露 `safe_code` / `safe_message` 与若干计数，
   绝不带 Cookie、请求行、平台原文（见 `accounts.py` 的脱敏处理）。
+- 面向普通用户的界面不展示后端、Redis、Playwright 或版本构建术语；离线、版本不一致、浏览器缺失均给出可以直接照做的应用级提示。
 - **`degraded` 的判定条件只有三个**：浏览器不可用、前后端版本不一致、
   或者"需要 Redis 但连不上"。其他情况一律 `ok` —— 不让健康检查因为无关原因变黄。
 - **Redis 只在 `ENABLE_IP_PROXY` 为真时才检查**（`redis_required`）。代理池已于
