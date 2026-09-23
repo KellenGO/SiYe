@@ -13,27 +13,27 @@
 
 ## 产品截图
 
-**首页**：热搜卡片 + 搜索入口，勾选要搜的平台：
+**首页**：搜索入口与平台选择：
 
 ![首页：热搜与搜索入口](docs/images/shot-home.png)
 
-**一次搜索，一个结果页**：四平台结果统一排序、平台内筛选、可导出：
+**搜索结果**：按选择的平台聚合展示，支持筛选与导出：
 
 ![聚合搜索结果页](docs/images/shot-search.png)
 
-| 本机收藏 | 跨平台收藏 |
+| 本机收藏：列表 | 本机收藏：图标 |
 | --- | --- |
-| ![本机收藏](docs/images/shot-favorites.png) | ![跨平台收藏](docs/images/shot-fav-cross.png) |
+| ![本机收藏列表](docs/images/shot-favorites.png) | ![本机收藏图标视图](docs/images/shot-favorites-grid.png) |
 
-| 看过的历史 | 账号与登录 |
+| 跨平台收藏 | 看过的历史 |
 | --- | --- |
-| ![看过的历史](docs/images/shot-history.png) | ![账号与登录](docs/images/shot-settings-account.png) |
+| ![跨平台收藏](docs/images/shot-fav-cross.png) | ![看过的历史](docs/images/shot-history.png) |
 
-| 外观 · 浅色 | 外观 · 暗色 |
+| 账号与登录 | 外观与首页 |
 | --- | --- |
-| ![外观浅色](docs/images/shot-appearance-light.png) | ![外观暗色](docs/images/shot-appearance-dark.png) |
+| ![账号与登录](docs/images/shot-settings-account.png) | ![外观与首页设置](docs/images/shot-appearance-light.png) |
 
-> 截图中的内容封面与作者昵称已做打码处理。
+> 截图中的内容作者昵称已做遮挡处理；内容封面保留原样。
 
 - 推广落地页：<https://kellengo.github.io/SiYe/>（仓库内 `site/index.html`，单文件无依赖，可直接部署到静态托管）
 - 使用说明：<https://kellengo.github.io/SiYe/guide.html>（仓库内 `docs/使用说明.md`）

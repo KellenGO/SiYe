@@ -567,11 +567,11 @@ html.js .reveal.in{opacity:1;transform:none}
       <span class="platform-choice"><i class="pd zhihu"></i>知乎<span class="check">✓</span></span>
     </div>
 
-    <!-- 界面示意：真实结果页截图（封面与作者已打码），本地相对路径，随 site/ 一起部署。 -->
+    <!-- 界面示意：真实结果页截图（作者昵称已遮挡），本地相对路径，随 site/ 一起部署。 -->
     <div class="mock-wrap">
-      <img class="shot" src="shot-search.png" width="1600" height="700"
-           alt="四野搜索结果页截图：关键词「中国女排将与日本女排争夺金牌」，抖音、B站、知乎的结果合并到同一页，顶部显示各平台结果数与耗时，下方结果统一编号排序">
-      <p class="mock-cap">真实界面：四个平台的搜索结果合并在一页，统一排序、可筛选、可收藏、可导出（截图已对内容封面与作者昵称打码）。</p>
+      <img class="shot" src="shot-search.png" width="2550" height="1233"
+           alt="四野搜索结果页截图：搜索 Windows，显示所选平台的结果数、耗时和统一排序的内容列表">
+      <p class="mock-cap">真实界面：搜索结果统一展示，支持筛选、收藏与导出（作者昵称已遮挡）。</p>
     </div>
   </div>
 </section>
@@ -752,19 +752,19 @@ html.js .reveal.in{opacity:1;transform:none}
     <div class="section-head reveal">
       <p class="eyebrow">Screenshots</p>
       <h2 class="title">界面一览</h2>
-      <p class="description">搜索之外，收藏、历史与账号管理都在同一个界面里完成。截图为浅色主题实拍，内容封面与作者昵称已打码。</p>
+      <p class="description">搜索之外，收藏、历史与账号管理都在同一个界面里完成。截图为浅色主题实拍，内容作者昵称已遮挡。</p>
     </div>
 
     <div class="shots">
       <div class="card shot-card reveal">
-        <img src="shot-home.png" width="1600" height="773" loading="lazy"
+        <img src="shot-home.png" width="2550" height="1233" loading="lazy"
              alt="四野首页截图：大搜索框与平台勾选，下方是最近搜索与各平台热搜榜">
         <h3>首页：热搜 + 搜索入口</h3>
         <p>搜索框 + 平台勾选，下面是最近搜索和各平台热搜榜，点一条热搜就用当前勾选的平台直接搜。</p>
       </div>
 
       <div class="card shot-card reveal">
-        <img src="shot-favorites.png" width="1600" height="773" loading="lazy"
+        <img src="shot-favorites.png" width="2550" height="1233" loading="lazy"
              alt="四野本机收藏页截图：左侧收藏夹列表，右侧收藏条目带平台标识与备注入口">
         <h3>本机收藏</h3>
         <p>收藏与备注保存在本机 SQLite，按收藏夹归档，支持备份导出与导入。</p>
@@ -772,35 +772,38 @@ html.js .reveal.in{opacity:1;transform:none}
       </div>
 
       <div class="card shot-card reveal">
-        <img src="shot-fav-cross.png" width="1600" height="773" loading="lazy"
+        <img src="shot-favorites-grid.png" width="2550" height="1233" loading="lazy"
+             alt="四野本机收藏图标视图截图：用封面卡片浏览本机收藏夹">
+        <h3>本机收藏：图标视图</h3>
+        <p>按收藏夹封面快速浏览，也可以切回列表查看条目详情。</p>
+      </div>
+
+      <div class="card shot-card reveal">
+        <img src="shot-fav-cross.png" width="2550" height="1233" loading="lazy"
              alt="四野跨平台收藏页截图：显示各平台同步进度与拉取数量，下方是合并后的收藏列表">
         <h3>跨平台收藏</h3>
         <p>只读拉取各平台已收藏的内容，统一查看与导出；只读取，不会改动平台侧的收藏。</p>
       </div>
 
       <div class="card shot-card reveal">
-        <img src="shot-history.png" width="1600" height="773" loading="lazy"
+        <img src="shot-history.png" width="2550" height="1233" loading="lazy"
              alt="四野浏览历史页截图：自动记录点开过的内容，可按平台筛选、一键清空">
         <h3>看过的历史</h3>
         <p>点开过的内容自动记录，回头好找；只保留最近 1000 条，可按平台筛选或一键清空。</p>
       </div>
 
       <div class="card shot-card reveal">
-        <img src="shot-account.png" width="1600" height="773" loading="lazy"
-             alt="四野账号设置页截图：每个平台一张卡片，显示登录状态，提供扫码登录、重新验证等操作">
+        <img src="shot-settings-account.png" width="2550" height="1233" loading="lazy"
+             alt="四野账号与登录设置页截图：显示平台登录状态，并提供扫码登录、重新验证等操作">
         <h3>账号与登录</h3>
         <p>每个平台一张卡片：扫码登录、重新验证、清除状态都在这里。先连常用的 1–2 个平台就能开始用。</p>
         <span class="note">登录状态每次启动自动复核，装了浏览器扩展还会自动同步。</span>
       </div>
 
       <div class="card shot-card reveal">
-        <div class="shot-pair">
-          <img src="shot-appearance-light.png" width="1600" height="773" loading="lazy"
-               alt="四野外观设置页浅色主题截图：主题色选择、首页模式与板块开关">
-          <img src="shot-appearance-dark.png" width="1600" height="773" loading="lazy"
-               alt="四野外观设置页深色主题截图：同一页面在深色模式下的效果">
-        </div>
-        <h3>浅色 / 深色主题</h3>
+        <img src="shot-appearance-light.png" width="2550" height="1233" loading="lazy"
+             alt="四野外观与首页设置页截图：可选主题色、深浅模式和首页显示偏好">
+        <h3>外观与首页设置</h3>
         <p>跟随系统，也可以手动切换；主题色和首页板块都能按自己的习惯调。</p>
       </div>
     </div>
