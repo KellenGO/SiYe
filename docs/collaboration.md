@@ -21,8 +21,30 @@
 - 数据边界：全部检查使用模拟接口、临时数据和拦截网络，没有读取真实账号、收藏或平台内容。截图在 `build/review-local-folder-grid-mobile.png`、`build/ui-audit/favorites-local-320.png`、`build/ui-audit/settings-accounts-320.png`；临时审计脚本已删除。
 - 本任务只报告、不修改产品代码。建议修复顺序：长列表分页/渐进渲染 → 移动端 toast 与标题操作区避让 → 图标偏好恢复 → 320px 设置导航可见性。
 
-### ONBOARD-PAGES-20260923 — 新手教程扩为七步逐页导览
+### PLATFORM-PREF-MEMORY-20260923 — 平台勾选严格按上次选择记住（含零勾选）
 
+- 负责人：WorkBuddy / 当前会话；工作区：`MediaCrawler-main`；分支：`master`；起始提交：`b9753d7`。
+- 缘起：用户重申设计意图 ——「新手教程时四个平台都不勾、由用户自己勾，以后的勾选按上一次的记忆」。
+  先做只读核对（隔离浏览器逐条读 `localStorage`）：首次进入 `[]`、勾小红书后刷新仍是小红书、
+  首页↔搜索页往返不回退全选 —— 这三点在 `ONBOARD-PAGES-20260923` 之后已经成立；
+  但**取消到零不落地**：存储留旧值，刷新后被取消的平台自己勾回来。
+- 范围：`webui/src/lib/searchExperience.ts`（`platform_pref_set` 与两处注释）、
+  `webui/tests/searchExperience.test.ts`（用例 ⑭）、`scripts/getting_started_smoke.py`（两条常驻断言）、
+  `docs/features/{search-experience,getting-started}.md`、`docs/decisions/2026-09-23-平台偏好空数组语义.md`（追加「同日补充」）、
+  `CHANGELOG.md`。未动后端、未动抓取、未动数据。
+- 交付：偏好规则收敛成**「偏好 = 用户最后一次勾的样子，含一个都不勾」**。原来的"至少保留一个平台"
+  不变量被删除 —— 它让存储与界面分叉（界面零勾选、存储留着旧值），并且在平台搜索失败被自动取消勾选
+  之后会让这些平台在刷新时"复活"，与刚展示给用户的"已自动取消勾选"提示相反。
+- 验证：`npm run test:search` 371 通过（用例 ⑭ 改为断言空集落地，并补"零偏好写回再读仍是零"）；
+  `npm run build` 通过（dist 已更新）；`scripts/getting_started_smoke.py` 通过，新增"勾选跨刷新被记住"
+  与"取消到零仍是零"两条断言。另有一条临时隔离脚本逐条打印各步的存储值（`.tmp_platform_pref_check.py`，
+  已删除）。未跑全量 pytest。未访问真实平台与真实收藏。
+- 交付定位：`git log --all --grep=PLATFORM-PREF-MEMORY-20260923`。`webui/dist` 是忽略产物
+  （`webui/.gitignore`），本地已重建，不进提交；已打包的 EXE 不会自动更新，需要重新打包。
+- 待核实：① 旧的"至少留一个平台"规则是 `ONBOARD-PAGES-20260923` 之前某次会话加的（测试里带注释说明用意），
+  本次按用户口径推翻；若当时另有原因，需要在本条下面补记。② 未跑全量 pytest。
+
+### ONBOARD-PAGES-20260923 — 新手教程扩为七步逐页导览
 - 负责人：WorkBuddy / 当前会话；工作区：`MediaCrawler-main`；分支：`master`；起始提交：`810b03b`。
 - 范围：`webui/src/lib/{onboarding,searchExperience}.ts`、`webui/src/hooks/useOnboarding.ts`、`webui/src/components/help/{GettingStarted,HelpPage}.tsx`、两个 locale 的 `common.json`、`webui/tests/{onboarding,searchExperience}.test.ts`、`tests/test_webui_ui_contract.py`、`scripts/getting_started_smoke.py`、`docs/{index.md,使用说明.md}`、`docs/features/{getting-started,search-experience}.md`、新增两条 decisions、`CHANGELOG.md`、`site/guide.html`。未动后端、未动平台抓取、未动数据。
 - 交付：① 教程从四步改成七步「一步一页」（连接平台 → 首页 → 搜索与结果 → 收藏与整理 → 观看历史 → 外观与个性化 → 帮助与反馈），每步文案升级为"这一页是什么 + 能做什么"；步骤来源收敛成 `GUIDE_STEPS`（key + route），步数校验按长度动态。② 帮助页新增「页面与功能一览」（10 条逐页速查），教程页脚指向它。③ 修掉搜索页平台勾选「往返一次就变全选」：`parsePlatformPref` 对显式空数组返回空集，零勾选在刷新/切页后保持。取舍见 `docs/decisions/2026-09-23-教程扩为逐页导览.md`、`docs/decisions/2026-09-23-平台偏好空数组语义.md`。

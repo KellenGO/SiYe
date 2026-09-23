@@ -165,6 +165,27 @@ def main():
                     expect(button).to_have_attribute("aria-pressed", "false")
                 assert json.loads(page.evaluate("localStorage.getItem('aggregate_search_platform_pref')")) == ["xhs"]
 
+                # 勾选要按上一次的记忆恢复：刷新后仍是"只勾小红书"，不回退全选。
+                page.reload()
+                page.wait_for_timeout(300)
+                expect(xhs_button).to_have_attribute("aria-pressed", "true")
+                for button in (douyin_button, bilibili_button, zhihu_button):
+                    expect(button).to_have_attribute("aria-pressed", "false")
+                assert json.loads(page.evaluate("localStorage.getItem('aggregate_search_platform_pref')")) == ["xhs"]
+
+                # 取消到零也是一种"上一次的选择"：零勾选必须落地，刷新后不能自己勾回来。
+                xhs_button.click()
+                expect(xhs_button).to_have_attribute("aria-pressed", "false")
+                assert json.loads(page.evaluate("localStorage.getItem('aggregate_search_platform_pref')")) == []
+                page.reload()
+                page.wait_for_timeout(300)
+                for button in (xhs_button, douyin_button, bilibili_button, zhihu_button):
+                    expect(button).to_have_attribute("aria-pressed", "false")
+                assert json.loads(page.evaluate("localStorage.getItem('aggregate_search_platform_pref')")) == []
+                # 复原成"只勾小红书"，后面的历史词与收藏步骤按原样继续。
+                xhs_button.click()
+                expect(xhs_button).to_have_attribute("aria-pressed", "true")
+
                 before_search = len([item for item in mutations if item[1] == "/api/search/jobs"])
                 search.focus()
                 page.get_by_role("button", name="效率工作流", exact=True).click()
@@ -265,6 +286,7 @@ def main():
                 context.close()
                 browser.close()
             print("PASS: consent, skip, never again, restart, zero platform pre-selection, "
+                  "platform picks remembered across reload, zero picked stays zero, "
                   "keyword picks preserve platforms, seven tutorial steps (accounts/home/search/save/history/"
                   "appearance/help), back-to-results, reload, mobile, diagnostics copy/download/offline; "
                   "no real platform requests")

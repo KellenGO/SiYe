@@ -147,10 +147,10 @@ export function writeHistory(storage: StorageLike, history: SearchHistoryItem[])
 
 // ── Platform preference ────────────────────────────────────────────────
 
-/** 解析平台偏好：只接受合法 slug，至少保留一个平台；损坏 → 全选。 */
+/** 解析平台偏好：只接受合法 slug；损坏值（非数组 / 全是非法值）→ 全选兜底。 */
 export function parsePlatformPref(raw: unknown, all: PlatformSlug[] = PLATFORM_SLUGS): PlatformSlug[] {
   if (!Array.isArray(raw)) return [...all];
-  // 显式空数组 = "还没落地过偏好"：保持零勾选，交给用户亲手勾。
+  // 显式空数组 = "用户当前一个都没勾"：保持零勾选，交给用户亲手勾。
   // 没有这一条时，首次进入写回的 [] 会被当成"解析不出平台"而回退成全选，
   // 于是页面往返一次就变成四个平台全勾（教程文案承诺的是默认不预选）。
   if (raw.length === 0) return [];
@@ -160,7 +160,7 @@ export function parsePlatformPref(raw: unknown, all: PlatformSlug[] = PLATFORM_S
 
 // 首次进入（没有任何存储值）返回空集：允许"零勾选"，由用户亲手选择平台；
 // 首屏把空集写回存储后的"[]"同样按空集读，否则页面往返一次就变成全选。
-// 损坏 / 不可读的存储仍回退全选，避免把用户卡住（见下方 catch）。
+// 只有"存储坏了"才回退全选（下同，见下方 catch）—— 那与"用户没勾"是两回事。
 export function readPlatformPref(storage: StorageLike, all: PlatformSlug[] = PLATFORM_SLUGS): PlatformSlug[] {
   try {
     const raw = storage.getItem(PLATFORM_PREF_STORAGE_KEY);
@@ -1270,12 +1270,10 @@ export function applySearchTransition(state: ExperienceState, event: ExperienceE
       return { ...state, history: [] };
     }
     case "platform_pref_set": {
-      // 规范化：过滤非法 slug、去重；空 → 保持原偏好。
-      // 不变量的边界：首次进入（readPlatformPref 无存储值）允许空集；但偏好一旦
-      // 落地（用户勾选过任一平台），传入空集时保留原偏好，避免把已落地的偏好清空。
-      // UI 层始终允许手动取消到零，只是提交时统一提示"先选平台"。
+      // 偏好 = 用户最后一次的勾选，空集同样落地。零勾选是合法状态（首次进入就是零，
+      // 提交时由 SearchBar 提示"先勾选至少一个平台"），所以这里不再保留原偏好：
+      // 保留过一次就会让存储与界面分叉 —— 用户把平台全取消、刷新后又被自动勾回来。
       const valid = [...new Set(event.platforms.filter(isPlatformSlug))];
-      if (valid.length === 0) return state;
       return { ...state, platformPref: valid };
     }
     default:
