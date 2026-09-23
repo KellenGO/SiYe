@@ -15,6 +15,8 @@ export function GettingStarted({ step, onGoTo, onDismiss }: GettingStartedProps)
   if (step === null) return null;
   const total = GUIDE_STEPS.length;
   const current = step >= 0 ? GUIDE_STEPS[step] : null;
+  /** 收藏那一步的「回搜索结果」要跳回搜索步骤本身（而不是直接改地址）。 */
+  const searchStep = GUIDE_STEPS.findIndex((item) => item.key === "search");
   return (
     <section className="getting-started" aria-label={t("onboarding.label")}>
       <div className="guide-heading">
@@ -37,7 +39,7 @@ export function GettingStarted({ step, onGoTo, onDismiss }: GettingStartedProps)
             <button type="button" className="btn primary" onClick={() => step === total - 1 ? onDismiss(true, true) : onGoTo(step + 1)}>
               {step === total - 1 ? <>{t("onboarding.finish")}<Check /></> : <>{t("onboarding.next")}<ArrowRight /></>}
             </button>
-            {current.key === "save" && <button type="button" className="btn ghost" onClick={() => onGoTo(2)}>{t("onboarding.backToResults")}</button>}
+            {current.key === "save" && searchStep >= 0 && <button type="button" className="btn ghost" onClick={() => onGoTo(searchStep)}>{t("onboarding.backToResults")}</button>}
           </>}
         </div>
         <div className="guide-dismiss">

@@ -9,10 +9,19 @@
 | 任务 ID | 负责人/会话 | 工作区 / 分支 / 起始 HEAD | 修改范围 | 状态与下一步 | 更新时间 |
 |---|---|---|---|---|---|
 | V1-UI-AUDIT-20260923 | Codex / 当前会话 | `MediaCrawler-main` / `master` / `810b03b` | 只读检查：按钮行为、布局溢出、数量边界与响应式；不取得代码写入权 | 只读：运行隔离 UI 审计并报告发现 | 2026-09-23 |
-| ONBOARD-PAGES-20260923 | WorkBuddy / 当前会话 | `MediaCrawler-main` / `master` / `810b03b` | `webui/src/lib/{onboarding,searchExperience}.ts`、`webui/src/hooks/useOnboarding.ts`、`webui/src/components/help/{GettingStarted,HelpPage}.tsx`、`webui/src/index.css`、两个 locale 的 `common.json`、`webui/tests/onboarding.test.ts`、`webui/tests/searchExperience.test.ts`、`tests/test_webui_ui_contract.py`、`scripts/getting_started_smoke.py`、相关 docs | 进行中：教程扩为 7 步逐页导览、帮助页加「页面与功能一览」、修正平台偏好空数组语义 | 2026-09-23 |
 本表不表示所有外部会话都已登记。初始化时仅核实主工作区状态；其他工作区和会话仍需按开工流程核实。
 
 ## 最近交接
+
+### ONBOARD-PAGES-20260923 — 新手教程扩为七步逐页导览
+
+- 负责人：WorkBuddy / 当前会话；工作区：`MediaCrawler-main`；分支：`master`；起始提交：`810b03b`。
+- 范围：`webui/src/lib/{onboarding,searchExperience}.ts`、`webui/src/hooks/useOnboarding.ts`、`webui/src/components/help/{GettingStarted,HelpPage}.tsx`、两个 locale 的 `common.json`、`webui/tests/{onboarding,searchExperience}.test.ts`、`tests/test_webui_ui_contract.py`、`scripts/getting_started_smoke.py`、`docs/{index.md,使用说明.md}`、`docs/features/{getting-started,search-experience}.md`、新增两条 decisions、`CHANGELOG.md`、`site/guide.html`。未动后端、未动平台抓取、未动数据。
+- 交付：① 教程从四步改成七步「一步一页」（连接平台 → 首页 → 搜索与结果 → 收藏与整理 → 观看历史 → 外观与个性化 → 帮助与反馈），每步文案升级为"这一页是什么 + 能做什么"；步骤来源收敛成 `GUIDE_STEPS`（key + route），步数校验按长度动态。② 帮助页新增「页面与功能一览」（10 条逐页速查），教程页脚指向它。③ 修掉搜索页平台勾选「往返一次就变全选」：`parsePlatformPref` 对显式空数组返回空集，零勾选在刷新/切页后保持。取舍见 `docs/decisions/2026-09-23-教程扩为逐页导览.md`、`docs/decisions/2026-09-23-平台偏好空数组语义.md`。
+- 为什么②③与①同船：教程文案承诺「平台默认一个都不勾，由你亲手勾」，不同期修掉那个往返副作用就是发布了假承诺；两处行为改动落在互不相干的文件上。
+- 验证：前端 `npm run test:search` 371 通过（新增 4 条：步骤数边界、步骤路由、空偏好往返、空数组语义）、`npm run build` 通过；pytest `tests/test_docs_wiki.py` + `tests/test_webui_ui_contract.py` 58 通过（新增 2 条守卫：每步中英文案齐全、帮助页速查与教程互相指得到）；`scripts/getting_started_smoke.py` 通过——隔离 SQLite + TestClient + `webui/dist` + Playwright 拦 `/api`，覆盖许可前隐藏、七步全程与每步 URL、平台零勾选、回搜索结果、跳过、重开、刷新恢复、390px 窄屏 + 深色主题、诊断复制/下载/离线。未访问真实平台与真实收藏。截图在 `build/getting-started-review/`（构建产物，未提交）。
+- 交付定位：`git log --all --grep=ONBOARD-PAGES-20260923`。源码与本轮 `webui/dist` 生产构建一致；已打包的 EXE 不会自动更新，需要重新打包。
+- 未完成 / 待核实：① 未跑全量 pytest（只跑了文档与界面契约两个文件；平台偏好改动同时被前端 371 条用例覆盖）。② 教程的第 7 步只是把用户带到帮助页，没有做页内锚点高亮（help page 已有 `id="pages"`，将来要跳转可直接用）。③ `docs/使用说明.md` 与 `site/guide.html` 的正文已同步为"七步"，但 `site/index.html` 未提及教程步数，未改。④ 与本表里 Codex 的只读 UI 审计（`V1-UI-AUDIT-20260923`）有观测重叠：它审的是改动前的构建，结论需要按新版本重跑。
 
 ### V1-PUBLIC-COPY-20260923 — V1.0 面向普通用户的界面文案
 

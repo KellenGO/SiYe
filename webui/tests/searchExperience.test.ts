@@ -251,12 +251,24 @@ test("parsePlatformPref: 非法 slug 被丢弃，空结果回退全选", () => {
   assert.deepEqual(parsePlatformPref(null), [...PLATFORM_SLUGS]);
 });
 
+test("parsePlatformPref: 显式空数组保持空集（不是回退全选）", () => {
+  assert.deepEqual(parsePlatformPref([]), []);
+});
+
 test("readPlatformPref: 刷新后恢复，损坏时默认全选", () => {
   const storage = new MemoryStorage();
   writePlatformPref(storage, ["zhihu", "xhs"]);
   assert.deepEqual(readPlatformPref(storage), ["zhihu", "xhs"]);
   storage.setItem(PLATFORM_PREF_STORAGE_KEY, "###broken###");
   assert.deepEqual(readPlatformPref(storage), [...PLATFORM_SLUGS]);
+});
+
+test("readPlatformPref: 首屏写回的空偏好往返后仍是零勾选", () => {
+  const storage = new MemoryStorage();
+  assert.deepEqual(readPlatformPref(storage), []);
+  // 首屏把"还没有偏好"当成空集写回存储，再挂载时不能变成四个平台全选。
+  writePlatformPref(storage, []);
+  assert.deepEqual(readPlatformPref(storage), []);
 });
 
 test("readPlatformPref: 存储不可用时默认全选", () => {

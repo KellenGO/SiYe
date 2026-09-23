@@ -141,19 +141,27 @@ def main():
                 page.get_by_role("button", name="重新开始新手引导").click()
                 expect(page).to_have_url(origin + "/#/settings/accounts")
                 expect(guide.get_by_role("heading", name="连接平台", exact=True)).to_be_visible()
+                expect(guide.get_by_text("上手教程 · 1 / 7", exact=False)).to_be_visible()
+                guide.get_by_role("button", name="下一步", exact=True).click()
+                expect(page).to_have_url(origin + "/#/")
+                expect(guide.get_by_role("heading", name="认识首页", exact=True)).to_be_visible()
+                expect(guide.get_by_text("默认一个都不勾", exact=False)).to_be_visible()
                 guide.get_by_role("button", name="下一步", exact=True).click()
                 expect(page).to_have_url(origin + "/#/search")
-                expect(guide.get_by_text("带 ✓ 的平台会参与搜索", exact=False)).to_be_visible()
+                expect(guide.get_by_role("heading", name="搜索与结果", exact=True)).to_be_visible()
                 search = page.locator("form input[type='text']")
                 xhs_button = page.get_by_role("button", name="小红书", exact=True)
                 douyin_button = page.get_by_role("button", name="抖音", exact=True)
                 bilibili_button = page.get_by_role("button", name="B站", exact=True)
                 zhihu_button = page.get_by_role("button", name="知乎", exact=True)
-                # 向导的"连接平台"那步会把已连接平台**预先勾上**（"带 ✓ 的平台会参与搜索"），
-                # 所以进来时是四平台全选。这里只留小红书，作为"只搜一个平台"的样例。
+                # 平台按钮默认零勾选：教程不替用户选平台，教程正文也这么承诺。
+                for button in (xhs_button, douyin_button, bilibili_button, zhihu_button):
+                    expect(button).to_have_attribute("aria-pressed", "false")
+                assert json.loads(page.evaluate("localStorage.getItem('aggregate_search_platform_pref')")) == []
+                # 这里只勾小红书，作为"只搜一个平台"的样例。
+                xhs_button.click()
                 expect(xhs_button).to_have_attribute("aria-pressed", "true")
                 for button in (douyin_button, bilibili_button, zhihu_button):
-                    button.click()
                     expect(button).to_have_attribute("aria-pressed", "false")
                 assert json.loads(page.evaluate("localStorage.getItem('aggregate_search_platform_pref')")) == ["xhs"]
 
@@ -196,7 +204,14 @@ def main():
                 expect(page.get_by_role("button", name="取消收藏 剪辑入门 PRIVATE_RESULT", exact=True)).to_be_visible()
                 guide.get_by_role("button", name="下一步", exact=True).click()
                 expect(page).to_have_url(origin + "/#/favorites/local")
+                expect(guide.get_by_role("heading", name="收藏与整理", exact=True)).to_be_visible()
                 expect(page.get_by_role("button", name="取消收藏 剪辑入门 PRIVATE_RESULT", exact=True)).to_be_visible()
+                # 「回搜索结果」把教程一并带回搜索那一步，不只是改地址。
+                guide.get_by_role("button", name="回搜索结果", exact=True).click()
+                expect(page).to_have_url(origin + "/#/search")
+                expect(guide.get_by_role("heading", name="搜索与结果", exact=True)).to_be_visible()
+                guide.get_by_role("button", name="下一步", exact=True).click()
+                expect(page).to_have_url(origin + "/#/favorites/local")
                 page.reload()
                 expect(guide.get_by_role("heading", name="收藏与整理", exact=True)).to_be_visible()
                 page.set_viewport_size({"width": 390, "height": 844})
@@ -207,7 +222,15 @@ def main():
                 assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), "Mobile overflow"
                 page.screenshot(path=output / "mobile-tutorial.png", full_page=True)
                 guide.get_by_role("button", name="下一步", exact=True).click()
+                expect(page).to_have_url(origin + "/#/history")
+                expect(guide.get_by_role("heading", name="观看历史", exact=True)).to_be_visible()
+                guide.get_by_role("button", name="下一步", exact=True).click()
+                expect(page).to_have_url(origin + "/#/settings/appearance")
+                expect(guide.get_by_role("heading", name="外观与个性化", exact=True)).to_be_visible()
+                guide.get_by_role("button", name="下一步", exact=True).click()
                 expect(page).to_have_url(origin + "/#/help")
+                expect(guide.get_by_role("heading", name="帮助与反馈", exact=True)).to_be_visible()
+                expect(guide.get_by_text("上手教程 · 7 / 7", exact=False)).to_be_visible()
                 guide.get_by_role("button", name="完成教程", exact=True).click()
                 expect(guide).to_have_count(0)
                 page.reload()
@@ -241,7 +264,10 @@ def main():
                 assert not errors, errors
                 context.close()
                 browser.close()
-            print("PASS: consent, skip, never again, restart, keyword picks preserve platforms, tutorial with search/save, reload, mobile, diagnostics copy/download/offline; no real platform requests")
+            print("PASS: consent, skip, never again, restart, zero platform pre-selection, "
+                  "keyword picks preserve platforms, seven tutorial steps (accounts/home/search/save/history/"
+                  "appearance/help), back-to-results, reload, mobile, diagnostics copy/download/offline; "
+                  "no real platform requests")
     finally:
         server.shutdown()
         server.server_close()

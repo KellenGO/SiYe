@@ -150,11 +150,16 @@ export function writeHistory(storage: StorageLike, history: SearchHistoryItem[])
 /** 解析平台偏好：只接受合法 slug，至少保留一个平台；损坏 → 全选。 */
 export function parsePlatformPref(raw: unknown, all: PlatformSlug[] = PLATFORM_SLUGS): PlatformSlug[] {
   if (!Array.isArray(raw)) return [...all];
+  // 显式空数组 = "还没落地过偏好"：保持零勾选，交给用户亲手勾。
+  // 没有这一条时，首次进入写回的 [] 会被当成"解析不出平台"而回退成全选，
+  // 于是页面往返一次就变成四个平台全勾（教程文案承诺的是默认不预选）。
+  if (raw.length === 0) return [];
   const valid = [...new Set(raw.filter(isPlatformSlug))];
   return valid.length > 0 ? valid : [...all];
 }
 
 // 首次进入（没有任何存储值）返回空集：允许"零勾选"，由用户亲手选择平台；
+// 首屏把空集写回存储后的"[]"同样按空集读，否则页面往返一次就变成全选。
 // 损坏 / 不可读的存储仍回退全选，避免把用户卡住（见下方 catch）。
 export function readPlatformPref(storage: StorageLike, all: PlatformSlug[] = PLATFORM_SLUGS): PlatformSlug[] {
   try {

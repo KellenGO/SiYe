@@ -563,3 +563,39 @@ def test_public_ui_does_not_expose_developer_jargon():
     for phrase in ("后端不可用", "前后端版本", "重新构建", "Playwright", "Redis"):
         assert phrase not in health, f"启动提示重新出现开发者文案：{phrase}"
     assert "四野后端" not in accounts + help_page + scan_login
+
+
+# ── 新手教程：逐页导览（2026-09-23 扩为七步）─────────────────────────────
+
+
+def test_onboarding_steps_have_copy_in_every_locale():
+    """教程每一步都要有标题 / 正文 / 按钮文案，且每种语言都写全。
+
+    `GettingStarted` 用 `onboarding.<key>Title` 这类动态键渲染步骤；静态扫描
+    `t("ns.key")` 字面量的那条守卫看不到它们，所以这里按 `GUIDE_STEPS` 的 key
+    回查 locale —— 加一步而忘了写文案，会在这一步被抓住。
+    """
+    onboarding = (_ROOT / "lib" / "onboarding.ts").read_text(encoding="utf-8")
+    steps = re.findall(r'\{\s*key:\s*"(\w+)",\s*route:\s*"([^"]+)"\s*\}', onboarding)
+    assert len(steps) >= 4, f"没解析出教程步骤：{steps}"
+    assert len({key for key, _ in steps}) == len(steps), "步骤 key 重复"
+    assert all(route.startswith("#/") for _, route in steps), "每一步都要落到一个真实页面"
+    assert "#/help" in {route for _, route in steps}, "能重开教程的帮助页应当还在链路里"
+
+    for name in sorted(p.name for p in _LOCALES.iterdir() if p.is_dir()):
+        keys = _locale_keys(name)
+        missing = [f"onboarding.{key}{suffix}"
+                   for key, _ in steps for suffix in ("Title", "Body", "Action")
+                   if f"onboarding.{key}{suffix}" not in keys]
+        assert not missing, f"{name} 缺少教程文案：{missing}"
+
+
+def test_help_page_carries_the_page_by_page_tour():
+    """教程只带路，逐页说明常驻在帮助页：两边必须互相指得到。"""
+    help_page = (_ROOT / "components" / "help" / "HelpPage.tsx").read_text(encoding="utf-8")
+    assert 'id="pages"' in help_page and "页面与功能一览" in help_page, "帮助页的「页面与功能一览」不见了"
+    for page_name in ("首页", "搜索结果", "结果卡片", "本地收藏", "跨平台收藏", "观看历史"):
+        assert page_name in help_page, f"「页面与功能一览」缺少这一页：{page_name}"
+
+    # 教程卡片的页脚要把用户指向那份速查表。
+    assert "页面与功能一览" in _zh("onboarding.replayHint"), "教程页脚不再指向帮助页速查"

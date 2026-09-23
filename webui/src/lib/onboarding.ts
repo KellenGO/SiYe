@@ -8,8 +8,11 @@ export const GUIDE_SESSION_KEY = "siye_onboarding_session_v1";
  */
 export const GUIDE_STEPS = [
   { key: "connect", route: "#/settings/accounts" },
+  { key: "home", route: "#/" },
   { key: "search", route: "#/search" },
   { key: "save", route: "#/favorites/local" },
+  { key: "history", route: "#/history" },
+  { key: "appearance", route: "#/settings/appearance" },
   { key: "help", route: "#/help" },
 ] as const;
 
