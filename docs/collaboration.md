@@ -12,6 +12,13 @@
 
 ## 最近交接
 
+### V1-RESET-COPY-20260923 — 精简重置同步说明
+
+- 负责人：Codex / 当前会话；主工作区 `MediaCrawler-main`，`master`，起始 HEAD `8d23ed1`，起始状态干净；已核对近期提交、worktree 与相关 wiki，无重叠中的修改范围。
+- 交付：按用户截图移除收藏页高级操作中的蓝色问号，按钮旁说明只保留「将读取所选平台，并直接覆盖本地跨平台收藏」。清理对应样式与烟测断言；详细帮助页仍保留。重置确认及数据行为不变，未涉及观看历史。
+- 验证：`npm run test:search` 373/373、`npm run build` 通过；pytest `tests/test_webui_ui_contract.py` 与 `tests/test_docs_wiki.py` 63/63 通过（全新项目内 basetemp）；`scripts/remote_favorites_smoke.py` 在临时库与模拟响应下通过，覆盖高级区、确认取消和 390px 无横向溢出；目视核对窄屏截图；`git diff --check` 通过。首次构建受沙箱 Vite 配置目录读取限制，授权重跑通过。
+- 未做：未跑全量后端 pytest、未访问真实平台账号或收藏；已打包 EXE 未重建。源码与本地 `webui/dist` 一致，主工作区 `master` 已集成，修改范围释放。提交定位：`git log --all --grep=V1-RESET-COPY-20260923`。
+
 ### V1-RESET-SYNC-20260923 — 日常同步与重置同步分开
 
 - 负责人：Codex / 当前会话；主工作区 `MediaCrawler-main`，`master`，起始 HEAD `65899f1`，起始状态干净。开工已核对近期提交、worktree、协作表及涉及文件；任务范围由本会话登记并独占。

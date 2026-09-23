@@ -748,11 +748,9 @@ html.dark .search-submit { color: #101525; }
 .remote-heading h2 { margin: 0; color: var(--siye-ink); font-size: 18px; font-weight: 600; }
 .remote-advanced { margin-top: 10px; color: var(--siye-secondary); font-size: 12px; }
 .remote-advanced > summary { width: fit-content; cursor: pointer; color: var(--siye-ink); font-weight: 600; }
-.remote-advanced > summary:focus-visible, .reset-help-link:focus-visible { outline: 2px solid var(--siye-brand); outline-offset: 3px; border-radius: 4px; }
+.remote-advanced > summary:focus-visible { outline: 2px solid var(--siye-brand); outline-offset: 3px; border-radius: 4px; }
 .remote-advanced-content { max-width: 480px; padding: 10px 0 0; line-height: 1.7; }
 .remote-advanced-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
-.reset-help-link { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; color: var(--siye-brand); }
-.reset-help-link svg { width: 18px; height: 18px; }
 .local-heading-actions { display: flex; align-items: center; gap: 10px; }
 .local-view-switch { display: inline-flex; padding: 3px; border: 1px solid var(--siye-line); border-radius: 9px; background: var(--siye-soft); }
 .local-view-switch button { display: inline-flex; align-items: center; gap: 5px; padding: 6px 9px; border-radius: 6px; color: var(--siye-muted); font-size: 12px; }

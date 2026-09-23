@@ -128,11 +128,8 @@ def main():
                 advanced.locator("summary").focus()
                 advanced.locator("summary").press("Enter")
                 expect(advanced).to_have_attribute("open", "")
-                expect(advanced.get_by_text("重置同步：直接覆盖本地跨平台收藏。", exact=False)).to_be_visible()
-                question = page.get_by_role("link", name="查看重置同步的高级功能说明")
-                expect(question).to_have_attribute("href", "#/help/advanced-reset-sync")
-                question.focus()
-                expect(question).to_be_focused()
+                expect(advanced.get_by_text("将读取所选平台，并直接覆盖本地跨平台收藏", exact=True)).to_be_visible()
+                expect(advanced.get_by_role("link")).to_have_count(0)
                 reset = page.get_by_role("button", name="重置同步", exact=True)
                 before_reset = len(sync_requests)
                 dialogs = []
@@ -152,11 +149,6 @@ def main():
                 assert page.get_by_role("tablist", name="结果平台").count() == 1
                 assert page.get_by_label("归档平台").count() == 0
                 assert page.get_by_role("button", name="完整核对 B站", exact=True).count() == 0
-                question.click()
-                expect(page).to_have_url(origin + "/#/help/advanced-reset-sync")
-                expect(page.locator("#advanced-reset-sync")).to_be_visible()
-                expect(page.locator("#advanced-reset-sync")).to_be_focused()
-                page.screenshot(path=str(ROOT / "build/remote-reset-help-mobile.png"), full_page=True)
                 assert errors == [], errors
                 page.screenshot(path=str(ROOT / "build/remote-favorites-smoke.png"), full_page=True)
                 browser.close()
