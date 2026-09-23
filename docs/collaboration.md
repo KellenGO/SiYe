@@ -12,6 +12,13 @@
 
 ## 最近交接
 
+### V1-BACKTOP-SEARCH-HISTORY-20260923 — 搜索与历史更早显示回顶按钮
+
+- 负责人：Codex / 当前会话；主工作区 `MediaCrawler-main`，`master`，起始 HEAD `e235c01`，起始状态干净；已核对近期提交、worktree 和相关 wiki，无重叠中的修改范围。
+- 核对：原「返回顶部」已在应用根部挂载，模拟 60 条搜索结果及 60 条观看历史滚过 800px 时均会显示。用户感知上的缺口是两页沿用 400px 显示阈值；现改为搜索结果和历史页滚过 160px 即显示，收藏等页面仍为 400px。沿用同一按钮、样式、键盘与减少动态效果行为，未改变搜索或历史数据。
+- 验证：`npm run test:search` 373/373、`npm run build` 通过；pytest `tests/test_webui_ui_contract.py` 与 `tests/test_docs_wiki.py` 63/63 通过（全新项目内 basetemp）；新增 `scripts/scroll_to_top_smoke.py` 在模拟列表下通过，覆盖桌面/390px 两页显示、点击回顶与无横向溢出；目视核对两张窄屏截图；`git diff --check` 通过。首次构建受沙箱 Vite 配置目录读取限制，授权重跑通过。
+- 未做：未跑全量后端 pytest，未访问真实账号与历史数据；EXE 未重建。源码与本地 `webui/dist` 一致，主工作区 `master` 已集成，修改范围释放。提交定位：`git log --all --grep=V1-BACKTOP-SEARCH-HISTORY-20260923`。
+
 ### V1-RESET-COPY-20260923 — 精简重置同步说明
 
 - 负责人：Codex / 当前会话；主工作区 `MediaCrawler-main`，`master`，起始 HEAD `8d23ed1`，起始状态干净；已核对近期提交、worktree 与相关 wiki，无重叠中的修改范围。
