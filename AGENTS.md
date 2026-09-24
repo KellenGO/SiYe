@@ -1,46 +1,34 @@
 # AGENTS.md — 先读这里
 
-给所有在这个仓库里干活的 agent（人或 AI）的入口。**读完这一页，先读 `docs/collaboration.md`，再去读 `docs/index.md`。不要等用户提醒你查看其他 agent 的工作。**
+给所有在这个仓库里干活的 agent（人或 AI）的入口。先读 [当前协作状态](docs/collaboration.md)，再按 [功能地图](docs/index.md) 读取本任务相关 wiki；不要把历史聊天或旧交接当成当前仓库事实。
 
-## 每个会话的协作流程（必须执行）
+## 多会话协作
 
-### 开工与接手
+1. 新任务、接手和上下文压缩后，核对 `git status --short`、`git log -8 --oneline`、`git worktree list`、当前分支与 HEAD；按需查看相关提交、未提交 diff 和功能 wiki。以当前代码与 Git 为准，不要求用户重讲已有历史。
+2. 写入前在主工作区 [协作状态](docs/collaboration.md) 登记任务 ID、负责人/会话、实际 worktree、分支、起始 HEAD 与修改范围。一个 worktree 同时只有一个写入负责人；范围重叠先核实归属，其他执行者只读或使用独立 worktree。只读路由、评估无需占用文件，也不要擅自创建会话或派遣 agent。
+3. 改动范围、负责人或集成状态变化时更新登记；长任务在改共享文件和提交前重新核对状态。表格只是可见的协调约定，不是自动文件锁，也不会通知旧会话。不同 worktree 的同名文件不会自动同步；支线读取主工作区记录，主工作区已有写入负责人时由其串行更新公共记录，支线在自身提交中交代任务 ID，集成者汇总仍需接手的事项。
+4. 提交前复查 HEAD、status 与相关 diff；不覆盖、不丢弃、不顺手提交他人的改动，只暂存自己负责的文件。完成后移除当前任务行；普通已完成任务由清楚的提交信息和 Git 历史定位。仅在有未完成事项、特殊验证限制或难从代码与 wiki 看出的关键发现时，留下简短交接并标明提交、是否已集成和下一步。暂停或阻塞必须写清未提交文件归属。
 
-1. 新任务、接手续做、上下文压缩后恢复工作时，主动读取[协作记录](docs/collaboration.md)的当前任务和相关交接；读取相关功能 wiki。
-2. 检查 `git status --short`、`git log -8 --oneline`、`git worktree list`，记录所在工作区、分支和起始 HEAD。对相关近期提交用 `git show`，对已有未提交文件看 diff；不能把干净工作区当成没有其他 agent 在工作的证明。
-3. 动手前登记任务 ID、负责人/会话标识、工作区、分支、修改范围和状态。只读分析也登记为只读，不取得代码写入权。一个工作区同一时刻只有一个写入负责人；其他 agent 只读或用独立 worktree。重叠范围先核实归属，不覆盖、不丢弃、不顺手提交别人的改动。
-4. 不要求用户重新讲一遍已有历史；先自行读记录、代码和提交。只有这些证据仍无法解决的范围冲突或关键决策才向用户询问。不要擅自创建其他会话或派遣 agent。
-
-### 工作中与交接
-
-- 改动范围扩大、暂停、阻塞、转交时立即更新自己的任务记录。提交前再检查 HEAD、status 和相关 diff；发现意外变化先核对，不继续按旧上下文覆盖文件。
-- 完成时在同一协作记录留下简短交接：做了什么、相关提交/文档、验证结果、未验证内容、下一步、是否已集成，以及源码/构建/实际运行版本是否一致（涉及运行效果时）。未做的验证必须明说。
-- 提交只包含自己负责的文件，避免 `git add .`。协作记录随改动提交；记录本次提交时可写唯一任务 ID，并用 `git log --all --grep=<任务ID>` 定位包含该 ID 的提交，避免为了填写自身提交哈希反复提交。已有提交使用确切哈希。
-- 完成、暂停和交接状态必须真实；仅写方案不等于实现，仅分支提交不等于已集成。未知的其他任务状态标为待核实，不代替别的 agent 宣布完成。
-- `docs/collaboration.md` 是统一交接入口；功能行为仍更新对应 wiki，取舍写 decisions，用户变化写 CHANGELOG，本机流水账按下文追加。不要把全部 diff 或命令输出重复复制到多份文档。
-
-### 多 worktree 的可见性
-
-- 各 worktree 的同名文档是独立副本，不会实时互通。默认协调入口是主工作区 `MediaCrawler-main/docs/collaboration.md`；通过 `git worktree list` 核实实际路径，不依赖历史目录名猜测。
-- 支线开工必须读取主工作区的协调入口，再登记支线信息。主工作区有写入负责人时，由该负责人串行登记公共记录；支线不得并发改写主目录文件。支线在自身交接中保留任务 ID，集成负责人将交付状态汇总回公共入口。
-- 无法访问公共入口或联系负责人时，明确记录可见性限制；可先做独立只读检查，不把“看不到记录”视为文件无人占用。共享文件写入前解决冲突。
-- 协作表是交接约定，不是自动文件锁；它也不会主动通知已经运行的旧会话。长任务在修改相关文件和提交前重新查看当前任务记录。
+可选的只读任务路由者可以整理目标、约束、验收和待核实假设，但执行者须重新核对仓库；模型、推理等级和是否规划不写成仓库硬规则。功能现状写功能 wiki，长期取舍写 decisions，用户可感知变化写 CHANGELOG；协作状态只写接手必需的信息，不重复代码、测试输出或完整任务流水。
 
 ## 这个项目是什么
 
 「四野」：本地运行的中文社交平台聚合搜索工具。FastAPI 后端（`api/`）+ React 前端（`webui/`）
-+ Playwright 抓取（`aggregate_search/`、`media_platform/`）。只监听 `127.0.0.1:8080`，
++ Playwright 抓取（`aggregate_search/`、`media_platform/`）。默认监听 `127.0.0.1:8080`，
 用使用者本人的登录态去搜小红书 / 抖音 / B站 / 知乎。打包成两个 EXE 分发。
 
-## 知识库怎么用（两层，别搞混）
+## 文档各管什么
 
-| 层 | 位置 | 性质 | 写什么 |
-|---|---|---|---|
-| 流水账 | `.workbuddy/memory/YYYY-MM-DD.md` | 按天、只追加 | 今天做了什么、踩了什么坑 |
-| 功能 wiki | `docs/features/*.md` | 按功能、持续更新 | 这个功能是什么、入口在哪、为什么这样做、边界在哪 |
+| 位置 | 用途 | 更新时机 |
+|---|---|---|
+| `docs/collaboration.md` | 当前写入归属、未完成交接 | 接手前必须核对；完成后可删旧状态 |
+| `docs/features/*.md` | 当前功能行为与边界 | 行为变化时更新对应一份 |
+| `docs/decisions/` | 仍有价值的取舍原因 | 有重要取舍时更新 |
+| `CHANGELOG.md` | 用户可感知的版本变化 | 不记 agent 施工过程 |
+| `.workbuddy/memory/` | 本机可选笔记（不入库） | 不能作为跨会话交接依据 |
 
 - 想了解某个功能，**读 `docs/features/<功能>.md`**，不要靠翻流水账。
-- **一个功能一个文件**：改功能时顺手更新对应那一份。
+- **一个功能一个文件**：行为或边界变了才更新对应那一份。
 - **别在 wiki 里复述代码**（签名、字段表、配置项一律不写）——只写从代码里读不出来的东西。
 - 重要的取舍写进 `docs/decisions/`。
 
@@ -54,14 +42,12 @@
       修掉或新发现的坑改「已知坑 / 边界」。
       （纯内部重构、对外行为没变就跳过——别为了改而改。）
       **「代码入口」里不要写行号**（必漂移），只写文件路径 + 函数名。
-- [ ] 做了取舍 → 在 `docs/decisions/` 加一条（背景 / 选项 / 决定 / 后果 + 状态），
+- [ ] 做了重要且长期有效的取舍 → 在 `docs/decisions/` 加一条（背景 / 选项 / 决定 / 后果 + 状态），
       格式照 `docs/decisions/2026-09-14-登录方式取舍.md`。
 - [ ] 加了新功能 → 在 `docs/index.md` 加一行，并按 `docs/features/_TEMPLATE.md` 新建一份。
-- [ ] 在本机流水账 `.workbuddy/memory/YYYY-MM-DD.md` 追加当天记录（按日期，只追加）。
-      **注意：`.workbuddy/` 被 `.gitignore` 忽略，所以这只对本机有意义、评审时看不到**；
-      要让别人（或下一个 agent）看到的东西，必须写进 `docs/`。
+- [ ] 用户可感知变化更新 `CHANGELOG.md`；纯内部或文档调整不为凑记录而添加条目。
 - [ ] **改动已经提交**（见「硬规则」里那条"不许跨会话留未提交"）。
-- [ ] **协作记录已更新**：任务状态、交付定位、验证、未完成事项与集成状态明确，释放已完成任务的修改范围。
+- [ ] **协作状态已收尾**：释放已完成任务的修改范围；有未完成或接手关键信息时留简短交接。
 - [ ] **施工过程没有写进代码注释**：不要往代码里加 `Round 12`、`第 3 轮`、`Phase 4.2`
       这类"我是第几轮做的"标记 —— 那是 **commit message 的内容，不是代码的内容**。
       它对新读者零信息量，却在 67 个文件里累积了 200+ 处噪音。
@@ -95,14 +81,9 @@
   不要和行为改动混在一起。分开之后，与别人并行改动撞车时冲突会停在**文本级**；
   混在一起就变成**语义级**冲突 —— git 只会说"这两个 hunk 撞了"，帮不上忙。
 
-## 文件所有权（并行开发时的互斥表）
+## 并行改动与合并
 
-**同一时刻只允许一个 agent 在一个路径范围内有未提交改动。** 下表是工作区角色约定；实际负责人、占用范围与交接统一登记在 `docs/collaboration.md`，不另维护第二份动态名单。
-
-| 范围 | 归谁 | 说明 |
-|---|---|---|
-| 主目录 `MediaCrawler-main/` 的**全部**改动 | 主工作区负责人 | master 上不要出现两个来源的未提交改动 |
-| 支线目录 `MediaCrawler-side-tasks/` | 支线负责人 | 开工前 `git status` 必须干净 |
+实际负责人和范围只在 `docs/collaboration.md` 登记；不要用固定目录名或干净的 `git status` 推断某路径无人工作。支线开工前检查本 worktree 是否干净；主工作区不混入两个来源的未提交改动。
 
 **历史上最容易撞车的文件**（改它们之前先确认对方没有在改）：
 `api/routers/search.py`、`api/services/accounts.py`、`api/services/search_job_manager.py`、
@@ -112,83 +93,10 @@
 并且合并方向固定为：**在功能分支上 `git merge master`，解完跑全量测试，绿了再快进合回 master**。
 这样 master 全程可发布。
 
-## 在这台机器上干活（环境坑，都踩过了）
+## 本机环境
 
-- **bash 里跑 npm 会被拦，PowerShell 里完全不会。** 真正被拦的是 `wsl.exe`（安全中心的程序黑名单）：
-  bash 执行 `npm` 会解析到无扩展名的 Unix shell 脚本（`C:\Program Files\nodejs\npm`，与
-  `npm.cmd` / `npm.ps1` 并列），进而触发 WSL，于是报 "PROGRAM BLOCKED BY SECURITY POLICY"。
-  **PowerShell 里 npm 是好的**：`npm --version` = 10.9.7、`npm view <pkg> version` 能连 registry、
-  `npm install --save-dev <pkg>` 也能跑。所以前端命令**用 PowerShell 跑就行**，
-  不必绕 node 绝对路径。`scripts/build_exe.ps1` 是 .ps1，里面的 `npm ci` / `npm run build` 同样没事。
-- **同一个根因让 bash 工具基本不可用**：WorkBuddy 的 bash shim
-  `shell-runtime-bash-env.sh` 第 3 行 `dirname` 就失败，PATH 整个是坏的，
-  于是 `grep` / `find` / `head` 全部 "command not found"。**排查环境时别指望 bash，用 PowerShell。**
-- **pytest 写不进系统 Temp**，必须带项目内临时目录：`--basetemp=.tmp_pytest_xxx`。
-  **而且每次都要换新的子目录**（`--basetemp=.tmp_pytest_run/r<时间戳>`，父目录先建好）——
-  复用同一目录会触发沙箱的 safe-delete 批量保护，报成上百个 setup ERROR 的**假回归**。
-- **全量 pytest 会超过命令的默认超时（120 秒）**：套件已经涨到 1000+ 个用例，
-  实测一批就要 107 秒，**整跑会在跑到 80% 左右被掐断，而且看不到任何失败信息**
-  （表现为 exit 1 + 输出停在半路，很容易误判成"某个测试崩了"）。
-  两个办法：跑的时候显式给更长的 timeout，或者**按文件分两批跑**
-  （用 `--ignore=<后半批文件>` 跑前半，再单独跑后半），合起来覆盖全部用例。
-  `.tmp_*` 已在 `.git/info/exclude` 里，临时脚本不会被误提交。
-- **shell 会 mangle 带斜杠的参数**：`git branch feat/x` 会静默失败并报 `fatal: invalid reference`。
-  **可靠做法：用 Python `subprocess.run(['git', ...])` 调 git**（这一轮全程这么做，稳定），
-  分支名用连字符。
-- **Bash 工具的双引号里不要出现反引号**：bash 会当命令替换执行、静默吃掉内容。
-  复杂脚本一律用 Write 落盘再跑。
-- Python 用 `.venv/Scripts/python.exe`（该 venv 由 uv 建，原本没有 pip）。
-- **前端 `src/lib` 之间的 import 必须带 `.js` 后缀**（编译产物是原生 ESM）：
-  `tsc` 不会报错，只有 `run-compiled-tests.mjs` 会以 `ERR_MODULE_NOT_FOUND` 暴露。
-- **`git pull/push` 需要本机代理 `127.0.0.1:7890` 在跑**（git 里配了 `http.proxy`）；
-  代理没起时会报 "Failed to connect to github.com port 443"。离线时用
-  `git bundle create <项目外的路径>.bundle <branch>` 做本地备份。
-- **代理起来了 push 仍可能失败**：`credential.helper` 里有 `manager`（Git Credential Manager），
-  它在无交互环境会尝试弹窗、然后 git **静默返回 128 且不打印任何错误**（`git ls-remote` 却正常，
-  因为读操作不要凭据 —— 很容易误判成网络问题）。可靠推法是绕开它、直接用 gh 的 token：
+运行命令、临时目录和构建工具的本机注意事项见 [仓库地图](docs/repository-map.md#本机环境)。
 
-  ```powershell
-  $t = (gh auth token).Trim()
-  git push "https://$t@github.com/<owner>/<repo>.git" <branch>
-  ```
+## 多 worktree 运行
 
-  另外 **PowerShell 下 git 的 stderr 会被转成 ErrorRecord**，`git ... 2>&1 | Out-File` 经常拿到空文件，
-  排查时先把结果存进变量（`$r = git ... 2>&1`）再写文件。`cmd /c` 在本工具里被禁，别指望它。
-- **agent 沙箱里 `refs/remotes/**` 可能写不进去**：`git fetch` 会报成功，
-  但 `git branch -vv` 里上游仍显示 `[origin/xxx: gone]`、`git rev-parse origin/master` 报
-  `fatal: Needed a single revision`。**这是沙箱的限制，不是仓库损坏**（对照实验：写到
-  `refs/tags/` 能持久、Python 直接写文件也成功，只有 `refs/remotes` 被丢弃）。
-  要拉取更新就用 `git fetch origin <branch>` + `git merge FETCH_HEAD`，别依赖 remote-tracking ref。
-
-## 工作区与合并（2026-09-14）
-
-| 位置 | 分支 | 负责 | 内容 |
-|---|---|---|---|
-| `MediaCrawler-main/` | `master` | 主工作区 | 收藏、托盘与扫码登录在此集成；日常运行统一使用 dist |
-| `MediaCrawler-side-tasks/`（git worktree） | `side-tasks` | 支线任务工作区 | 独立目录、独立端口（8090）；**第一个支线任务是「应用自带扫码登录」，已合入 master**；下一个支线从这里开分支 |
-
-两个目录**共用一个 `.git`**（`MediaCrawler-main/.git`），可以分别提交，不需要 push/pull。
-并行开发用 `SIYE_PORT` 显式分配端口；产品默认 8080，扩展目前只支持该端口。
-
-⚠️ **共用 `.git` 的三条注意事项**（踩过）：
-
-1. **切目录 ≠ 切分支**：每个 worktree 有自己的 HEAD，在一边 `checkout` 不会影响另一边 ——
-   但**同一个分支不能在两个 worktree 同时检出**。要动 master 就去主目录动。
-2. **一边的操作会改共用元数据**：例如 `git worktree prune`、`git gc`、改 `.git/config`
-   影响的是两个目录。**在该目录存在未提交改动时，别在任何一个目录里跑 prune / reset --hard。**
-3. **`git worktree list` 里的记录目录名可能是旧的**（当前记录仍叫 `MediaCrawler-scanlogin`，
-   是本 worktree 旧名）。那只影响内部命名，**不要手动删它**：
-   删了就丢掉 worktree 身份。目录改名后若看到 `prunable`，用
-   `git worktree repair "<新目录路径>"` 修（它只重写一行 `gitdir` 指针）。
-
-### 支线任务 worktree 怎么启动
-
-`MediaCrawler.bat` 的**产品行为不变**：存在 `dist\SiYe\四野.exe` 就直接启动它。
-（原来还有一个内容与它逐字节相同的 `启动.bat`，2026-09-14 已删 —— 双击 `MediaCrawler.bat` 即可。）
-**没有打包产物时**（开发用 worktree 通常如此）回退到 `启动-源码.bat` —— 从源码起后端，
-**端口默认 8090**（本目录专用，避免和主目录的 8080 撞车），可用 `SIYE_PORT` 覆盖。
-
-- 端口只有 `base/server_port.py` 一处解析（`api/main.py`、`desktop_main.py`、`tray_main.py`、
-  `scripts/start.ps1 -Port`、vite dev 代理都读它）。
-- 浏览器扩展仍固定 8080，所以换端口的实例请用内置扫码登录，不要用扩展同步。
-- 想临时换端口：`set SIYE_PORT=8123` 后再双击启动。
+实际路径与分支以 `git worktree list` 为准；worktree 共用 Git 元数据，但各自有独立 HEAD 和工作文件，同一分支不能在两个 worktree 同时检出。不要在有未提交改动的 worktree 上做 prune、reset 等清理。启动入口与目录职责见 [仓库地图](docs/repository-map.md)。并行运行时用 `SIYE_PORT` 分配不同端口；产品默认 8080，浏览器扩展目前只支持 8080。
