@@ -8,7 +8,6 @@
 
 | 任务 ID | 负责人 / 会话 | worktree / 分支 / 起始 HEAD | 修改范围 | 状态 / 下一步 |
 |---|---|---|---|---|
-| `V1-RELEASE-20260924` | 当前 Codex 会话 | 主工作区 `C:\Users\Kellen\Desktop\MediaCrawler-main` / `codex/v1-release-lock-20260924` / `eba68fbd2ed62a6be07926c5fa3fe48e78c74a61` | `uv.lock`、本页发布交接；新候选的隔离构建及验证 | 正在修正锁文件漂移，确定新候选；自动与人工门槛通过前不推送 `master` 或 tag。 |
 
 ## 待接手事项
 
