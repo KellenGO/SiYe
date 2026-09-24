@@ -8,7 +8,7 @@
 
 | 任务 ID | 负责人 / 会话 | worktree / 分支 / 起始 HEAD | 修改范围 | 状态 / 下一步 |
 |---|---|---|---|---|
-| `V1-RELEASE-20260924` | 当前 Codex 会话 | 主工作区 `C:\Users\Kellen\Desktop\MediaCrawler-main` / `codex/v1-release-lock-20260924` / `eba68fbd2ed62a6be07926c5fa3fe48e78c74a61` | `uv.lock`、本页发布交接；新候选的隔离构建及验证 | 正在修正锁文件漂移，确定新候选；自动与人工门槛通过前不推送 `master` 或 tag。 |
+| `V1-RELEASE-20260924` | 当前 Codex 会话，待用户人工验收 | 主工作区 `C:\Users\Kellen\Desktop\MediaCrawler-main` / `codex/v1-release-lock-20260924` / `eba68fbd2ed62a6be07926c5fa3fe48e78c74a61` | `uv.lock`、本页发布交接；候选构建在忽略目录 | 发布候选 `f1b8558770641ce2a2191b46aec7106824802633` 已通过锁检查、PR #1 完整 CI、Actions 运行 `36020843301` 的全新构建与 EXE/安装器 clean-room；本机正常权限复核也通过（沙箱内安装器退出 4）。托盘及四平台真实账号验收待用户回报；不得推 `master`、tag 或发布。候选资产在 `.tmp_release_f1b8558_artifact/`，收到通过后重核远程状态。 |
 
 ## 待接手事项
 
