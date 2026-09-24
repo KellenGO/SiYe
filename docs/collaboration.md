@@ -8,6 +8,7 @@
 
 | 任务 ID | 负责人 / 会话 | worktree / 分支 / 起始 HEAD | 修改范围 | 状态 / 下一步 |
 |---|---|---|---|---|
+| `V1-RELEASE-20260924` | Codex / 当前发布任务 | `C:/Users/Kellen/Desktop/MediaCrawler-main` / `master` / `5a3f5f5` | `docs/collaboration.md`；隔离构建 worktree 的生成文件 | 核对发布门槛；取得实机与真实账号验收后才推送 tag。 |
 
 ## 待接手事项
 
