@@ -7,9 +7,9 @@
 
 历史上一版号写在五处（`pyproject.toml`、`api/main.py` 两处、
 `api/services/environment_health.py`、`webui/package.json`），发版时改一个漏一个。
-这里只留一处 Python 常量，另外两处由 `tests/test_version_consistency.py` 盯着对齐：
+这里只留一处 Python 常量，另外两处由 `tests/test_repo_hygiene.py` 盯着对齐：
 
-- ``pyproject.toml`` —— 打包与安装器读它（`scripts/build_exe.ps1`），是发版的真值；
+- ``pyproject.toml`` —— 打包脚本读取它并写入 ``RELEASE_VERSION``，安装器再读取该文件；
 - ``webui/package.json`` —— 前端版本，用于前后端版本匹配检查。
 
 改版本的顺序是：**先改这三处 → 提交 → 再打 tag**。`scripts/build_exe.ps1`

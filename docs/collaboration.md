@@ -13,7 +13,9 @@
 
 仅保留未集成、未完成、阻塞、归属不明的改动，或代码和 wiki 难以重建的验证限制。每项用任务 ID 或提交定位，写清现状、下一步和负责人；解决后删除。不替其他会话宣布完成。
 
-当前无已登记的待接手事项；这不证明其他 worktree 或未登记的会话没有工作。接手前仍要看 `git worktree list`、各相关 worktree 的 status 与最新提交。
+- `V1-RELEASE-READINESS-20260924`：本地 `master` 的 v1.0.0 发行包通过 EXE 与安装器 clean-room；本次不推送、不打 tag、不发布。当前提交的 GitHub Actions 尚未运行；本机用 Python 3.12 构建，工作流指定 3.11。发布执行者需在实际发布前核对该提交的 CI 结果，并按功能 wiki 完成托盘窗口/菜单及真实平台账号的人工实机验收。构建产物仅在本地忽略的 `dist/`。
+
+这不证明其他 worktree 或未登记的会话没有工作。接手前仍要看 `git worktree list`、各相关 worktree 的 status 与最新提交。
 
 ## 留记录的边界
 

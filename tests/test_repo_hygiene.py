@@ -172,8 +172,8 @@ def test_product_version_is_declared_consistently():
 
     为什么需要这条：``/api/health`` 拿 webui 的版本和后端版本比对，
     不一致就报 degraded（前端读 ``version_match``）；而发行包里的 ``RELEASE_VERSION``
-    又由 ``.github/workflows/release-package.yml`` 从 **git tag** 写入（带
-    ``--verify-tag``）。三处不齐时，用户看到的版本、健康检查的结论、发行包里的版本
+    由 ``scripts/build_exe.ps1`` 从 ``pyproject.toml`` 写入，tag 构建时还会校验
+    tag 与该版本一致。三处不齐时，用户看到的版本、健康检查的结论、发行包里的版本
     会互相矛盾（2026-09-15 之前 pyproject 写 0.1.0、另两处写 1.0.0）。
 
     运行时读的是 ``base/app_version.py`` 的 ``APP_VERSION``（``api/main.py`` 与
@@ -196,7 +196,7 @@ def test_product_version_is_release_shaped():
 def test_tagged_commit_declares_the_tagged_version():
     """HEAD 上打了 tag 时，声明的产品版本必须与该 tag 对得上。
 
-    tag 是发布版本的真正来源（CI 在 tag 上跑 release-package.yml 并带 --verify-tag）。
+    CI 在 tag 上跑 release-package.yml；构建脚本也会核对 tag 与项目版本。
     当前提交没打 tag 时直接返回 —— 大多数提交都如此。
     """
     tags = [line.strip() for line in _git("tag", "--points-at", "HEAD").splitlines()
