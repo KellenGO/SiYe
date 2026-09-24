@@ -8,13 +8,12 @@
 
 | 任务 ID | 负责人 / 会话 | worktree / 分支 / 起始 HEAD | 修改范围 | 状态 / 下一步 |
 |---|---|---|---|---|
-| `V1-RELEASE-20260924` | Codex / 当前发布任务 | `C:/Users/Kellen/Desktop/MediaCrawler-main` / `master` / `5a3f5f5` | `docs/collaboration.md`；隔离构建 worktree 的生成文件 | 核对发布门槛；取得实机与真实账号验收后才推送 tag。 |
 
 ## 待接手事项
 
 仅保留未集成、未完成、阻塞、归属不明的改动，或代码和 wiki 难以重建的验证限制。每项用任务 ID 或提交定位，写清现状、下一步和负责人；解决后删除。不替其他会话宣布完成。
 
-- `V1-RELEASE-READINESS-20260924`：本地 `master` 的 v1.0.0 发行包通过 EXE 与安装器 clean-room；本次不推送、不打 tag、不发布。当前提交的 GitHub Actions 尚未运行；本机用 Python 3.12 构建，工作流指定 3.11。发布执行者需在实际发布前核对该提交的 CI 结果，并按功能 wiki 完成托盘窗口/菜单及真实平台账号的人工实机验收。构建产物仅在本地忽略的 `dist/`。
+- `V1-RELEASE-20260924`：先前候选提交 `cdc2c25` 尚未推送、打 tag 或发布。隔离工作区 `.tmp_release_v1_build` 上的首项门槛 `uv lock --check` 失败：`pyproject.toml` 为 `1.0.0`，`uv.lock` 的项目版本仍为 `0.2.2`；发布工作流也会执行该检查。未改锁文件，未重新构建或完成人工验收。旧 `dist/` 保持原样，不可作本候选提交资产。下一步先处理锁文件漂移，确定新的发布提交，再重跑全部自动门槛与托盘、四平台真实账号验收；通过后才可推送 master 与 `v1.0.0` tag。隔离 worktree 仅有忽略的 uv 缓存，无未提交跟踪文件。
 
 这不证明其他 worktree 或未登记的会话没有工作。接手前仍要看 `git worktree list`、各相关 worktree 的 status 与最新提交。
 
