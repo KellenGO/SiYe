@@ -8,12 +8,11 @@
 
 | 任务 ID | 负责人 / 会话 | worktree / 分支 / 起始 HEAD | 修改范围 | 状态 / 下一步 |
 |---|---|---|---|---|
+| `V1-RELEASE-20260924` | 当前 Codex 会话 | 主工作区 `C:\Users\Kellen\Desktop\MediaCrawler-main` / `codex/v1-release-lock-20260924` / `eba68fbd2ed62a6be07926c5fa3fe48e78c74a61` | `uv.lock`、本页发布交接；新候选的隔离构建及验证 | 正在修正锁文件漂移，确定新候选；自动与人工门槛通过前不推送 `master` 或 tag。 |
 
 ## 待接手事项
 
 仅保留未集成、未完成、阻塞、归属不明的改动，或代码和 wiki 难以重建的验证限制。每项用任务 ID 或提交定位，写清现状、下一步和负责人；解决后删除。不替其他会话宣布完成。
-
-- `V1-RELEASE-20260924`：先前候选提交 `cdc2c25` 尚未推送、打 tag 或发布。隔离工作区 `.tmp_release_v1_build` 上的首项门槛 `uv lock --check` 失败：`pyproject.toml` 为 `1.0.0`，`uv.lock` 的项目版本仍为 `0.2.2`；发布工作流也会执行该检查。未改锁文件，未重新构建或完成人工验收。旧 `dist/` 保持原样，不可作本候选提交资产。下一步先处理锁文件漂移，确定新的发布提交，再重跑全部自动门槛与托盘、四平台真实账号验收；通过后才可推送 master 与 `v1.0.0` tag。隔离 worktree 仅有忽略的 uv 缓存，无未提交跟踪文件。
 
 这不证明其他 worktree 或未登记的会话没有工作。接手前仍要看 `git worktree list`、各相关 worktree 的 status 与最新提交。
 
