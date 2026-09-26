@@ -16,19 +16,57 @@
 from __future__ import annotations
 
 import json
+import base64
+import binascii
 import sqlite3
 import threading
+from io import BytesIO
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 from urllib.parse import urlsplit
+from uuid import uuid4
+
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 from .favorite_snapshot import decode_metrics, encode_metrics, merge_into_result
 from .sqlite_base import RESULT_FIELDS, SqliteStoreBase, default_db_path, utc_now
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 MAX_NOTE_LENGTH = 1000
+MAX_COLLECTION_DESCRIPTION = 200
+MAX_COVER_BYTES = 5 * 1024 * 1024
 MAX_ITEMS = 500
 SYSTEM_COLLECTIONS = {"default": "默认收藏夹", "watch_later": "稍后再看"}
 RESERVED_COLLECTION_NAMES = {"全部", "全部收藏", *SYSTEM_COLLECTIONS.values()}
+
+
+def _prepare_collection_cover(data_url: str) -> bytes:
+    """Validate and resize a user-picked image before storing it in the library."""
+    if not data_url.startswith("data:image/") or ";base64," not in data_url:
+        raise ValueError("请选择图片文件作为封面")
+    encoded = data_url.split(";base64,", 1)[1]
+    if len(encoded) > (MAX_COVER_BYTES * 4 // 3) + 8:
+        raise ValueError("封面图片不能超过 5 MB")
+    try:
+        raw = base64.b64decode(encoded, validate=True)
+        if len(raw) > MAX_COVER_BYTES:
+            raise ValueError("封面图片不能超过 5 MB")
+        with Image.open(BytesIO(raw)) as source:
+            if source.width * source.height > 40_000_000:
+                raise ValueError("封面图片尺寸过大")
+            image = ImageOps.exif_transpose(source)
+            image.thumbnail((1200, 1200))
+            if image.mode != "RGB":
+                background = Image.new("RGB", image.size, "white")
+                if "A" in image.getbands():
+                    background.paste(image, mask=image.getchannel("A"))
+                else:
+                    background.paste(image.convert("RGB"))
+                image = background
+            output = BytesIO()
+            image.save(output, format="JPEG", quality=85, optimize=True)
+            return output.getvalue()
+    except (binascii.Error, UnidentifiedImageError, OSError, Image.DecompressionBombError) as error:
+        raise ValueError("封面图片无法读取") from error
 
 _LIBRARY_SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -39,6 +77,9 @@ CREATE TABLE IF NOT EXISTS meta (
 CREATE TABLE IF NOT EXISTS collections (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     name       TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    description TEXT NOT NULL DEFAULT '',
+    cover_image BLOB,
+    cover_token TEXT,
     position   INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
 );
@@ -117,6 +158,13 @@ class LibraryStore(SqliteStoreBase):
                   AND NOT EXISTS (SELECT 1 FROM item_collections ic WHERE ic.item_id = items.id)
                 """
             )
+        collection_columns = {row["name"] for row in conn.execute("PRAGMA table_info(collections)").fetchall()}
+        if "description" not in collection_columns:
+            conn.execute("ALTER TABLE collections ADD COLUMN description TEXT NOT NULL DEFAULT ''")
+        if "cover_image" not in collection_columns:
+            conn.execute("ALTER TABLE collections ADD COLUMN cover_image BLOB")
+        if "cover_token" not in collection_columns:
+            conn.execute("ALTER TABLE collections ADD COLUMN cover_token TEXT")
         self._enable_wal(conn)
         conn.execute(
             "INSERT INTO meta (key, value) VALUES ('schema_version', ?) "
@@ -411,7 +459,7 @@ class LibraryStore(SqliteStoreBase):
         with self._conn() as conn:
             rows = conn.execute(
                 """
-                SELECT c.id, c.name, c.position, c.created_at,
+                SELECT c.id, c.name, c.description, c.cover_token, c.position, c.created_at,
                        (SELECT COUNT(*) FROM item_collections ic WHERE ic.collection_id = c.id) AS item_count
                 FROM collections c
                 ORDER BY c.position ASC, c.id ASC
@@ -421,6 +469,8 @@ class LibraryStore(SqliteStoreBase):
                 {
                     "id": int(row["id"]),
                     "name": row["name"],
+                    "description": row["description"],
+                    "cover_url": f'/api/library/collections/{row["id"]}/cover?v={row["cover_token"]}' if row["cover_token"] else None,
                     "position": int(row["position"]),
                     "created_at": row["created_at"],
                     "item_count": int(row["item_count"]),
@@ -446,6 +496,48 @@ class LibraryStore(SqliteStoreBase):
             )
             collection_id = int(cursor.lastrowid)
         return {"id": collection_id, "name": name, "position": int(position), "item_count": 0}
+
+    def get_collection_cover(self, collection_id: int) -> Optional[bytes]:
+        with self._conn() as conn:
+            row = conn.execute("SELECT cover_image FROM collections WHERE id = ?", (collection_id,)).fetchone()
+        return bytes(row["cover_image"]) if row and row["cover_image"] is not None else None
+
+    def update_collection_info(
+        self, collection_id: int, name: str, description: str,
+        cover_data: Optional[str] = None, remove_cover: bool = False,
+    ) -> Dict[str, Any]:
+        name = (name or "").strip()
+        description = (description or "").strip()
+        if not name:
+            raise ValueError("收藏夹名称不能为空")
+        if len(name) > 60:
+            raise ValueError("收藏夹名称最长 60 个字")
+        if len(description) > MAX_COLLECTION_DESCRIPTION:
+            raise ValueError("收藏夹简介最长 200 个字")
+        if cover_data and remove_cover:
+            raise ValueError("不能同时更换和移除封面")
+        cover = _prepare_collection_cover(cover_data) if cover_data else None
+        with self._conn(write=True) as conn:
+            conflict = conn.execute(
+                "SELECT id FROM collections WHERE name = ? AND id <> ?", (name, collection_id)
+            ).fetchone()
+            if conflict:
+                raise ValueError(f'收藏夹「{name}」已存在')
+            row = conn.execute("SELECT id, name FROM collections WHERE id = ?", (collection_id,)).fetchone()
+            if row is None:
+                raise ValueError("收藏夹不存在")
+            if name.casefold() in {item.casefold() for item in RESERVED_COLLECTION_NAMES} and name.casefold() != row["name"].casefold():
+                raise ValueError(f'「{name}」是系统收藏夹名称')
+            conn.execute(
+                "UPDATE collections SET name = ?, description = ? WHERE id = ?",
+                (name, description, collection_id),
+            )
+            if cover is not None or remove_cover:
+                conn.execute(
+                    "UPDATE collections SET cover_image = ?, cover_token = ? WHERE id = ?",
+                    (cover, uuid4().hex if cover is not None else None, collection_id),
+                )
+        return next(item for item in self.list_collections() if item["id"] == collection_id)
 
     def ensure_imported_collection(self, name: str) -> Dict[str, Any]:
         """Restore a historical custom folder, including names now reserved by the UI."""
@@ -608,10 +700,15 @@ class LibraryStore(SqliteStoreBase):
                 self._row_to_item(row, self._collections_of(conn, int(row["id"])))
                 for row in rows
             ]
+        collections = self.list_collections()
+        for collection in collections:
+            cover = self.get_collection_cover(collection["id"])
+            if cover is not None:
+                collection["cover_data"] = "data:image/jpeg;base64," + base64.b64encode(cover).decode("ascii")
         return {
-            "version": 4,
+            "version": 5,
             "exported_at": utc_now(),
-            "collections": self.list_collections(),
+            "collections": collections,
             "items": items,
         }
 
@@ -628,12 +725,13 @@ class LibraryStore(SqliteStoreBase):
         - v2（旧本机库导出）：额外带 ``collections`` 与条目内嵌的 ``collections`` 名称；
         - v3：再保存两个内置收藏夹的独立归属；
         - v4：额外保存「是否已收藏」（`saved`，决定它出现在不在「全部」里）。
+        - v5：收藏夹还带简介及自定义封面。
         """
         raw_items = payload.get("items")
         if not isinstance(raw_items, list):
             raise ValueError("备份文件格式不正确：缺少 items 数组")
         version = payload.get("version", 1)
-        if version not in (1, 2, 3, 4):
+        if version not in (1, 2, 3, 4, 5):
             raise ValueError("暂不支持这个备份版本")
         folders = payload.get("collections") or []
         if not isinstance(folders, list):
@@ -650,7 +748,14 @@ class LibraryStore(SqliteStoreBase):
             if not name:
                 continue
             existing = next((c for c in self.list_collections() if c["name"].lower() == name.lower()), None)
-            name_to_id[name.lower()] = existing["id"] if existing else self.ensure_imported_collection(name)["id"]
+            collection_id = existing["id"] if existing else self.ensure_imported_collection(name)["id"]
+            name_to_id[name.lower()] = collection_id
+            if version >= 5 and not existing:
+                description = entry.get("description", "")
+                cover_data = entry.get("cover_data")
+                if not isinstance(description, str) or (cover_data is not None and not isinstance(cover_data, str)):
+                    raise ValueError("收藏夹信息格式无效")
+                self.update_collection_info(collection_id, name, description, cover_data)
 
         entries: List[Dict[str, Any]] = []
         for raw in raw_items:

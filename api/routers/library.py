@@ -19,11 +19,12 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 from ..schemas.library import (
     CollectionBatchInput,
     CollectionCreate,
+    CollectionInfoUpdate,
     CollectionRename,
     LibraryImportInput,
     LibraryItemInput,
@@ -195,6 +196,28 @@ def create_collection(
     """新建收藏夹。"""
     try:
         return store.create_collection(payload.name)
+    except ValueError as error:
+        raise _bad_request(error)
+
+
+@library_router.get("/collections/{collection_id}/cover")
+def collection_cover(collection_id: int, store: LibraryStore = Depends(get_library_store)) -> Response:
+    cover = store.get_collection_cover(collection_id)
+    if cover is None:
+        raise HTTPException(status_code=404, detail="收藏夹封面不存在")
+    return Response(content=cover, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=31536000, immutable"})
+
+
+@library_router.put("/collections/{collection_id}/info")
+def update_collection_info(
+    collection_id: int,
+    payload: CollectionInfoUpdate,
+    store: LibraryStore = Depends(get_library_store),
+) -> Dict[str, Any]:
+    try:
+        return store.update_collection_info(
+            collection_id, payload.name, payload.description, payload.cover_data, payload.remove_cover,
+        )
     except ValueError as error:
         raise _bad_request(error)
 

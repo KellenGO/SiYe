@@ -72,6 +72,8 @@ export interface LibraryItem {
 
 export interface LibraryCollection extends LibraryTag {
   item_count: number;
+  description: string;
+  coverUrl: string | null;
 }
 
 export interface LibraryStats {
@@ -148,6 +150,8 @@ export function toCollections(raw: unknown): LibraryCollection[] {
       id: Number(row.id) || 0,
       name: String(row.name ?? ""),
       item_count: Number(row.item_count) || 0,
+      description: typeof row.description === "string" ? row.description : "",
+      coverUrl: typeof row.cover_url === "string" ? row.cover_url : null,
     }))
     .filter((row) => row.id > 0 && row.name.length > 0);
 }
@@ -182,10 +186,10 @@ export function decideMigration(args: {
   return { shouldOffer: count > 0, count };
 }
 
-/** 备份文件体积/格式校验（10 MB），返回给后端导入的 payload。 */
+/** 备份文件体积/格式校验（64 MB），返回给后端导入的 payload。 */
 export function parseBackupFile(raw: string): unknown {
   if (new TextEncoder().encode(raw).length > MAX_BACKUP_BYTES) {
-    throw new Error("收藏备份不能超过 10 MB");
+    throw new Error("收藏备份不能超过 64 MB");
   }
   let parsed: unknown;
   try {
@@ -339,7 +343,18 @@ export async function updateNote(key: string, note: string): Promise<void> {
 
 export async function createCollection(name: string): Promise<LibraryCollection> {
   const { data } = await axios.post(`${LIBRARY_API_BASE}/collections`, { name });
-  return { id: Number(data.id) || 0, name: String(data.name ?? name), item_count: Number(data.item_count) || 0 };
+  return { id: Number(data.id) || 0, name: String(data.name ?? name), item_count: Number(data.item_count) || 0, description: "", coverUrl: null };
+}
+
+export async function updateCollectionInfo(id: number, draft: {
+  name: string; description: string; coverData?: string; removeCover?: boolean;
+}): Promise<void> {
+  await axios.put(`${LIBRARY_API_BASE}/collections/${id}/info`, {
+    name: draft.name,
+    description: draft.description,
+    ...(draft.coverData ? { cover_data: draft.coverData } : {}),
+    ...(draft.removeCover ? { remove_cover: true } : {}),
+  });
 }
 
 export async function renameCollection(id: number, name: string): Promise<void> {

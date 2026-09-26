@@ -13,10 +13,13 @@
 from __future__ import annotations
 
 import json
+import base64
 import sqlite3
+from io import BytesIO
 from pathlib import Path
 
 import pytest
+from PIL import Image
 
 from api.services.library_store import MAX_NOTE_LENGTH, LibraryStore, _LIBRARY_SCHEMA
 
@@ -179,7 +182,7 @@ def test_export_then_import_roundtrip(store: LibraryStore) -> None:
     store.add_item(_result(content_id="b"), note="备注 B")
 
     payload = store.export_payload()
-    assert payload["version"] == 4
+    assert payload["version"] == 5
     assert len(payload["items"]) == 2
 
     fresh = LibraryStore(store.db_path.parent / "restored.db")
@@ -192,6 +195,45 @@ def test_export_then_import_roundtrip(store: LibraryStore) -> None:
     assert restored is not None
     assert restored["note"] == "备注 A"
     assert [c["name"] for c in restored["collections"]] == ["我的夹"]
+
+
+def test_collection_info_cover_and_backup_roundtrip(store: LibraryStore) -> None:
+    folder = store.create_collection("学习")
+    output = BytesIO()
+    Image.new("RGB", (1600, 900), "#3276ba").save(output, format="PNG")
+    cover_data = "data:image/png;base64," + base64.b64encode(output.getvalue()).decode("ascii")
+
+    updated = store.update_collection_info(folder["id"], "学习资料", "前端与设计", cover_data)
+    assert updated["description"] == "前端与设计"
+    assert updated["cover_url"].startswith(f'/api/library/collections/{folder["id"]}/cover?v=')
+    cover = store.get_collection_cover(folder["id"])
+    assert cover is not None
+    with Image.open(BytesIO(cover)) as image:
+        assert image.format == "JPEG"
+        assert image.size == (1200, 675)
+
+    payload = store.export_payload()
+    assert payload["collections"][0]["cover_data"].startswith("data:image/jpeg;base64,")
+    fresh = LibraryStore(store.db_path.parent / "info-restored.db")
+    fresh.import_payload(json.loads(json.dumps(payload)))
+    restored = fresh.list_collections()[0]
+    assert restored["name"] == "学习资料"
+    assert restored["description"] == "前端与设计"
+    assert fresh.get_collection_cover(restored["id"]) == cover
+
+    fresh.update_collection_info(restored["id"], "学习资料", "", remove_cover=True)
+    assert fresh.list_collections()[0]["cover_url"] is None
+    assert fresh.get_collection_cover(restored["id"]) is None
+
+
+def test_collection_info_rejects_bad_cover_without_partial_update(store: LibraryStore) -> None:
+    folder = store.create_collection("资料")
+    with pytest.raises(ValueError, match="封面图片无法读取"):
+        store.update_collection_info(folder["id"], "改名", "简介", "data:image/png;base64,AAAA")
+    assert store.list_collections()[0]["name"] == "资料"
+    assert store.list_collections()[0]["description"] == ""
+    with pytest.raises(ValueError, match="最长 200"):
+        store.update_collection_info(folder["id"], "资料", "太长" * 101)
 
 
 def test_saved_outlives_leaving_the_default_folder(store: LibraryStore) -> None:
@@ -258,6 +300,21 @@ def test_legacy_database_gets_saved_backfilled(tmp_path: Path) -> None:
     assert store.get_item("xhs", "kept")["saved"] is True
     assert store.get_item("xhs", "later-only")["saved"] is False
     assert store.stats()["saved_count"] == 1
+
+
+def test_legacy_collections_gain_info_columns_without_losing_folders(tmp_path: Path) -> None:
+    legacy_schema = _LIBRARY_SCHEMA.replace("    description TEXT NOT NULL DEFAULT '',\n", "")
+    legacy_schema = legacy_schema.replace("    cover_image BLOB,\n", "").replace("    cover_token TEXT,\n", "")
+    path = tmp_path / "legacy-collections.db"
+    with sqlite3.connect(path) as conn:
+        conn.executescript(legacy_schema)
+        conn.execute("INSERT INTO collections (name, position, created_at) VALUES (?, ?, ?)", ("旧收藏夹", 1, "2026-09-01"))
+
+    collections = LibraryStore(path).list_collections()
+    assert len(collections) == 1
+    assert collections[0]["name"] == "旧收藏夹"
+    assert collections[0]["description"] == ""
+    assert collections[0]["cover_url"] is None
 
 
 def test_system_collections_are_independent_and_removal_keeps_item(store: LibraryStore) -> None:

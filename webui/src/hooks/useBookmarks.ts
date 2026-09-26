@@ -37,6 +37,7 @@ import {
   renameCollection as apiRenameCollection,
   toAddPayload,
   updateNote,
+  updateCollectionInfo as apiUpdateCollectionInfo,
   type LibraryCollection,
   type LibraryItem,
   type LibraryStats,
@@ -253,6 +254,20 @@ export function useBookmarks() {
     [refresh],
   );
 
+  const updateCollectionInfo = useCallback(
+    async (id: number, draft: { name: string; description: string; coverData?: string; removeCover?: boolean }) => {
+      try {
+        await apiUpdateCollectionInfo(id, draft);
+        await refresh();
+        return true;
+      } catch (error) {
+        toast.error(errorText(error, "保存收藏夹信息失败"));
+        return false;
+      }
+    },
+    [refresh],
+  );
+
   const deleteCollection = useCallback(
     async (id: number) => {
       try {
@@ -360,6 +375,7 @@ export function useBookmarks() {
     exportBackup,
     createCollection,
     renameCollection,
+    updateCollectionInfo,
     deleteCollection,
     addToCollection,
     removeFromCollection,

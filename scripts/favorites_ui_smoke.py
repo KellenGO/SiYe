@@ -6,8 +6,10 @@ Run after npm run build with the existing Playwright/Edge installation.
 
 import json
 import argparse
+import re
 import sys
 import threading
+from io import BytesIO
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -20,6 +22,7 @@ sys.path.insert(0, str(ROOT))
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from playwright.sync_api import expect, sync_playwright
+from PIL import Image
 
 from api.routers.library import library_router
 from api.services.library_store import LibraryStore, get_library_store
@@ -222,39 +225,56 @@ def main():
                 expect(more).to_be_visible()
                 closed_bounds = more.bounding_box()
                 more.click()
-                expect(page.locator(".local-folder-detail-menu")).to_be_visible()
-                assert more.bounding_box() == closed_bounds, "detail menu must not move its trigger"
-                expect(page.locator(".local-folder-detail-menu")).not_to_contain_text("夹内内容仍会保留")
+                menu = page.locator(".library-folder-menu")
+                expect(menu).to_be_visible()
+                assert more.bounding_box() == closed_bounds, "sidebar menu must not move its trigger"
+                assert menu.get_by_role("button").count() == 2
+                expect(menu).not_to_contain_text("夹内内容仍会保留")
                 page.keyboard.press("Tab")
-                expect(page.locator(".local-folder-detail-menu").get_by_role("button", name="重命名")).to_be_focused()
+                expect(menu.get_by_role("button", name="编辑信息")).to_be_focused()
                 page.screenshot(path=str(ROOT / "build" / "review-local-folder-menu.png"), full_page=True)
                 page.keyboard.press("Escape")
-                expect(page.locator(".local-folder-detail-menu")).to_have_count(0)
+                expect(menu).to_have_count(0)
                 assert more.evaluate("el => document.activeElement === el")
                 more.press("Enter")
-                page.locator(".local-folder-detail-menu").get_by_role("button", name="重命名").click()
-                rename = page.get_by_role("textbox", name="重命名收藏夹")
-                expect(rename).to_be_focused()
-                rename.fill("跨平台学习改名")
-                page.get_by_role("button", name="保存名称").click()
+                menu.get_by_role("button", name="编辑信息").click()
+                info = page.get_by_role("dialog", name="编辑收藏夹信息")
+                expect(info).to_be_visible()
+                expect(info.get_by_label("名称")).to_be_focused()
+                info.get_by_label("名称").fill("跨平台学习改名")
+                info.get_by_label("简介").fill("整理跨平台的学习资料")
+                image = BytesIO()
+                Image.new("RGB", (640, 360), "#2579b7").save(image, format="PNG")
+                with page.expect_file_chooser() as chooser:
+                    info.get_by_role("button", name="点击更换收藏夹封面").click()
+                chooser.value.set_files({"name": "folder-cover.png", "mimeType": "image/png", "buffer": image.getvalue()})
+                expect(info.locator(".folder-info-cover img")).to_have_attribute("src", re.compile(r"^data:image/png;base64,"))
+                page.screenshot(path=str(ROOT / "build" / "review-local-folder-edit-card.png"), full_page=True)
+                info.get_by_role("button", name="保存", exact=True).click()
+                expect(info).to_have_count(0)
                 expect(page.locator(".local-folder-detail-title h2")).to_have_text("跨平台学习改名")
+                expect(page.locator(".local-folder-detail-description")).to_have_text("整理跨平台的学习资料")
+                assert store.get_collection_cover(store.list_collections()[0]["id"]) is not None
                 page.get_by_role("button", name="更多操作：跨平台学习改名").click()
-                page.locator(".local-folder-detail-menu").get_by_role("button", name="重命名").click()
-                page.get_by_role("textbox", name="重命名收藏夹").fill("跨平台学习")
-                page.get_by_role("button", name="保存名称").click()
+                page.locator(".library-folder-menu").get_by_role("button", name="编辑信息").click()
+                info = page.get_by_role("dialog", name="编辑收藏夹信息")
+                info.get_by_label("名称").fill("跨平台学习")
+                info.get_by_role("button", name="保存", exact=True).click()
                 expect(page.locator(".local-folder-detail-title h2")).to_have_text("跨平台学习")
                 page.screenshot(path=str(ROOT / "build" / "review-local-folder-detail.png"), full_page=True)
                 page.set_viewport_size({"width": 320, "height": 700})
                 more = page.get_by_role("button", name="更多操作：跨平台学习")
                 assert more.evaluate("el => el.getBoundingClientRect().width >= 40")
                 more.click()
-                menu_bounds = page.locator(".local-folder-detail-menu").bounding_box()
+                menu_bounds = page.locator(".library-folder-menu").bounding_box()
                 assert menu_bounds is not None and menu_bounds["x"] >= 0 and menu_bounds["x"] + menu_bounds["width"] <= 320
-                title_bounds = page.locator(".local-folder-detail-title").bounding_box()
-                assert title_bounds is not None and menu_bounds["y"] >= title_bounds["y"] + title_bounds["height"]
                 assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), "detail menu overflow at 320px"
                 page.screenshot(path=str(ROOT / "build" / "review-local-folder-menu-320.png"), full_page=True)
+                page.locator(".library-folder-menu").get_by_role("button", name="编辑信息").click()
+                edit_bounds = page.locator(".folder-info-card").bounding_box()
+                assert edit_bounds is not None and edit_bounds["x"] >= 0 and edit_bounds["x"] + edit_bounds["width"] <= 320
                 page.keyboard.press("Escape")
+                expect(page.locator(".folder-info-card")).to_have_count(0)
                 page.set_viewport_size({"width": 1440, "height": 1000})
                 page.get_by_role("button", name="返回收藏夹", exact=True).click()
                 expect(page.locator(".local-folder-browser")).to_be_visible()
@@ -270,6 +290,11 @@ def main():
                 page.screenshot(path=str(ROOT / "build" / "review-local-folder-grid-mobile.png"), full_page=True)
                 page.reload()
                 expect(page.locator(".local-folder-browser")).to_be_visible()
+                custom_card = page.locator(".local-folder-open").filter(has_text="跨平台学习")
+                expect(custom_card.locator("img")).to_have_attribute("src", re.compile(r"^/api/library/collections/\d+/cover\?v="))
+                custom_card.click()
+                expect(page.locator(".local-folder-detail-description")).to_have_text("整理跨平台的学习资料")
+                page.get_by_role("button", name="返回收藏夹", exact=True).click()
                 page.get_by_role("button", name="列表", exact=True).click()
                 for width in (1024, 390):
                     page.set_viewport_size({"width": width, "height": 844})
@@ -288,7 +313,7 @@ def main():
                 page.get_by_role("button", name="图标", exact=True).click()
                 page.locator(".local-folder-open").filter(has_text="跨平台学习").click()
                 page.get_by_role("button", name="更多操作：跨平台学习").click()
-                page.locator(".local-folder-detail-menu").get_by_role("button", name="删除收藏夹").click()
+                page.locator(".library-folder-menu").get_by_role("button", name="删除", exact=True).click()
                 expect(page.locator(".local-folder-browser")).to_be_visible()
                 expect(page.locator(".local-folder-open").filter(has_text="跨平台学习")).to_have_count(0)
                 assert store.stats()["total"] == 2

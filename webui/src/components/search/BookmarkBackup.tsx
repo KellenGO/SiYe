@@ -32,7 +32,7 @@ export function BookmarkBackup({ library }: { library: BookmarkLibrary }) {
   const restore = async (file: File) => {
     setBusy(true);
     try {
-      if (file.size > MAX_BACKUP_BYTES) throw new Error("收藏备份不能超过 10 MB");
+      if (file.size > MAX_BACKUP_BYTES) throw new Error("收藏备份不能超过 64 MB");
       await library.importBackup(await file.text());
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "无法读取备份文件");
@@ -64,7 +64,7 @@ export function BookmarkBackup({ library }: { library: BookmarkLibrary }) {
         />
       </div>
       <p className="text-xs text-cyber-text-muted">
-        导出的 JSON 包含全部收藏、收藏夹归属和已保存备注。导入时只合并新增，重复内容保留现有备注；最多 500 条，文件不超过 10 MB。
+        导出的 JSON 包含全部收藏、收藏夹归属、简介、封面和已保存备注。导入时只合并新增，重复内容保留现有备注；最多 500 条，文件不超过 64 MB。
       </p>
     </div>
   );

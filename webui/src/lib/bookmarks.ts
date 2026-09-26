@@ -14,7 +14,7 @@ import { safeContentUrl } from "./resultTools.js";
 import { isPlatformSlug } from "./platformMeta.js";
 
 export const MAX_NOTE_LENGTH = 1000;
-export const MAX_BACKUP_BYTES = 10 * 1024 * 1024;
+export const MAX_BACKUP_BYTES = 64 * 1024 * 1024;
 
 export interface Bookmark {
   result: UnifiedSearchResult;

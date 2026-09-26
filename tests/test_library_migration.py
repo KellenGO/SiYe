@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import sqlite3
+import base64
+from io import BytesIO
 from pathlib import Path
+
+from PIL import Image
 
 from api.services.library_migration import migrate_legacy_libraries
 from api.services.library_store import LibraryStore
@@ -41,6 +45,9 @@ def test_merges_known_legacy_paths_and_is_idempotent(tmp_path: Path, monkeypatch
 
     first = LibraryStore(source_a)
     historical = first.ensure_imported_collection("稍后再看")
+    cover_image = BytesIO()
+    Image.new("RGB", (20, 12), "#4285f4").save(cover_image, format="PNG")
+    first.update_collection_info(historical["id"], "稍后再看", "来源简介", "data:image/png;base64," + base64.b64encode(cover_image.getvalue()).decode("ascii"))
     first.add_item(_result("douyin", "same", "来源旧标题"), note="旧备注", collection_ids=[historical["id"]])
     remote_a = RemoteFavoritesStore(source_a)
     remote_a.save_platform("douyin", [_result("douyin", "remote-d")], status="succeeded")
@@ -69,6 +76,8 @@ def test_merges_known_legacy_paths_and_is_idempotent(tmp_path: Path, monkeypatch
     assert [folder["name"] for folder in merged_item["collections"]] == ["稍后再看"]
     assert merged.get_item("xhs", "local-x")["watch_later"] is True
     assert merged.list_collections()[0]["name"] == "稍后再看"
+    assert merged.list_collections()[0]["description"] == "来源简介"
+    assert merged.get_collection_cover(merged.list_collections()[0]["id"]) is not None
     assert {item["platform"] for item in RemoteFavoritesStore(target_path).load()["results"]} == {
         "xhs", "douyin", "bilibili", "zhihu",
     }

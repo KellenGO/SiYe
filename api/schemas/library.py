@@ -56,6 +56,13 @@ class CollectionRename(BaseModel):
     name: str = Field(min_length=1, max_length=60)
 
 
+class CollectionInfoUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    description: str = Field(default="", max_length=200)
+    cover_data: Optional[str] = Field(default=None, max_length=7_000_000)
+    remove_cover: bool = False
+
+
 class CollectionBatchInput(BaseModel):
     keys: List[LibraryKey] = Field(default_factory=list)
 

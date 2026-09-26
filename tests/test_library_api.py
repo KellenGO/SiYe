@@ -6,10 +6,13 @@
 
 from __future__ import annotations
 
+import base64
+from io import BytesIO
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
 
 from api.main import app
 from api.services.library_store import LibraryStore, get_library_store
@@ -104,6 +107,39 @@ def test_collection_lifecycle_and_keep_items(client: TestClient) -> None:
     assert stats["unclassified"] == 1
 
 
+def test_collection_info_and_cover_endpoint(client: TestClient) -> None:
+    collection_id = client.post("/api/library/collections", json={"name": "学习"}).json()["id"]
+    assert client.get(f"/api/library/collections/{collection_id}/cover").status_code == 404
+    image = BytesIO()
+    Image.new("RGB", (80, 45), "#1d85b3").save(image, format="PNG")
+    cover_data = "data:image/png;base64," + base64.b64encode(image.getvalue()).decode("ascii")
+
+    response = client.put(f"/api/library/collections/{collection_id}/info", json={
+        "name": "学习资料", "description": "待整理的课程", "cover_data": cover_data,
+    })
+    assert response.status_code == 200
+    assert response.json()["description"] == "待整理的课程"
+    assert response.json()["cover_url"].startswith(f"/api/library/collections/{collection_id}/cover?v=")
+    cover = client.get(response.json()["cover_url"])
+    assert cover.status_code == 200
+    assert cover.headers["content-type"].startswith("image/jpeg")
+    assert cover.content.startswith(b"\xff\xd8")
+
+    bad = client.put(f"/api/library/collections/{collection_id}/info", json={
+        "name": "错误名", "description": "错误简介", "cover_data": "data:image/png;base64,AAAA",
+    })
+    assert bad.status_code == 400
+    listed = client.get("/api/library/collections").json()["collections"][0]
+    assert listed["name"] == "学习资料" and listed["description"] == "待整理的课程"
+
+    removed = client.put(f"/api/library/collections/{collection_id}/info", json={
+        "name": "学习资料", "description": "", "remove_cover": True,
+    })
+    assert removed.status_code == 200
+    assert removed.json()["cover_url"] is None
+    assert client.get(f"/api/library/collections/{collection_id}/cover").status_code == 404
+
+
 def test_batch_add_and_remove_from_collection(client: TestClient) -> None:
     collection_id = client.post("/api/library/collections", json={"name": "批量"}).json()["id"]
     for cid in ("a", "b"):
@@ -148,7 +184,7 @@ def test_import_legacy_backup_and_export(client: TestClient) -> None:
     assert imported.json()["added"] == 1
 
     exported = client.get("/api/library/export").json()
-    assert exported["version"] == 4
+    assert exported["version"] == 5
     assert len(exported["items"]) == 1
     assert exported["items"][0]["note"] == "旧备注"
 

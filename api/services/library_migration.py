@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import base64
 import json
 import sqlite3
 from datetime import datetime, timezone
@@ -57,13 +58,20 @@ def _merge_local(source: sqlite3.Connection, target: LibraryStore) -> int:
     source.row_factory = sqlite3.Row
     target_collections = {row["name"].casefold(): row["id"] for row in target.list_collections()}
     collection_map: Dict[int, int] = {}
-    for row in source.execute("SELECT id, name FROM collections ORDER BY position, id"):
+    collection_columns = _columns(source, "collections")
+    for row in source.execute("SELECT * FROM collections ORDER BY position, id"):
         raw_name = str(row["name"] or "").strip()
         if not raw_name:
             continue
         key = raw_name.casefold()
         if key not in target_collections:
-            target_collections[key] = target.ensure_imported_collection(raw_name)["id"]
+            collection_id = target.ensure_imported_collection(raw_name)["id"]
+            target_collections[key] = collection_id
+            description = row["description"] if "description" in collection_columns else ""
+            cover = row["cover_image"] if "cover_image" in collection_columns else None
+            if description or cover:
+                cover_data = "data:image/jpeg;base64," + base64.b64encode(cover).decode("ascii") if cover else None
+                target.update_collection_info(collection_id, raw_name, description, cover_data)
         collection_map[int(row["id"])] = target_collections[key]
 
     item_columns = _columns(source, "items")

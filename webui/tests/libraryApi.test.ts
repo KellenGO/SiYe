@@ -118,15 +118,15 @@ test("toLibraryItems：过滤坏数据并接受空输入", () => {
 test("toCollections：解析收藏夹并丢弃无 id / 无名称的行", () => {
   const collections = toCollections({
     collections: [
-      { id: 1, name: "AI 学习", item_count: 3 },
+      { id: 1, name: "AI 学习", item_count: 3, description: "常看教程", cover_url: "/api/library/collections/1/cover?v=abc" },
       { id: 0, name: "坏行" },
       { id: 2, name: "" },
       { id: 3, name: "待看" },
     ],
   });
   jsonEqual(collections, [
-    { id: 1, name: "AI 学习", item_count: 3 },
-    { id: 3, name: "待看", item_count: 0 },
+    { id: 1, name: "AI 学习", item_count: 3, description: "常看教程", coverUrl: "/api/library/collections/1/cover?v=abc" },
+    { id: 3, name: "待看", item_count: 0, description: "", coverUrl: null },
   ]);
 });
 
@@ -148,17 +148,18 @@ test("decideMigration：有旧数据且未迁移才提示；迁移过就不再�
 
 // ── 备份解析 ────────────────────────────────────────────────────────────
 
-test("parseBackupFile：接受 v1、v2 与当前 v3 备份结构", () => {
+test("parseBackupFile：接受旧版与当前 v5 备份结构", () => {
   jsonEqual(parseBackupFile(JSON.stringify({ version: 1, items: [] })), { version: 1, items: [] });
   jsonEqual(parseBackupFile(JSON.stringify({ version: 2, items: [], collections: [] })), { version: 2, items: [], collections: [] });
   jsonEqual(parseBackupFile(JSON.stringify({ version: 3, items: [], collections: [] })), { version: 3, items: [], collections: [] });
+  jsonEqual(parseBackupFile(JSON.stringify({ version: 5, items: [], collections: [] })), { version: 5, items: [], collections: [] });
 });
 
 test("parseBackupFile：拒绝非 JSON、缺 items 与超大文件", () => {
   expectThrow(() => parseBackupFile("不是 JSON"), /JSON/);
   expectThrow(() => parseBackupFile(JSON.stringify({ version: 1 })), /items/);
   const huge = JSON.stringify({ items: ["x".repeat(MAX_BACKUP_BYTES)] });
-  expectThrow(() => parseBackupFile(huge), /10 MB/);
+  expectThrow(() => parseBackupFile(huge), /64 MB/);
 });
 
 // ── 收藏载荷 ────────────────────────────────────────────────────────────
