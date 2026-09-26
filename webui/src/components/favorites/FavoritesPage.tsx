@@ -70,7 +70,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
   const [selectionResetKey, setSelectionResetKey] = useState(0);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
-  const [folderMenuOpen, setFolderMenuOpen] = useState(false);
+  const [folderMenuOpenId, setFolderMenuOpenId] = useState<number | null>(null);
   const [orderPreview, setOrderPreview] = useState<number[] | null>(null);
   const [draggingFolderId, setDraggingFolderId] = useState<number | null>(null);
   const [reordering, setReordering] = useState(false);
@@ -86,7 +86,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
   const gridScrollY = useRef(0);
   const localGridScrollY = useRef(0);
   const folderMenuRef = useRef<HTMLDivElement>(null);
-  const folderMenuTriggerRef = useRef<HTMLButtonElement>(null);
+  const folderMenuTriggerRefs = useRef(new Map<number, HTMLButtonElement>());
   const folderDrag = useRef<{ pointerId: number; sourceId: number; startX: number; startY: number; originalIds: number[]; previewIds: number[]; moved: boolean } | null>(null);
   const orderedCollections = useMemo(() => {
     if (!orderPreview) return library.collections;
@@ -163,20 +163,20 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
   // 切换选择时清空勾选
   useEffect(() => {
     setSelectedKeys([]);
-    setFolderMenuOpen(false);
+    setFolderMenuOpenId(null);
   }, [selection]);
 
   useEffect(() => {
-    if (!folderMenuOpen) return;
+    if (folderMenuOpenId === null) return;
     const closeOnOutsideClick = (event: PointerEvent) => {
       if (!folderMenuRef.current?.contains(event.target as Node)) {
-        setFolderMenuOpen(false);
+        setFolderMenuOpenId(null);
       }
     };
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      setFolderMenuOpen(false);
-      folderMenuTriggerRef.current?.focus();
+      setFolderMenuOpenId(null);
+      folderMenuTriggerRefs.current.get(folderMenuOpenId)?.focus();
     };
     document.addEventListener("pointerdown", closeOnOutsideClick);
     document.addEventListener("keydown", closeOnEscape);
@@ -184,7 +184,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
       document.removeEventListener("pointerdown", closeOnOutsideClick);
       document.removeEventListener("keydown", closeOnEscape);
     };
-  }, [folderMenuOpen]);
+  }, [folderMenuOpenId]);
 
   const data = remote.data;
   const retainedCounts = useMemo(() => Object.fromEntries(PLATFORMS.map((platform) => [
@@ -277,7 +277,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
   const startFolderDrag = (event: ReactPointerEvent<HTMLButtonElement>, sourceId: number) => {
     if (reordering || (event.pointerType === "mouse" && event.button !== 0)) return;
     event.preventDefault();
-    setFolderMenuOpen(false);
+    setFolderMenuOpenId(null);
     const ids = library.collections.map((item) => item.id);
     folderDrag.current = { pointerId: event.pointerId, sourceId, startX: event.clientX, startY: event.clientY, originalIds: ids, previewIds: ids, moved: false };
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -325,7 +325,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
   };
 
   const deleteDetailCollection = async (id: number) => {
-    setFolderMenuOpen(false);
+    setFolderMenuOpenId(null);
     if (await library.deleteCollection(id)) {
       if (localFolderView === "icon") {
         setSelection({ kind: "all" });
@@ -397,7 +397,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
         : `${savedCount} 条已收藏 · 收藏与备注保存在本机`;
 
   const setLocalView = (view: LocalFolderView) => {
-    setFolderMenuOpen(false);
+    setFolderMenuOpenId(null);
     setLocalFolderView(view);
     writeLocalFolderView(view);
     if (view === "icon" && selection.kind === "all") setLocalFolderRoot(true);
@@ -405,12 +405,12 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
   };
   const openLocalFolder = (next: LibrarySelection) => {
     localGridScrollY.current = window.scrollY;
-    setFolderMenuOpen(false);
+    setFolderMenuOpenId(null);
     setSelection(next);
     setLocalFolderRoot(false);
   };
   const closeLocalFolder = () => {
-    setFolderMenuOpen(false);
+    setFolderMenuOpenId(null);
     setLocalFolderRoot(true);
     requestAnimationFrame(() => window.scrollTo({ top: localGridScrollY.current }));
   };
@@ -540,22 +540,26 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
 
             <p className="library-side-title">收藏夹</p>
             {orderedCollections.map((collection) => (
-              <div key={collection.id} data-folder-id={collection.id} className={`library-side-row ${draggingFolderId === collection.id ? "is-dragging" : ""}`}>
-                <button type="button" className="library-folder-grip" aria-label={`调整顺序：${collection.name}，按上下方向键移动`} title="按住拖动调整顺序；键盘可用上下方向键" onPointerDown={(event) => startFolderDrag(event, collection.id)} onPointerMove={moveFolderDrag} onPointerUp={finishFolderDrag} onPointerCancel={(event) => finishFolderDrag(event, true)} onKeyDown={(event) => moveFolderWithKeyboard(event, collection.id)}><Menu aria-hidden="true" /></button>
+              <div key={collection.id} data-folder-id={collection.id} className={`library-side-row ${selection.kind === "collection" && selection.id === collection.id ? "is-selected" : ""} ${draggingFolderId === collection.id ? "is-dragging" : ""}`}>
+                <button type="button" className="library-folder-grip" aria-label={`调整顺序：${collection.name}，按上下方向键移动`} title="按住拖动调整顺序；键盘可用上下方向键" onPointerDown={(event) => startFolderDrag(event, collection.id)} onPointerMove={moveFolderDrag} onPointerUp={finishFolderDrag} onPointerCancel={(event) => finishFolderDrag(event, true)} onKeyDown={(event) => moveFolderWithKeyboard(event, collection.id)}><FolderHeart className="library-folder-idle-icon" aria-hidden="true" /><Menu className="library-folder-drag-icon" aria-hidden="true" /></button>
                 <button
                   type="button"
-                  className={`library-side-item ${selection.kind === "collection" && selection.id === collection.id ? "active" : ""}`}
+                  className="library-side-item library-folder-select"
+                  aria-label={`${customCollectionLabel(collection.name)} ${collection.item_count}`}
                   onClick={() => setSelection({ kind: "collection", id: collection.id })}
                 >
-                  <FolderHeart aria-hidden="true" /><span className="library-folder-name" title={collection.name}>{customCollectionLabel(collection.name)}</span><span className="library-folder-count">{collection.item_count}</span>
+                  <span className="library-folder-name" title={collection.name}>{customCollectionLabel(collection.name)}</span>
                 </button>
-                {selection.kind === "collection" && selection.id === collection.id && <div className="library-folder-menu-anchor" ref={folderMenuRef}>
-                  <button ref={folderMenuTriggerRef} type="button" className="library-folder-more" aria-label={`更多操作：${collection.name}`} aria-expanded={folderMenuOpen} aria-controls={folderMenuOpen ? "library-folder-menu" : undefined} onClick={() => setFolderMenuOpen((open) => !open)}><MoreHorizontal aria-hidden="true" /></button>
-                  {folderMenuOpen && <div className="library-folder-menu" id="library-folder-menu">
-                    <button type="button" onClick={() => { setFolderMenuOpen(false); setEditingCollectionId(collection.id); }}><Pencil aria-hidden="true" />编辑信息</button>
+                <div className="library-folder-actions" ref={folderMenuOpenId === collection.id ? folderMenuRef : null}>
+                  <span className="library-folder-count" aria-hidden="true">{collection.item_count}</span>
+                  <div className="library-folder-menu-anchor">
+                  <button ref={(element) => { if (element) folderMenuTriggerRefs.current.set(collection.id, element); else folderMenuTriggerRefs.current.delete(collection.id); }} type="button" className="library-folder-more" aria-label={`更多操作：${collection.name}`} aria-expanded={folderMenuOpenId === collection.id} aria-controls={folderMenuOpenId === collection.id ? "library-folder-menu" : undefined} onClick={() => setFolderMenuOpenId((openId) => openId === collection.id ? null : collection.id)}><MoreHorizontal aria-hidden="true" /></button>
+                  {folderMenuOpenId === collection.id && <div className="library-folder-menu" id="library-folder-menu">
+                    <button type="button" onClick={() => { setFolderMenuOpenId(null); setEditingCollectionId(collection.id); }}><Pencil aria-hidden="true" />编辑信息</button>
                     <button type="button" className="danger" onClick={() => void deleteDetailCollection(collection.id)}><Trash2 aria-hidden="true" />删除</button>
                   </div>}
-                </div>}
+                  </div>
+                </div>
               </div>
             ))}
             <span className="sr-only" role="status" aria-live="polite">{orderAnnouncement}</span>
@@ -705,7 +709,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
       ) : (
         <div className="empty"><div className="empty-symbol"><FolderHeart /></div><h2>把喜欢的内容，放到一起</h2><p>选择平台后点击同步，四处散落的收藏会汇到这里。</p><button type="button" className="btn" onClick={() => void remote.sync([...selected])}>同步收藏</button></div>
       )}
-      {editingCollection && <CollectionInfoDialog key={editingCollection.id} collection={editingCollection} fallbackCover={editingFallbackCover} busy={moving} onSave={saveCollectionInfo} onClose={() => { setEditingCollectionId(null); folderMenuTriggerRef.current?.focus(); }} />}
+      {editingCollection && <CollectionInfoDialog key={editingCollection.id} collection={editingCollection} fallbackCover={editingFallbackCover} busy={moving} onSave={saveCollectionInfo} onClose={() => { const id = editingCollectionId; setEditingCollectionId(null); if (id !== null) folderMenuTriggerRefs.current.get(id)?.focus(); }} />}
     </div>
   );
 }
