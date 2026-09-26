@@ -74,10 +74,10 @@
     .cover-count { position: absolute; z-index: 1; right: 8px; bottom: 6px; color: #fff; font-size: 11px; text-shadow: 0 1px 3px #0009; }
     .folder-name { display: block; overflow: hidden; margin-top: 12px; color: var(--ink); font-size: 14px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
     .folder-meta { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; }
-    .target-card .folder-name, .target-card .folder-meta { padding-right: 44px; }
-    .action-anchor { position: absolute; z-index: 5; right: 0; bottom: 0; width: 36px; height: 36px; }
-    .more-button { position: relative; z-index: 2; display: grid; width: 36px; height: 36px; place-items: center; padding: 0; border: 1px solid #e8ebf2; border-radius: 10px; color: #495a77; background: #fffffff2; box-shadow: 0 3px 10px #1019362a; }
-    .more-button:hover, .more-button[aria-expanded="true"] { color: var(--brand); background: #fff; }
+    .proposal-a .target-card .folder-name { padding-right: 40px; }
+    .action-anchor { position: absolute; z-index: 5; right: 0; bottom: 9px; width: 36px; height: 36px; }
+    .more-button { position: relative; z-index: 2; display: grid; width: 36px; height: 36px; place-items: center; padding: 0; border: 0; border-radius: 10px; color: #687792; background: transparent; box-shadow: none; }
+    .more-button:hover, .more-button[aria-expanded="true"] { color: var(--brand); background: transparent; }
     .more-button svg { width: 18px; height: 18px; }
     .action-popover { position: absolute; top: calc(100% + 7px); right: 0; width: 194px; padding: 5px; border: 1px solid #dce2ed; border-radius: 11px; background: #fff; box-shadow: 0 13px 30px #151e3b2c; }
     .folder-card[data-state="closed"] .action-popover { display: none; }
@@ -104,25 +104,31 @@
     .rename-help { margin: 0 0 11px; color: var(--muted); font-size: 10px; line-height: 1.5; }
     .rename-panel .rename-input { height: 38px; }
     .rename-panel .rename-actions { margin-top: 11px; }
-    .edit-caption { display: none; }
-    .proposal-b .target-card .folder-name { padding-right: 0; }
-    .proposal-b .target-card .folder-meta { padding-right: 66px; }
-    .proposal-b .action-anchor { bottom: -8px; }
-    .proposal-b .action-anchor, .proposal-b .more-button { width: 62px; }
-    .proposal-b .more-button { display: flex; gap: 3px; border-color: #cad5f1; color: #435bc3; background: #f1f4ff; box-shadow: none; font-size: 11px; font-weight: 700; }
-    .proposal-b .edit-caption { display: inline; }
-    .proposal-b .action-popover { width: 176px; border-color: #cbd5ec; background: #f8faff; box-shadow: 0 13px 28px #17275530; }
-    .proposal-b .action-row { color: #425475; }
-    .proposal-b .action-row:hover, .proposal-b .action-row:focus-visible { color: var(--brand); background: #e8edff; }
-    .proposal-b .action-divider { background: #dfe5f3; }
-    .proposal-b .action-row.delete-action { color: var(--red); }
-    .proposal-b .action-row.delete-action:hover, .proposal-b .folder-card[data-state="delete"] .action-row.delete-action { color: #a82e3a; background: var(--red-soft); }
-    .proposal-b .delete-hint { color: #a36d72; }
-    .proposal-b .folder-card[data-state="rename"] .action-popover { width: 224px; }
-    .proposal-b .rename-label { color: var(--ink); }
-    .proposal-b .rename-actions button:not(.save-button) { border-color: var(--line); color: var(--secondary); background: #fff; }
-    .is-narrow .action-anchor, .is-narrow .more-button { height: 40px; }
-    .proposal-a .is-narrow .action-anchor, .proposal-a .is-narrow .more-button { width: 40px; }
+    .proposal-b .folder-open-button { display: block; width: 100%; padding: 0; border: 0; color: inherit; background: transparent; text-align: left; }
+    .proposal-b .folder-open-button .folder-cover { display: block; }
+    .proposal-b .folder-open-button:hover .folder-name { color: var(--brand); }
+    .detail-scene { display: none; }
+    .proposal-b[data-scene="detail"] .stage-caption, .proposal-b[data-scene="detail"] .folder-grid { display: none; }
+    .proposal-b[data-scene="detail"] .detail-scene { display: block; }
+    .detail-back { padding: 0; border: 0; color: var(--brand); background: transparent; font-size: 11px; font-weight: 700; }
+    .detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; margin-top: 27px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
+    .detail-heading { min-width: 0; }
+    .detail-heading .eyebrow { font-size: 10px; }
+    .detail-heading h3 { overflow: hidden; max-width: 100%; margin: 7px 0 6px; font-size: 21px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+    .detail-heading p { margin: 0; color: var(--muted); font-size: 11px; }
+    .detail-action-anchor { position: relative; z-index: 5; flex: none; width: 36px; height: 36px; }
+    .detail-scene[data-state="closed"] .action-popover, .detail-scene[data-state="root"] .action-popover { display: none; }
+    .detail-scene[data-state="rename"] .menu-view { display: none; }
+    .detail-scene:not([data-state="rename"]) .rename-view { display: none; }
+    .detail-scene[data-state="delete"] .delete-action { color: #ad303b; background: var(--red-soft); }
+    .detail-scene[data-state="rename"] .action-popover { width: 232px; }
+    .detail-result { display: flex; align-items: center; gap: 12px; margin-top: 19px; color: var(--secondary); }
+    .detail-result-cover { flex: none; width: 106px; aspect-ratio: 16 / 9; border-radius: 7px; background: linear-gradient(135deg, #1d2431, #46516c); }
+    .detail-result strong { display: block; color: var(--ink); font-size: 12px; }
+    .detail-result small { display: block; margin-top: 6px; color: var(--muted); font-size: 10px; }
+    .is-narrow .more-button { width: 40px; height: 40px; }
+    .proposal-a .is-narrow .action-anchor { width: 40px; height: 40px; }
+    .proposal-b .is-narrow .detail-action-anchor { width: 40px; height: 40px; }
     .anchor-caption { display: flex; align-items: center; gap: 8px; margin: 1px 24px 0; padding: 12px 0 16px; border-top: 1px solid #eef0f4; color: #687792; font-size: 11px; }
     .anchor-dot { width: 8px; height: 8px; border: 2px solid var(--brand); border-radius: 50%; }
     .state-note { min-height: 49px; margin: 0; padding: 0 24px 19px; color: var(--secondary); font-size: 12px; line-height: 1.55; }
@@ -143,45 +149,49 @@
   <main class="page">
     <header class="masthead"><div class="brand"><span class="brand-mark" aria-hidden="true"></span>四野 <span style="color:#aab4c5;font-weight:400">/</span> 界面探索</div><div class="masthead-note">收藏 › 本地收藏 › 图标模式</div></header>
     <section class="intro">
-      <div><span class="eyebrow">FOLDER ACTIONS · VISUAL STUDY</span><h1>把编辑入口还给卡片信息区。</h1><p>两个可直接比较的草稿。封面、叠层、数量角标和网格尺寸按现有卡片逻辑呈现；编辑入口和展开层都位于封面下方。</p></div>
+      <div><span class="eyebrow">FOLDER ACTIONS · VISUAL STUDY</span><h1>封面只留给内容。</h1><p>两个可直接比较的草稿：A 在名称旁印一个无底框的三点入口；B 让根页保持纯净，进入收藏夹后再管理。封面、叠层、数量角标和网格尺寸不变。</p></div>
       <div class="scope-note">这是独立预览。重命名只改这页的示例文字；删除只展示危险操作样式，不删除任何收藏夹。</div>
     </section>
     <section class="comparison" aria-label="两种编辑入口方向">
       <article class="proposal proposal-a" data-prototype="a">
-        <header class="proposal-head"><div class="proposal-index">A</div><div><h2>名称行 · 轻量三点</h2><p>三点靠名称右侧；短菜单只负责选操作。</p></div></header>
+        <header class="proposal-head"><div class="proposal-index">A</div><div><h2>名称旁 · 裸三点</h2><p>不画白框，三点直接跟在名称行右侧。</p></div><span class="recommend">推荐</span></header>
         <div class="controls"><div class="state-group" role="group" aria-label="A 方案状态"><button class="state-button" type="button" data-show="closed" aria-pressed="true">合上</button><button class="state-button" type="button" data-show="menu" aria-pressed="false">菜单</button><button class="state-button" type="button" data-show="rename" aria-pressed="false">重命名</button><button class="state-button" type="button" data-show="delete" aria-pressed="false">删除</button></div><button class="option-button" type="button" data-long aria-pressed="false">长名称</button><button class="option-button" type="button" data-narrow aria-pressed="false">320px 窄屏</button></div>
         <div class="stage-wrap"><div class="preview-stage"><div class="stage-caption">本地收藏夹　/　自建收藏夹</div><div class="folder-grid">
           <div class="folder-card"><div class="folder-stack"></div><div class="folder-cover placeholder"><span class="cover-count">8 条</span></div><span class="folder-name">全部收藏</span><span class="folder-meta">本地分类</span></div>
           <div class="folder-card target-card" data-state="closed"><div class="folder-stack"></div><div class="folder-cover"><span class="cover-kicker">PRIVATE NOTES · 2026</span><span class="cover-graphic"></span><span class="cover-count">1 条</span></div><span class="folder-name" data-name title="study">study</span><span class="folder-meta">本地收藏夹</span>
-            <div class="action-anchor"><button class="more-button" type="button" aria-label="更多操作：study" aria-expanded="false" aria-controls="menu-a"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg><span class="edit-caption">编辑</span></button><div class="action-popover" id="menu-a"><div class="menu-view"><button class="action-row rename-action" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z"/></svg>重命名</button><span class="action-divider"></span><button class="action-row delete-action" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v7m4-7v7M6 7l1 14h10l1-14M9 7V4h6v3"/></svg>删除收藏夹</button><span class="delete-hint">夹内内容仍会保留</span></div></div></div>
+            <div class="action-anchor"><button class="more-button" type="button" aria-label="更多操作：study" aria-expanded="false" aria-controls="menu-a"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="action-popover" id="menu-a"><div class="menu-view"><button class="action-row rename-action" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z"/></svg>重命名</button><span class="action-divider"></span><button class="action-row delete-action" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v7m4-7v7M6 7l1 14h10l1-14M9 7V4h6v3"/></svg>删除收藏夹</button><span class="delete-hint">夹内内容仍会保留</span></div></div></div>
             <form class="rename-panel" role="dialog" aria-labelledby="rename-title-a"><label class="rename-label" id="rename-title-a" for="rename-a">重命名收藏夹</label><p class="rename-help">名称会显示在这张收藏夹卡片下方</p><input class="rename-input" id="rename-a" maxlength="60" value="study"><div class="rename-actions"><button type="button" class="cancel-button">取消</button><button type="submit" class="save-button">保存名称</button></div></form>
           </div>
           <div class="folder-card"><div class="folder-stack"></div><div class="folder-cover"><span class="cover-kicker">FIELD NOTES · 02</span><span class="cover-graphic"></span><span class="cover-count">1 条</span></div><span class="folder-name" title="稍后整理">稍后整理</span><span class="folder-meta">本地收藏夹</span></div>
         </div></div></div>
-        <div class="anchor-caption"><span class="anchor-dot"></span>固定锚点：信息区 right 0 / bottom 0；封面开合时完整可见</div><p class="state-note" aria-live="polite">合上：按钮常驻且可直接点击或按 Enter / Space 打开。</p>
-        <div class="proposal-foot"><div><h3>视觉效果</h3><p>三点与名称形成一行，封面完全无遮挡；重命名单独展开。</p></div><div><h3>取舍</h3><p>名称可显示的宽度减少约 44px，长名称会更早省略。</p></div></div>
+        <div class="anchor-caption"><span class="anchor-dot"></span>固定锚点：名称行 right 0 / bottom 9px；开合时三点不移动</div><p class="state-note" aria-live="polite">合上：按钮常驻且可直接点击或按 Enter / Space 打开。</p>
+        <div class="proposal-foot"><div><h3>视觉效果</h3><p>封面与名称都很安静；只有三点符号，没有常驻底框。</p></div><div><h3>取舍</h3><p>长名称会更早省略；三点入口比带文字的控件更隐蔽。</p></div></div>
       </article>
-      <article class="proposal proposal-b" data-prototype="b">
-        <header class="proposal-head"><div class="proposal-index">B</div><div><h2>信息行 · 编辑胶囊</h2><p>“编辑”与“本地收藏夹”信息并列，入口更明确。</p></div><span class="recommend">推荐</span></header>
-        <div class="controls"><div class="state-group" role="group" aria-label="B 方案状态"><button class="state-button" type="button" data-show="closed" aria-pressed="true">合上</button><button class="state-button" type="button" data-show="menu" aria-pressed="false">菜单</button><button class="state-button" type="button" data-show="rename" aria-pressed="false">重命名</button><button class="state-button" type="button" data-show="delete" aria-pressed="false">删除</button></div><button class="option-button" type="button" data-long aria-pressed="false">长名称</button><button class="option-button" type="button" data-narrow aria-pressed="false">320px 窄屏</button></div>
+      <article class="proposal proposal-b" data-prototype="b" data-scene="root">
+        <header class="proposal-head"><div class="proposal-index">B</div><div><h2>进入后 · 角落管理</h2><p>根页只负责浏览；点进自建收藏夹后再编辑。</p></div></header>
+        <div class="controls"><div class="state-group" role="group" aria-label="B 方案状态"><button class="state-button" type="button" data-show="root" aria-pressed="true">根页</button><button class="state-button" type="button" data-show="closed" aria-pressed="false">详情</button><button class="state-button" type="button" data-show="menu" aria-pressed="false">菜单</button><button class="state-button" type="button" data-show="rename" aria-pressed="false">重命名</button><button class="state-button" type="button" data-show="delete" aria-pressed="false">删除</button></div><button class="option-button" type="button" data-long aria-pressed="false">长名称</button><button class="option-button" type="button" data-narrow aria-pressed="false">320px 窄屏</button></div>
         <div class="stage-wrap"><div class="preview-stage"><div class="stage-caption">本地收藏夹　/　自建收藏夹</div><div class="folder-grid">
           <div class="folder-card"><div class="folder-stack"></div><div class="folder-cover placeholder"><span class="cover-count">8 条</span></div><span class="folder-name">全部收藏</span><span class="folder-meta">本地分类</span></div>
-          <div class="folder-card target-card" data-state="closed"><div class="folder-stack"></div><div class="folder-cover"><span class="cover-kicker">PRIVATE NOTES · 2026</span><span class="cover-graphic"></span><span class="cover-count">1 条</span></div><span class="folder-name" data-name title="study">study</span><span class="folder-meta">本地收藏夹</span>
-            <div class="action-anchor"><button class="more-button" type="button" aria-label="更多操作：study" aria-expanded="false" aria-controls="menu-b"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg><span class="edit-caption">编辑</span></button><div class="action-popover" id="menu-b"><div class="menu-view"><button class="action-row rename-action" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z"/></svg>重命名</button><span class="action-divider"></span><button class="action-row delete-action" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v7m4-7v7M6 7l1 14h10l1-14M9 7V4h6v3"/></svg>删除</button><span class="delete-hint">内容保留</span></div><form class="rename-view"><label class="rename-label" for="rename-b">重命名收藏夹</label><input class="rename-input" id="rename-b" maxlength="60" value="study"><div class="rename-actions"><button type="button" class="cancel-button">取消</button><button type="submit" class="save-button">保存名称</button></div></form></div></div>
-          </div>
+          <div class="folder-card target-card" data-state="root"><div class="folder-stack"></div><button class="folder-open-button" type="button" aria-label="打开收藏夹 study"><span class="folder-cover"><span class="cover-kicker">PRIVATE NOTES · 2026</span><span class="cover-graphic"></span><span class="cover-count">1 条</span></span><span class="folder-name" data-name title="study">study</span><span class="folder-meta">本地收藏夹</span></button></div>
           <div class="folder-card"><div class="folder-stack"></div><div class="folder-cover"><span class="cover-kicker">FIELD NOTES · 02</span><span class="cover-graphic"></span><span class="cover-count">1 条</span></div><span class="folder-name" title="稍后整理">稍后整理</span><span class="folder-meta">本地收藏夹</span></div>
-        </div></div></div>
-        <div class="anchor-caption"><span class="anchor-dot"></span>固定锚点：信息区 right 0 / bottom −8px；封面开合时完整可见</div><p class="state-note" aria-live="polite">合上：按钮常驻且可直接点击或按 Enter / Space 打开。</p>
-        <div class="proposal-foot"><div><h3>视觉效果</h3><p>“编辑”文字更易识别，名称仍可占满卡片宽度。</p></div><div><h3>取舍</h3><p>按钮借用卡片下方 8px 留白，信息行更紧凑。</p></div></div>
+        </div>
+          <div class="detail-scene" data-state="root"><button class="detail-back" type="button">← 返回收藏夹</button><div class="detail-head"><div class="detail-heading"><span class="eyebrow">LOCAL FOLDER</span><h3 data-detail-name title="study">study</h3><p>1 条内容 · 本地收藏夹</p></div>
+            <div class="detail-action-anchor"><button class="more-button" type="button" aria-label="更多操作：study" aria-expanded="false" aria-controls="menu-b"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button><div class="action-popover" id="menu-b"><div class="menu-view"><button class="action-row rename-action" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4z"/></svg>重命名</button><span class="action-divider"></span><button class="action-row delete-action" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v7m4-7v7M6 7l1 14h10l1-14M9 7V4h6v3"/></svg>删除收藏夹</button><span class="delete-hint">夹内内容仍会保留</span></div><form class="rename-view"><label class="rename-label" for="rename-b">重命名收藏夹</label><input class="rename-input" id="rename-b" maxlength="60" value="study"><div class="rename-actions"><button type="button" class="cancel-button">取消</button><button type="submit" class="save-button">保存名称</button></div></form></div></div></div>
+            <div class="detail-result"><span class="detail-result-cover" aria-hidden="true"></span><span><strong>示例收藏内容</strong><small>进入收藏夹后浏览条目</small></span></div>
+          </div>
+        </div></div>
+        <div class="anchor-caption"><span class="anchor-dot"></span>根页没有编辑入口；详情页三点固定在标题区右上角</div><p class="state-note" aria-live="polite">根页：点击收藏夹卡片进入详情，编辑入口才会出现。</p>
+        <div class="proposal-foot"><div><h3>视觉效果</h3><p>封面和名称区域都完全纯净，管理动作集中在详情页。</p></div><div><h3>取舍</h3><p>改名或删除要先进入收藏夹，多一步，但入口不干扰浏览。</p></div></div>
       </article>
     </section>
-    <section class="decision"><div><span class="eyebrow">RECOMMENDATION</span><h2>建议先选 B：信息行编辑胶囊</h2><p>两种方向都让封面保持完整。B 把操作放在次要信息旁，名称仍可占满一行；文字“编辑”也比孤立的三点更好认。A 适合想要更克制的图标入口。</p></div><div><span class="eyebrow">NEXT DECISION</span><h2>需要用户选择的细节</h2><ul><li>优先更简洁的 A，还是标明“编辑”的 B。</li><li>删除项是否只显示红色危险样式；本草稿不增加确认流程。</li><li>将来统一其他 UI 时，可复用 36–40px 目标、7px 菜单间距、右边缘锚点和可见焦点。</li></ul></div></section>
+    <section class="decision"><div><span class="eyebrow">RECOMMENDATION</span><h2>建议先选 A：名称旁裸三点</h2><p>这是当前路径的最小调整：封面干净，常用的改名也能从根页直接找到。B 让卡片最纯净，但每次管理都要先进详情。</p></div><div><span class="eyebrow">NEXT DECISION</span><h2>需要用户选择的细节</h2><ul><li>根页保留低调入口（A），还是仅在详情页管理（B）。</li><li>删除项是否只显示红色危险样式；本草稿不增加确认流程。</li><li>将来统一其他 UI 时，可复用透明 36–40px 点击区、7px 菜单间距、固定锚点和可见焦点。</li></ul></div></section>
     <section class="benchmark" style="margin-top:18px;color:#687792;font-size:11px;line-height:1.7"><strong>参照说明：</strong><a href="https://support.google.com/youtube/answer/6083634?hl=en-GB">YouTube 官方编辑说明</a>把名称编辑放在单独界面；<a href="https://support.google.com/youtube/answer/57792?hl=en-7">官方删除说明</a>使用“更多”入口。<a href="https://jingyan.baidu.com/article/359911f5f3209616ff030618.html">B站较早版本的手机截图</a>显示“编辑信息”和“删除”分列，仅作层级参照，不代表当前网页端样式。</section>
-    <footer class="footer"><span>键盘路径：Tab 到三点按钮 → Enter / Space 打开 → Tab 到操作 → Escape 返回按钮；重命名输入框支持 Enter 保存、Escape 取消。</span><span>独立视觉草稿 · 不连接产品代码或真实数据</span></footer>
+    <footer class="footer"><span>A：Tab 到名称旁三点。B：Tab 到收藏夹卡片 → Enter 进入 → Tab 到详情三点。两者都支持 Enter / Space 开菜单、Escape 返回，重命名可用 Enter 保存。</span><span>独立视觉草稿 · 不连接产品代码或真实数据</span></footer>
   </main>
   <script>
     (() => {
       const notes = {
+        root: "根页：点击收藏夹卡片进入详情，编辑入口才会出现。",
         closed: "合上：按钮常驻且可直接点击或按 Enter / Space 打开。",
         menu: "菜单：三点按钮留在原位，重命名与删除呈现清楚的操作层级。",
         rename: "重命名：输入框获得焦点；Enter 模拟保存，Escape 取消并返回菜单。",
@@ -195,18 +205,27 @@
         const name = proposal.querySelector("[data-name]");
         const note = proposal.querySelector(".state-note");
         const menu = proposal.querySelector(".action-popover");
+        const detail = proposal.querySelector(".detail-scene");
+        const rootOpen = proposal.querySelector(".folder-open-button");
+        const detailName = proposal.querySelector("[data-detail-name]");
         let currentName = "study";
         let longName = false;
 
         function setState(next, focus = false) {
           card.dataset.state = next;
-          const menuOpen = next === "menu" || next === "delete" || (proposal.dataset.prototype === "b" && next === "rename");
+          if (detail) {
+            detail.dataset.state = next;
+            proposal.dataset.scene = next === "root" ? "root" : "detail";
+          }
+          const menuOpen = next === "menu" || next === "delete" || Boolean(detail && next === "rename");
           trigger.setAttribute("aria-expanded", String(menuOpen));
           menu.setAttribute("aria-hidden", String(!menuOpen));
           proposal.querySelectorAll("[data-show]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.show === next)));
-          note.textContent = next === "rename" && proposal.dataset.prototype === "a"
+          note.textContent = next === "rename" && !detail
             ? "重命名：菜单收起，独立编辑层获得焦点；Enter 模拟保存，Escape 返回菜单。"
-            : notes[next];
+            : next === "closed" && detail
+              ? "详情：三点固定在标题区右侧；按 Enter / Space 打开管理菜单。"
+              : notes[next];
           if (next === "rename") {
             input.value = currentName;
             if (focus) input.focus();
@@ -214,12 +233,16 @@
             proposal.querySelector(".rename-action").focus();
           } else if (focus && next === "closed") {
             trigger.focus();
+          } else if (focus && next === "root" && rootOpen) {
+            rootOpen.focus();
           }
         }
         function showName() {
           const display = longName ? "letsgooooooooooooooooooooooo-study-notes" : currentName;
           name.textContent = display;
           name.title = display;
+          if (detailName) { detailName.textContent = display; detailName.title = display; }
+          if (rootOpen) rootOpen.setAttribute("aria-label", `打开收藏夹 ${display}`);
           trigger.setAttribute("aria-label", `更多操作：${display}`);
         }
         proposal.querySelectorAll("[data-show]").forEach((button) => button.addEventListener("click", () => setState(button.dataset.show, button.dataset.show === "rename")));
@@ -232,6 +255,8 @@
           const narrow = proposal.querySelector(".preview-stage").classList.toggle("is-narrow");
           event.currentTarget.setAttribute("aria-pressed", String(narrow));
         });
+        if (rootOpen) rootOpen.addEventListener("click", () => setState("closed", true));
+        if (detail) proposal.querySelector(".detail-back").addEventListener("click", () => setState("root", true));
         trigger.addEventListener("click", () => setState(card.dataset.state === "closed" ? "menu" : "closed", card.dataset.state !== "closed"));
         proposal.querySelector(".rename-action").addEventListener("click", () => setState("rename", true));
         proposal.querySelector(".delete-action").addEventListener("click", () => setState("delete"));
@@ -250,12 +275,13 @@
         proposal.addEventListener("keydown", (event) => {
           if (event.key !== "Escape") return;
           if (card.dataset.state === "rename") { event.preventDefault(); setState("menu", true); }
-          else if (card.dataset.state !== "closed") { event.preventDefault(); setState("closed", true); }
+          else if (card.dataset.state !== "closed" && card.dataset.state !== "root") { event.preventDefault(); setState("closed", true); }
+          else if (detail && detail.contains(event.target)) { event.preventDefault(); setState("root", true); }
         });
         document.addEventListener("pointerdown", (event) => {
-          if (card.dataset.state !== "closed" && !proposal.contains(event.target)) setState("closed");
+          if (card.dataset.state !== "closed" && card.dataset.state !== "root" && !proposal.contains(event.target)) setState("closed");
         });
-        setState("closed");
+        setState(detail ? "root" : "closed");
       });
     })();
   </script>
