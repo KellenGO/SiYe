@@ -502,6 +502,15 @@ class LibraryStore(SqliteStoreBase):
             row = conn.execute("SELECT cover_image FROM collections WHERE id = ?", (collection_id,)).fetchone()
         return bytes(row["cover_image"]) if row and row["cover_image"] is not None else None
 
+    def reorder_collections(self, ids: Sequence[int]) -> List[Dict[str, Any]]:
+        with self._conn(write=True) as conn:
+            current = [int(row["id"]) for row in conn.execute("SELECT id FROM collections ORDER BY position, id")]
+            if len(ids) != len(current) or set(ids) != set(current):
+                raise ValueError("收藏夹列表已变化，请刷新后重试")
+            for position, collection_id in enumerate(ids, start=1):
+                conn.execute("UPDATE collections SET position = ? WHERE id = ?", (position, collection_id))
+        return self.list_collections()
+
     def update_collection_info(
         self, collection_id: int, name: str, description: str,
         cover_data: Optional[str] = None, remove_cover: bool = False,

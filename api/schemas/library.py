@@ -63,6 +63,10 @@ class CollectionInfoUpdate(BaseModel):
     remove_cover: bool = False
 
 
+class CollectionOrderUpdate(BaseModel):
+    ids: List[int]
+
+
 class CollectionBatchInput(BaseModel):
     keys: List[LibraryKey] = Field(default_factory=list)
 

@@ -25,6 +25,7 @@ from ..schemas.library import (
     CollectionBatchInput,
     CollectionCreate,
     CollectionInfoUpdate,
+    CollectionOrderUpdate,
     CollectionRename,
     LibraryImportInput,
     LibraryItemInput,
@@ -206,6 +207,17 @@ def collection_cover(collection_id: int, store: LibraryStore = Depends(get_libra
     if cover is None:
         raise HTTPException(status_code=404, detail="收藏夹封面不存在")
     return Response(content=cover, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=31536000, immutable"})
+
+
+@library_router.put("/collections/order")
+def reorder_collections(
+    payload: CollectionOrderUpdate,
+    store: LibraryStore = Depends(get_library_store),
+) -> Dict[str, Any]:
+    try:
+        return {"collections": store.reorder_collections(payload.ids)}
+    except ValueError as error:
+        raise _bad_request(error)
 
 
 @library_router.put("/collections/{collection_id}/info")

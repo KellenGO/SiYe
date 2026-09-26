@@ -140,6 +140,16 @@ def test_collection_info_and_cover_endpoint(client: TestClient) -> None:
     assert client.get(f"/api/library/collections/{collection_id}/cover").status_code == 404
 
 
+def test_collection_order_endpoint(client: TestClient) -> None:
+    first = client.post("/api/library/collections", json={"name": "第一夹"}).json()["id"]
+    second = client.post("/api/library/collections", json={"name": "第二夹"}).json()["id"]
+    response = client.put("/api/library/collections/order", json={"ids": [second, first]})
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()["collections"]] == [second, first]
+    assert [item["id"] for item in client.get("/api/library/collections").json()["collections"]] == [second, first]
+    assert client.put("/api/library/collections/order", json={"ids": [first]}).status_code == 400
+
+
 def test_batch_add_and_remove_from_collection(client: TestClient) -> None:
     collection_id = client.post("/api/library/collections", json={"name": "批量"}).json()["id"]
     for cid in ("a", "b"):

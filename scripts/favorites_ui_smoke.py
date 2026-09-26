@@ -172,6 +172,29 @@ def main():
                 long_name = "超长收藏夹LongFolder" * 4
                 page.get_by_role("textbox", name="新收藏夹名称").fill(long_name)
                 page.get_by_role("button", name="创建收藏夹", exact=True).click()
+                folders = page.locator(".library-side-row")
+                expect(folders).to_have_count(2)
+                assert folders.locator(".library-folder-name").all_text_contents() == ["跨平台学习", long_name]
+                grip = page.get_by_role("button", name=f"调整顺序：{long_name}，按上下方向键移动")
+                grip.hover()
+                assert grip.evaluate("el => getComputedStyle(el).opacity === '1'")
+                source = grip.bounding_box()
+                target = folders.first.bounding_box()
+                assert source is not None and target is not None
+                page.mouse.move(source["x"] + source["width"] / 2, source["y"] + source["height"] / 2)
+                page.mouse.down()
+                page.mouse.move(target["x"] + target["width"] / 2, target["y"] + 5, steps=8)
+                page.mouse.up()
+                expect(folders.first.locator(".library-folder-name")).to_have_text(long_name)
+                assert [item["name"] for item in store.list_collections()] == [long_name, "跨平台学习"]
+                page.reload()
+                folders = page.locator(".library-side-row")
+                expect(folders.first.locator(".library-folder-name")).to_have_text(long_name)
+                grip = page.get_by_role("button", name=f"调整顺序：{long_name}，按上下方向键移动")
+                grip.focus()
+                grip.press("ArrowDown")
+                expect(folders.first.locator(".library-folder-name")).to_have_text("跨平台学习")
+                assert [item["name"] for item in store.list_collections()] == ["跨平台学习", long_name]
                 saved_items = page.locator(".saved-result-item")
                 assert saved_items.count() == 2
                 assert saved_items.first.locator(":scope > .result-row").count() == 1
@@ -263,6 +286,7 @@ def main():
                 expect(page.locator(".local-folder-detail-title h2")).to_have_text("跨平台学习")
                 page.screenshot(path=str(ROOT / "build" / "review-local-folder-detail.png"), full_page=True)
                 page.set_viewport_size({"width": 320, "height": 700})
+                assert page.locator(".library-folder-grip").first.evaluate("el => el.getBoundingClientRect().width >= 40")
                 more = page.get_by_role("button", name="更多操作：跨平台学习")
                 assert more.evaluate("el => el.getBoundingClientRect().width >= 40")
                 more.click()

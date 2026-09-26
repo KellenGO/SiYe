@@ -357,6 +357,10 @@ export async function updateCollectionInfo(id: number, draft: {
   });
 }
 
+export async function reorderCollections(ids: number[]): Promise<void> {
+  await axios.put(`${LIBRARY_API_BASE}/collections/order`, { ids });
+}
+
 export async function renameCollection(id: number, name: string): Promise<void> {
   await axios.patch(`${LIBRARY_API_BASE}/collections/${id}`, { name });
 }

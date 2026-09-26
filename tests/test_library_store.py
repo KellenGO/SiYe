@@ -176,6 +176,21 @@ def test_collection_name_rules(store: LibraryStore) -> None:
             store.create_collection(reserved)
 
 
+def test_reorder_collections_persists_and_rejects_stale_lists(store: LibraryStore) -> None:
+    first = store.create_collection("第一夹")
+    second = store.create_collection("第二夹")
+    third = store.create_collection("第三夹")
+    ordered = [third["id"], first["id"], second["id"]]
+
+    assert [item["id"] for item in store.reorder_collections(ordered)] == ordered
+    assert [item["id"] for item in LibraryStore(store.db_path).list_collections()] == ordered
+    with pytest.raises(ValueError, match="列表已变化"):
+        store.reorder_collections([first["id"], first["id"], third["id"]])
+    with pytest.raises(ValueError, match="列表已变化"):
+        store.reorder_collections([first["id"], second["id"]])
+    assert [item["id"] for item in store.list_collections()] == ordered
+
+
 def test_export_then_import_roundtrip(store: LibraryStore) -> None:
     collection = store.create_collection("我的夹")
     store.add_item(_result(content_id="a"), note="备注 A", collection_ids=[collection["id"]])

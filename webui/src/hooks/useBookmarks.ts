@@ -34,6 +34,7 @@ import {
   removeItems,
   removeItemsFromSystemCollection as apiRemoveFromSystemCollection,
   removeItemsFromCollection as apiRemoveFromCollection,
+  reorderCollections as apiReorderCollections,
   renameCollection as apiRenameCollection,
   toAddPayload,
   updateNote,
@@ -268,6 +269,20 @@ export function useBookmarks() {
     [refresh],
   );
 
+  const reorderCollections = useCallback(
+    async (ids: number[]) => {
+      try {
+        await apiReorderCollections(ids);
+        await refresh();
+        return true;
+      } catch (error) {
+        toast.error(errorText(error, "调整收藏夹顺序失败"));
+        return false;
+      }
+    },
+    [refresh],
+  );
+
   const deleteCollection = useCallback(
     async (id: number) => {
       try {
@@ -376,6 +391,7 @@ export function useBookmarks() {
     createCollection,
     renameCollection,
     updateCollectionInfo,
+    reorderCollections,
     deleteCollection,
     addToCollection,
     removeFromCollection,

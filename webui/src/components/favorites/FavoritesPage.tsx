@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import axios from "axios";
 import {
-  AlertTriangle, ArrowLeft, Bookmark, Check, Clock3, FolderHeart, FolderPlus, Grid2X2, List, Loader2, MoreHorizontal, Pencil, RefreshCw, Trash2, X,
+  AlertTriangle, ArrowLeft, Bookmark, Check, Clock3, FolderHeart, FolderPlus, Grid2X2, List, Loader2, Menu, MoreHorizontal, Pencil, RefreshCw, Trash2, X,
 } from "lucide-react";
 import { ResultTabs } from "@/components/search/ResultTabs";
 import { BookmarkBackup } from "@/components/search/BookmarkBackup";
@@ -13,6 +13,7 @@ import type { PlatformSlug, UnifiedSearchResult } from "@/types/search";
 import { PLATFORM_COLORS, PLATFORM_LABELS, STATUS_LABELS } from "@/types/search";
 import { PLATFORM_SLUGS } from "@/lib/platformMeta";
 import { readLocalFolderView, writeLocalFolderView, type LocalFolderView } from "@/lib/localFolderView";
+import { moveCollection } from "@/lib/collectionOrder";
 
 const PLATFORMS = PLATFORM_SLUGS;
 const RECOVERY_NOTICE_PREFIX = "siye_library_recovery_notice_";
@@ -70,6 +71,10 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [folderMenuOpen, setFolderMenuOpen] = useState(false);
+  const [orderPreview, setOrderPreview] = useState<number[] | null>(null);
+  const [draggingFolderId, setDraggingFolderId] = useState<number | null>(null);
+  const [reordering, setReordering] = useState(false);
+  const [orderAnnouncement, setOrderAnnouncement] = useState("");
   const [editingCollectionId, setEditingCollectionId] = useState<number | null>(null);
   const [moving, setMoving] = useState(false);
   const [showRecoveryNotice, setShowRecoveryNotice] = useState(false);
@@ -82,6 +87,12 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
   const localGridScrollY = useRef(0);
   const folderMenuRef = useRef<HTMLDivElement>(null);
   const folderMenuTriggerRef = useRef<HTMLButtonElement>(null);
+  const folderDrag = useRef<{ pointerId: number; sourceId: number; startX: number; startY: number; originalIds: number[]; previewIds: number[]; moved: boolean } | null>(null);
+  const orderedCollections = useMemo(() => {
+    if (!orderPreview) return library.collections;
+    const ranks = new Map(orderPreview.map((id, index) => [id, index]));
+    return [...library.collections].sort((left, right) => (ranks.get(left.id) ?? Infinity) - (ranks.get(right.id) ?? Infinity));
+  }, [library.collections, orderPreview]);
 
   const defaultCount = useMemo(
     () => library.items.filter((item) => item.inDefault).length,
@@ -250,6 +261,67 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
     const ok = await library.updateCollectionInfo(id, draft);
     setMoving(false);
     return ok;
+  };
+
+  const saveFolderOrder = async (ids: number[], sourceId: number) => {
+    setReordering(true);
+    const saved = await library.reorderCollections(ids);
+    setOrderPreview(null);
+    setReordering(false);
+    if (saved) {
+      const name = library.collections.find((item) => item.id === sourceId)?.name ?? "收藏夹";
+      setOrderAnnouncement(`${name}已移至第 ${ids.indexOf(sourceId) + 1} 位`);
+    }
+  };
+
+  const startFolderDrag = (event: ReactPointerEvent<HTMLButtonElement>, sourceId: number) => {
+    if (reordering || (event.pointerType === "mouse" && event.button !== 0)) return;
+    event.preventDefault();
+    setFolderMenuOpen(false);
+    const ids = library.collections.map((item) => item.id);
+    folderDrag.current = { pointerId: event.pointerId, sourceId, startX: event.clientX, startY: event.clientY, originalIds: ids, previewIds: ids, moved: false };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDraggingFolderId(sourceId);
+  };
+
+  const moveFolderDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const drag = folderDrag.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (!drag.moved && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 5) return;
+    drag.moved = true;
+    const row = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-folder-id]");
+    if (!row) return;
+    const targetId = Number(row.dataset.folderId);
+    const after = event.clientY >= row.getBoundingClientRect().top + row.getBoundingClientRect().height / 2;
+    const next = moveCollection(drag.previewIds, drag.sourceId, targetId, after);
+    if (next === drag.previewIds || next.every((id, index) => id === drag.previewIds[index])) return;
+    drag.previewIds = next;
+    setOrderPreview(next);
+  };
+
+  const finishFolderDrag = (event: ReactPointerEvent<HTMLButtonElement>, cancelled = false) => {
+    const drag = folderDrag.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    folderDrag.current = null;
+    setDraggingFolderId(null);
+    if (cancelled || !drag.moved || drag.previewIds.every((id, index) => id === drag.originalIds[index])) {
+      setOrderPreview(null);
+      return;
+    }
+    void saveFolderOrder(drag.previewIds, drag.sourceId);
+  };
+
+  const moveFolderWithKeyboard = (event: ReactKeyboardEvent<HTMLButtonElement>, sourceId: number) => {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    event.preventDefault();
+    if (reordering) return;
+    const ids = library.collections.map((item) => item.id);
+    const index = ids.indexOf(sourceId);
+    const target = ids[index + (event.key === "ArrowUp" ? -1 : 1)];
+    if (target === undefined) return;
+    const next = moveCollection(ids, sourceId, target, event.key === "ArrowDown");
+    setOrderPreview(next);
+    void saveFolderOrder(next, sourceId);
   };
 
   const deleteDetailCollection = async (id: number) => {
@@ -467,8 +539,9 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
             </button>
 
             <p className="library-side-title">收藏夹</p>
-            {library.collections.map((collection) => (
-              <div key={collection.id} className="library-side-row">
+            {orderedCollections.map((collection) => (
+              <div key={collection.id} data-folder-id={collection.id} className={`library-side-row ${draggingFolderId === collection.id ? "is-dragging" : ""}`}>
+                <button type="button" className="library-folder-grip" aria-label={`调整顺序：${collection.name}，按上下方向键移动`} title="按住拖动调整顺序；键盘可用上下方向键" onPointerDown={(event) => startFolderDrag(event, collection.id)} onPointerMove={moveFolderDrag} onPointerUp={finishFolderDrag} onPointerCancel={(event) => finishFolderDrag(event, true)} onKeyDown={(event) => moveFolderWithKeyboard(event, collection.id)}><Menu aria-hidden="true" /></button>
                 <button
                   type="button"
                   className={`library-side-item ${selection.kind === "collection" && selection.id === collection.id ? "active" : ""}`}
@@ -485,6 +558,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
                 </div>}
               </div>
             ))}
+            <span className="sr-only" role="status" aria-live="polite">{orderAnnouncement}</span>
 
             {creating ? (
               <span className="library-inline-form">
