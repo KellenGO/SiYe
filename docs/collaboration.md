@@ -13,7 +13,7 @@
 
 仅保留未集成、未完成、阻塞、归属不明的改动，或代码和 wiki 难以重建的验证限制。每项用任务 ID 或提交定位，写清现状、下一步和负责人；解决后删除。不替其他会话宣布完成。
 
-- `FOLDER-ACTIONS-DRAFT-20260926` / `FOLDER-ACTIONS-BENCHMARK-20260926`：独立视觉草稿见 `docs/plans/local-folder-actions-design-preview.html`，已在 `master` 提交；参考 YouTube 的编辑/删除路径及有版本限制的 B站旧截图后，A 改为短菜单加独立重命名层，B 仍是封面内操作栏。待用户选方向，之后另开产品实现任务。应用内浏览器的本地文件 URL 被安全策略拒绝，当前只完成脚本语法与静态结构检查；后续接手者需在允许的环境中人工检查视觉、键盘路径和 320px 窄屏。
+- `FOLDER-ACTIONS-DRAFT-20260926` / `FOLDER-ACTIONS-BENCHMARK-20260926` / `FOLDER-ACTIONS-OFF-COVER-20260926`：独立视觉草稿见 `docs/plans/local-folder-actions-design-preview.html`，已在 `master` 提交。按用户反馈，A、B 的按钮与操作层均移到封面下方；A 在名称右侧，B 在信息行右侧，推荐 B。待用户选方向，之后另开产品实现任务。应用内浏览器的本地文件 URL 被安全策略拒绝，当前只完成脚本语法与静态结构检查；后续接手者需在允许的环境中人工检查视觉、键盘路径和 320px 窄屏。
 - `V1-RELEASE-CLOSEOUT-20260925`：现有 v1.0.0 Release 正文已补普通用户下载与限制说明，四项资产及两份 SHA256 已复核。`92324fe` 确认托盘、四平台登录/搜索及受支持收藏同步的真人验收；首次安装与教程、单平台重搜、换一批、收藏及偏好重启、CSV/Markdown 导出、覆盖安装/卸载尚无逐项真人记录。CI 与隔离 smoke 不能代替这些记录；B站增量排序前提仍未在真实账号验证。后续验收接手者仅在有安全、实际价值的场景补记，不阻塞既有 v1.0.0 发布。
 
 这不证明其他 worktree 或未登记的会话没有工作。接手前仍要看 `git worktree list`、各相关 worktree 的 status 与最新提交。
