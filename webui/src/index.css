@@ -756,7 +756,7 @@ html.dark .search-submit { color: #101525; }
 .local-view-switch button { display: inline-flex; align-items: center; gap: 5px; padding: 6px 9px; border-radius: 6px; color: var(--siye-muted); font-size: 12px; }
 .local-view-switch button svg { width: 14px; height: 14px; }
 .local-view-switch button:hover, .local-view-switch button.active { background: var(--siye-bg); color: var(--siye-brand-ink); box-shadow: 0 1px 3px #20294514; }
-.local-view-switch button:focus-visible, .local-folder-open:focus-visible, .local-folder-actions summary:focus-visible { outline: 2px solid var(--siye-brand); outline-offset: 3px; }
+.local-view-switch button:focus-visible, .local-folder-open:focus-visible, .local-folder-more:focus-visible, .local-folder-detail-menu button:focus-visible, .local-folder-detail-menu input:focus-visible { outline: 2px solid var(--siye-brand); outline-offset: 3px; }
 .local-folder-browser { margin-top: 26px; }
 .local-folder-intro { display: flex; align-items: center; justify-content: space-between; gap: 22px; margin-bottom: 29px; }
 .local-folder-intro h2 { margin: 4px 0 5px; color: var(--siye-ink); font-size: 18px; font-weight: 600; }
@@ -780,25 +780,37 @@ html.dark .search-submit { color: #101525; }
 .local-folder-count { position: absolute; z-index: 2; right: 8px; bottom: 6px; color: #fff; font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums; text-shadow: 0 1px 3px rgb(0 0 0 / .5); }
 .local-folder-name { display: block; overflow: hidden; margin-top: 12px; text-overflow: ellipsis; white-space: nowrap; color: var(--siye-ink); font-size: 14px; font-weight: 650; }
 .local-folder-meta { display: flex; align-items: center; gap: 5px; margin-top: 5px; color: var(--siye-muted); font-size: 11px; white-space: nowrap; }
-.local-folder-actions { position: absolute; z-index: 3; top: 20px; right: 8px; }
-.local-folder-actions > summary { display: grid; width: 28px; height: 28px; cursor: pointer; place-items: center; list-style: none; border: 1px solid transparent; border-radius: 8px; background: #fffffff0; color: var(--siye-secondary); box-shadow: 0 2px 9px #20294512; }
-.local-folder-actions > summary::-webkit-details-marker { display: none; }
-.local-folder-actions > summary svg { width: 16px; height: 16px; }
-.local-folder-actions[open] { min-width: 128px; padding: 4px; border: 1px solid var(--siye-line-strong); border-radius: 10px; background: var(--siye-bg); box-shadow: 0 12px 30px #20294522; }
-.local-folder-actions[open] > summary { position: absolute; top: 4px; right: 4px; box-shadow: none; }
-.local-folder-actions button { display: flex; width: 100%; align-items: center; gap: 7px; padding: 8px 9px; border-radius: 7px; color: var(--siye-secondary); font-size: 12px; text-align: left; }
-.local-folder-actions button:hover { background: var(--siye-soft); color: var(--siye-brand-ink); }
-.local-folder-actions button.danger { color: var(--siye-red); }
-.local-folder-actions button svg { width: 14px; height: 14px; }
-.local-card-rename { display: flex; width: 210px; align-items: center; gap: 4px; padding: 32px 3px 3px; }
-.local-card-rename .field { min-width: 0; flex: 1; padding: 6px; font-size: 12px; }
-.local-card-rename button { width: 25px; padding: 5px; }
+.local-folder-detail-heading { display: flex; position: relative; z-index: 5; align-items: flex-start; justify-content: space-between; gap: 12px; min-width: 0; margin: 0 0 24px; }
+.local-folder-detail-title { min-width: 0; }
+.local-folder-detail-title h2 { overflow: hidden; margin: 4px 0 5px; color: var(--siye-ink); font-size: 18px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.local-folder-detail-title p { margin: 0; color: var(--siye-muted); font-size: 12px; }
+.local-folder-detail-actions { flex: none; }
+.local-folder-more { display: grid; width: 36px; height: 36px; padding: 0; place-items: center; border: 0; border-radius: 8px; background: transparent; color: var(--siye-secondary); }
+.local-folder-more:hover, .local-folder-more[aria-expanded="true"] { background: var(--siye-soft); color: var(--siye-brand-ink); }
+.local-folder-more svg { width: 18px; height: 18px; }
+.local-folder-detail-menu { position: absolute; top: calc(100% + 7px); right: 0; width: 190px; max-width: calc(100vw - 32px); padding: 5px; border: 1px solid var(--siye-line-strong); border-radius: 10px; background: var(--siye-bg); box-shadow: 0 12px 30px #20294522; }
+.local-folder-detail-menu:has(form) { width: 250px; }
+.local-folder-detail-menu > button { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 36px; padding: 7px 9px; border-radius: 7px; color: var(--siye-secondary); font-size: 12px; text-align: left; }
+.local-folder-detail-menu > button:hover { background: var(--siye-soft); color: var(--siye-brand-ink); }
+.local-folder-detail-menu > button.danger { margin-top: 3px; border-top: 1px solid var(--siye-line); border-radius: 0 0 7px 7px; color: var(--siye-red); }
+.local-folder-detail-menu > button.danger:hover { background: color-mix(in srgb, var(--siye-red) 9%, var(--siye-bg)); }
+.local-folder-detail-menu > button svg { width: 15px; height: 15px; }
+.local-folder-detail-menu form { padding: 7px; }
+.local-folder-detail-menu label { display: block; margin-bottom: 8px; color: var(--siye-secondary); font-size: 12px; font-weight: 600; }
+.local-folder-detail-menu .field { width: 100%; min-width: 0; font-size: 12px; }
+.local-folder-rename-actions { display: flex; justify-content: flex-end; gap: 7px; margin-top: 10px; }
+.local-folder-rename-actions button { min-height: 32px; padding: 5px 9px; border-radius: 6px; color: var(--siye-secondary); font-size: 12px; }
+.local-folder-rename-actions button:hover { background: var(--siye-soft); }
+.local-folder-rename-actions button[type="submit"] { background: var(--siye-brand); color: #fff; }
+.local-folder-rename-actions button[type="submit"]:disabled { opacity: .5; cursor: not-allowed; }
 @media (max-width: 620px) {
   .collection-heading .page-heading { flex-direction: column; }
   .local-heading-actions { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
   .local-view-switch button { white-space: nowrap; }
   .local-folder-intro { align-items: flex-start; flex-direction: column; gap: 12px; }
   .local-folder-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 30px 12px; }
+  .local-folder-more { width: 40px; height: 40px; }
+  .local-folder-detail-menu > button, .local-folder-rename-actions button { min-height: 40px; }
 }
 .backup-details { position: relative; }
 .backup-details > summary { list-style: none; cursor: pointer; }

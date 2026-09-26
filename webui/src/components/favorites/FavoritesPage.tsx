@@ -70,6 +70,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
   const [newName, setNewName] = useState("");
   const [renaming, setRenaming] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [detailMenuOpen, setDetailMenuOpen] = useState(false);
   const [moving, setMoving] = useState(false);
   const [showRecoveryNotice, setShowRecoveryNotice] = useState(false);
   const [remoteFolders, setRemoteFolders] = useState<RemoteFolder[]>([]);
@@ -79,6 +80,8 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
   const folderRequest = useRef(0);
   const gridScrollY = useRef(0);
   const localGridScrollY = useRef(0);
+  const detailMenuRef = useRef<HTMLDivElement>(null);
+  const detailMenuTriggerRef = useRef<HTMLButtonElement>(null);
 
   const defaultCount = useMemo(
     () => library.items.filter((item) => item.inDefault).length,
@@ -143,7 +146,31 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
   // 切换选择时清空勾选
   useEffect(() => {
     setSelectedKeys([]);
+    setDetailMenuOpen(false);
+    setRenaming(null);
   }, [selection]);
+
+  useEffect(() => {
+    if (!detailMenuOpen) return;
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (!detailMenuRef.current?.contains(event.target as Node)) {
+        setDetailMenuOpen(false);
+        setRenaming(null);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setDetailMenuOpen(false);
+      setRenaming(null);
+      detailMenuTriggerRef.current?.focus();
+    };
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [detailMenuOpen]);
 
   const data = remote.data;
   const retainedCounts = useMemo(() => Object.fromEntries(PLATFORMS.map((platform) => [
@@ -224,6 +251,17 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
     if (ok) {
       setRenaming(null);
       setRenameValue("");
+      setDetailMenuOpen(false);
+      detailMenuTriggerRef.current?.focus();
+    }
+  };
+
+  const deleteDetailCollection = async (id: number) => {
+    setDetailMenuOpen(false);
+    if (await library.deleteCollection(id)) {
+      setSelection({ kind: "all" });
+      setLocalFolderRoot(true);
+      requestAnimationFrame(() => window.scrollTo({ top: localGridScrollY.current }));
     }
   };
 
@@ -289,6 +327,8 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
         : `${savedCount} 条已收藏 · 收藏与备注保存在本机`;
 
   const setLocalView = (view: LocalFolderView) => {
+    setDetailMenuOpen(false);
+    setRenaming(null);
     setLocalFolderView(view);
     writeLocalFolderView(view);
     if (view === "icon" && selection.kind === "all") setLocalFolderRoot(true);
@@ -296,10 +336,14 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
   };
   const openLocalFolder = (next: LibrarySelection) => {
     localGridScrollY.current = window.scrollY;
+    setDetailMenuOpen(false);
+    setRenaming(null);
     setSelection(next);
     setLocalFolderRoot(false);
   };
   const closeLocalFolder = () => {
+    setDetailMenuOpen(false);
+    setRenaming(null);
     setLocalFolderRoot(true);
     requestAnimationFrame(() => window.scrollTo({ top: localGridScrollY.current }));
   };
@@ -399,7 +443,6 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
           <section className="local-folder-section" aria-label="自建收藏夹"><h3>自建收藏夹</h3>
             {localFolderCards.collections.length ? <div className="local-folder-grid">{localFolderCards.collections.map((collection) => <article className="local-folder-card" key={collection.id}>
               <button type="button" className="local-folder-open" onClick={() => openLocalFolder({ kind: "collection", id: collection.id })}><span className="local-folder-stack" aria-hidden="true"><span /><span /></span><span className="local-folder-cover">{collection.cover && <img src={collection.cover} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} />}<span className="local-folder-count">{collection.item_count} 条</span></span><span className="local-folder-name" title={customCollectionLabel(collection.name)}>{customCollectionLabel(collection.name)}</span><span className="local-folder-meta"><span>本地收藏夹</span></span></button>
-              <details className="local-folder-actions" onClick={(event) => event.stopPropagation()}><summary aria-label={`更多操作：${collection.name}`}><MoreHorizontal /></summary>{renaming === collection.id ? <span className="local-card-rename"><input className="field" aria-label={`重命名收藏夹 ${collection.name}`} value={renameValue} autoFocus maxLength={60} onChange={(event) => setRenameValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void submitRename(collection.id); if (event.key === "Escape") setRenaming(null); }} /><button type="button" onClick={() => void submitRename(collection.id)}><Check /></button><button type="button" onClick={() => setRenaming(null)}><X /></button></span> : <><button type="button" onClick={() => { setRenaming(collection.id); setRenameValue(collection.name); }}><Pencil />重命名</button><button type="button" className="danger" onClick={() => void library.deleteCollection(collection.id)}><Trash2 />删除</button></>}</details>
             </article>)}</div> : <p className="local-folder-empty">还没有自建收藏夹。新建后，可在内容列表中把同一条内容放进多个收藏夹。</p>}
           </section>
         </section>
@@ -431,7 +474,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
             <p className="library-side-title">收藏夹</p>
             {library.collections.map((collection) => (
               <div key={collection.id} className="library-side-row">
-                {renaming === collection.id ? (
+                {localFolderView === "list" && renaming === collection.id ? (
                   <span className="library-inline-form">
                     <input
                       className="field"
@@ -457,18 +500,18 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
                     >
                       <FolderHeart aria-hidden="true" /><span className="library-folder-name" title={collection.name}>{customCollectionLabel(collection.name)}</span><span className="library-folder-count">{collection.item_count}</span>
                     </button>
-                    <button
+                    {localFolderView === "list" && <button
                       type="button"
                       className="icon-btn library-side-action"
                       aria-label={`重命名收藏夹 ${collection.name}`}
                       onClick={() => { setRenaming(collection.id); setRenameValue(collection.name); }}
-                    ><Pencil /></button>
-                    <button
+                    ><Pencil /></button>}
+                    {localFolderView === "list" && <button
                       type="button"
                       className="icon-btn library-side-action"
                       aria-label={`删除收藏夹 ${collection.name}`}
                       onClick={() => void library.deleteCollection(collection.id)}
-                    ><Trash2 /></button>
+                    ><Trash2 /></button>}
                   </>
                 )}
               </div>
@@ -499,6 +542,22 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
 
           <div className="library-main">
             {localFolderView === "icon" && <button type="button" className="text-link remote-folder-back" onClick={closeLocalFolder}><ArrowLeft />返回收藏夹</button>}
+            {localFolderView === "icon" && activeCollection && <div className="local-folder-detail-heading">
+              <div className="local-folder-detail-title"><span className="eyebrow">LOCAL FOLDER</span><h2 title={customCollectionLabel(activeCollection.name)}>{customCollectionLabel(activeCollection.name)}</h2><p>{activeCollection.item_count} 条内容 · 本地收藏夹</p></div>
+              <div className="local-folder-detail-actions" ref={detailMenuRef}>
+                <button ref={detailMenuTriggerRef} type="button" className="local-folder-more" aria-label={`更多操作：${activeCollection.name}`} aria-expanded={detailMenuOpen} aria-controls={detailMenuOpen ? "local-folder-detail-menu" : undefined} onClick={() => { setDetailMenuOpen((open) => !open); setRenaming(null); }}><MoreHorizontal aria-hidden="true" /></button>
+                {detailMenuOpen && <div className="local-folder-detail-menu" id="local-folder-detail-menu">
+                  {renaming === activeCollection.id ? <form onSubmit={(event) => { event.preventDefault(); void submitRename(activeCollection.id); }}>
+                    <label htmlFor="local-folder-rename">重命名收藏夹</label>
+                    <input id="local-folder-rename" className="field" value={renameValue} autoFocus maxLength={60} onChange={(event) => setRenameValue(event.target.value)} />
+                    <div className="local-folder-rename-actions"><button type="button" onClick={() => { setRenaming(null); setDetailMenuOpen(false); detailMenuTriggerRef.current?.focus(); }}>取消</button><button type="submit" disabled={moving || !renameValue.trim()}>保存名称</button></div>
+                  </form> : <>
+                    <button type="button" onClick={() => { setRenaming(activeCollection.id); setRenameValue(activeCollection.name); }}><Pencil aria-hidden="true" />重命名</button>
+                    <button type="button" className="danger" onClick={() => void deleteDetailCollection(activeCollection.id)}><Trash2 aria-hidden="true" />删除收藏夹</button>
+                  </>}
+                </div>}
+              </div>
+            </div>}
             {selectedKeys.length > 0 && (
               <div className="library-batch" role="status">
                 <span>已选 {selectedItemKeys.length} 条</span>
