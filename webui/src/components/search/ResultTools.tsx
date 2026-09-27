@@ -189,7 +189,7 @@ export function MembershipEditor({ keys, library, subject, label = "编辑归属
     const outside = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node)) close(); };
     const escape = (event: KeyboardEvent) => {
       if (event.key === "Escape") { close(); root.current?.querySelector("button")?.focus(); }
-      if (modal && event.key === "Tab") {
+      if (modal && event.key === "Tab" && !event.defaultPrevented) {
         const controls = card.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled)');
         if (!controls?.length) return;
         const first = controls[0], last = controls[controls.length - 1];

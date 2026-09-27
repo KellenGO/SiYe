@@ -113,6 +113,16 @@ def main():
                 expect(drawer.get_by_role("heading", name="同步条目 1", exact=True)).to_be_visible()
                 assert library.get_item("bilibili", "BV1") is None
                 drawer.get_by_role("button", name="收藏 同步条目 1", exact=True).click()
+                membership = page.get_by_role("dialog", name="编辑收藏夹归属", exact=True)
+                expect(membership).to_be_visible()
+                membership.get_by_role("button", name="完成", exact=True).focus()
+                page.keyboard.press("Shift+Tab")
+                expect(membership.get_by_role("checkbox", name="默认收藏夹", exact=True)).to_be_focused()
+                page.screenshot(path=str(ROOT / "build/drawer-save-membership.png"))
+                page.keyboard.press("Escape")
+                expect(membership).to_have_count(0)
+                expect(drawer).to_be_visible()
+                expect(drawer.get_by_role("button", name="取消收藏 同步条目 1", exact=True)).to_be_focused()
                 expect(drawer.get_by_role("button", name="编辑归属")).to_be_visible()
                 assert library.get_item("bilibili", "BV1") is not None
                 page.keyboard.press("Escape")

@@ -1,10 +1,10 @@
-import { useEffect, useId, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { ArrowUpRight, Trash2, X } from "lucide-react";
 import type { PlatformSlug, UnifiedSearchResult } from "@/types/search";
 import { PLATFORM_LABELS } from "@/types/search";
 import type { BookmarkLibrary } from "@/hooks/useBookmarks";
-import { BookmarkControl, BookmarkNote, WatchLaterControl } from "@/components/search/ResultTools";
+import { BookmarkControl, BookmarkNote, MembershipEditor, WatchLaterControl } from "@/components/search/ResultTools";
 import { orderedMetrics, resultKey, resultSources, safeContentUrl } from "@/lib/resultTools";
 import { recordView } from "@/lib/historyApi";
 import { LocalContentCover, localContentType } from "./LocalContentCard";
@@ -26,6 +26,8 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
   const closeRequest = useRef<() => void>(() => {});
   const [saving, setSaving] = useState(false);
   const [noteError, setNoteError] = useState("");
+  const [membershipKeys, setMembershipKeys] = useState<string[] | null>(null);
+  const closeMembership = useCallback(() => setMembershipKeys(null), []);
   const keys = resultSources(result).map(resultKey);
   const items = keys.map((key) => library?.items.find((item) => item.key === key)).filter((item) => item !== undefined);
   const requestClose = () => {
@@ -108,7 +110,8 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
             <h4>简介</h4><p className="local-content-snippet">{source.snippet || "暂无简介"}</p>
             {metrics.length ? <dl className="local-content-metrics">{metrics.map(({ key, label }) => <div key={key}><dt>{label}</dt><dd>{source.metrics_approximate?.includes(key) ? "约 " : ""}{source.metrics[key].toLocaleString("zh-CN")}</dd></div>)}</dl>
               : <p className="local-content-detail-meta">暂无互动数据</p>}
-            {library && <div className="local-content-actions"><span><BookmarkControl result={source} library={library} fetchedAt={fetchedAt} />{item?.saved ? "已收藏" : "收藏"}</span><span><WatchLaterControl result={source} library={library} fetchedAt={fetchedAt} />{item?.watchLater ? "已加入稍后再看" : "稍后再看"}</span></div>}
+            {library && <div className="local-content-actions"><span><BookmarkControl result={source} library={library} fetchedAt={fetchedAt}
+              onToggled={(added, savedKeys) => setMembershipKeys(added ? savedKeys : null)} />{item?.saved ? "已收藏" : "收藏"}</span><span><WatchLaterControl result={source} library={library} fetchedAt={fetchedAt} />{item?.watchLater ? "已加入稍后再看" : "稍后再看"}</span></div>}
             {item && library && <>
             <div className="local-content-folders">
               <h4>所在收藏夹</h4>
@@ -130,6 +133,8 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
             </>}
           </section>;
         })}
+        {membershipKeys && library && membershipKeys.some((key) => library.items.some((item) => item.key === key)) && <MembershipEditor
+          keys={membershipKeys} library={library} modal defaultOpen onClose={closeMembership} />}
         {onDelete && <button type="button" className="btn danger" onClick={onDelete}><Trash2 aria-hidden="true" />从历史中移除</button>}
         {library?.error && <p className="local-content-error" role="alert">{library.error}</p>}
         {noteError && <p className="local-content-error" role="alert">{noteError}</p>}

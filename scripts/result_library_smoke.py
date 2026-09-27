@@ -56,6 +56,8 @@ def main() -> None:
     note = source("xhs", "old-note", "研究素材图文", "note", "https://www.xiaohongshu.com/explore/old-note", 20)
     video = source("bilibili", "new-video", "研究素材视频", "video", "https://www.bilibili.com/video/new-video", 1)
     article = source("zhihu", "article", "独立文章", "article", "https://zhuanlan.zhihu.com/p/article", 2)
+    article["metrics"] = {"view_count": 12000, "like_count": 12}
+    article["metrics_approximate"] = ["view_count"]
     group = {**note, "grouped_sources": [note, video]}
     job = dict(job_id="library-smoke", overall="completed", keyword="研究素材",
                created_at=fetched, completed_at=fetched, total_ms=100,
@@ -122,6 +124,7 @@ def main() -> None:
             page.goto(origin + "/#/search")
             expect(page.get_by_role("button", name="选择收藏平台 研究素材图文", exact=True)).to_be_visible()
             expect(page.locator(".local-content-card")).to_have_count(2)
+            expect(page.locator(".local-content-primary-metric")).to_have_text(["点赞 12", "阅读 约 1.2万"])
             if args.screenshots:
                 page.screenshot(path=str(ROOT / "build/content-grid-search.png"), full_page=True)
             page.set_viewport_size({"width": 390, "height": 844})
@@ -329,6 +332,7 @@ def main() -> None:
             page.reload()
             blank_card = page.locator(".local-content-card").filter(has_text="无标题内容")
             expect(blank_card).to_contain_text("封面暂不可用")
+            expect(blank_card.locator(".local-content-primary-metric")).to_have_count(0)
             expect(blank_card.get_by_role("link")).to_have_count(0)
             blank_card.get_by_role("button", name="查看内容信息：无标题内容", exact=True).click()
             blank_drawer = page.get_by_role("dialog", name="内容信息", exact=True)
@@ -336,6 +340,9 @@ def main() -> None:
             expect(blank_drawer).to_contain_text("暂无互动数据")
             expect(blank_drawer.get_by_role("link")).to_have_count(0)
             page.keyboard.press("Escape")
+            blank["metrics"] = {"view_count": 0, "like_count": 99}
+            page.reload()
+            expect(blank_card.locator(".local-content-primary-metric")).to_have_text("播放 0")
             assert not errors, errors
             assert not api_writes, api_writes
             browser.close()
