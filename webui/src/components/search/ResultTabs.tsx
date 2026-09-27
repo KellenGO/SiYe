@@ -9,6 +9,8 @@ import { ResultCard } from "./ResultCard";
 import { BookmarkControl, BookmarkNote, ExportActions, WatchLaterControl } from "./ResultTools";
 import type { BookmarkLibrary } from "@/hooks/useBookmarks";
 import { DEFAULT_FILTERS, exportRows, filterResultGroups, groupKey, resultKey, type ResultFilters } from "@/lib/resultTools";
+import { LocalContentCard } from "@/components/favorites/LocalContentCard";
+import { LocalContentDrawer } from "@/components/favorites/LocalContentDrawer";
 
 interface ResultTabsProps {
   results: UnifiedSearchResult[];
@@ -33,11 +35,13 @@ interface ResultTabsProps {
   /** 勾选工具按钮在收起状态的文案，默认“导出 / 复制”。 */
   selectionToolLabel?: string;
   selectionResetKey?: number;
+  localContentView?: "list" | "grid";
+  emptyMessage?: string;
 }
 
 type TabKey = "all" | PlatformSlug;
 
-/** Round 14：平台结果标签固定为五个（全部 / 小红书 / 抖音 / B站 / 知乎）。 */
+/** 平台结果标签固定为五个（全部 / 小红书 / 抖音 / B站 / 知乎）。 */
 const ALL_TABS: { key: TabKey; label: string }[] = [
   { key: "all", label: "全部" },
   { key: "xhs", label: "小红书" },
@@ -69,7 +73,12 @@ export function ResultTabs({
   disableSort = false,
   pageSize,
   onDeleteItem,
+  localContentView = "list",
+  emptyMessage,
 }: ResultTabsProps) {
+  const resultBlock = useRef<HTMLDivElement>(null);
+  const [detailResult, setDetailResult] = useState<UnifiedSearchResult | null>(null);
+  const gridView = savedView && localContentView === "grid";
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [filters, setFilters] = useState<ResultFilters>({ ...DEFAULT_FILTERS });
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -166,7 +175,7 @@ export function ResultTabs({
   const selectClass = "field select";
 
   return (
-    <div className="results-block">
+    <div className="results-block" ref={resultBlock} tabIndex={-1}>
       <div className="tabs" role="tablist" aria-label="结果平台">
           {visibleTabs.map((tab) => {
             const count = counts[tab.key] || 0;
@@ -204,7 +213,7 @@ export function ResultTabs({
         </div>
         <ExportActions rows={rows} keyword={savedView ? "本地收藏" : keyword} />
       </div>}
-      <div className="result-list flex flex-col">
+      <div className={gridView ? "local-content-grid" : "result-list flex flex-col"}>
         {renderedResults.map((result, index) => {
           const key = groupKey(result);
           const bookmark = bookmarks.get(resultKey(result));
@@ -213,7 +222,7 @@ export function ResultTabs({
             ? library?.items.find((item) => membershipPrompt.keys.includes(item.key))
             : undefined;
           return (
-            <div key={key} className={savedView || promptItem ? "saved-result-item" : undefined}>
+            <div key={key} className={gridView ? `local-content-card ${selected.has(key) ? "is-selected" : ""}` : savedView || promptItem ? "saved-result-item" : undefined}>
               {exportOpen && <div className="mb-1.5 flex items-center gap-2 px-1">
                 <label className="flex min-w-0 items-center gap-1.5 text-xs text-cyber-text-muted">
                   <input type="checkbox" aria-label={`选择 ${result.title}`} checked={selected.has(key)} onChange={() => setSelected((previous) => {
@@ -221,20 +230,22 @@ export function ResultTabs({
                   })} />选择
                 </label>
               </div>}
-              <ResultCard result={result} index={index} highlightQuery={filters.query || keyword}
+              {gridView ? <LocalContentCard result={result} onOpen={() => setDetailResult(result)} /> : <ResultCard result={result} index={index} highlightQuery={filters.query || keyword}
                 renderBookmark={library ? (source) => <>
                   <BookmarkControl result={source} library={library} fetchedAt={fetchedAt}
                     onToggled={(added, keys) => setMembershipPrompt(added ? { group: groupKey(source), keys } : null)} />
                   <WatchLaterControl result={source} library={library} fetchedAt={fetchedAt} />
                 </> : undefined}
-                onDelete={onDeleteItem ? () => onDeleteItem(result) : undefined} />
+                onDelete={onDeleteItem ? () => onDeleteItem(result) : undefined} />}
               {/* 收藏页每条本来就常驻这个信息条，只有搜索结果页才需要"刚收藏完"弹出一次 */}
               {!savedView && promptItem && library && <BookmarkNote bookmark={promptItem} onSave={library.saveNote} library={library} />}
-              {savedView && bookmark && library && <BookmarkNote bookmark={bookmark} onSave={library.saveNote} library={library} />}
+              {!gridView && savedView && bookmark && library && <BookmarkNote bookmark={bookmark} onSave={library.saveNote} library={library} />}
             </div>
           );
         })}
       </div>
+
+      {gridView && detailResult && library && <LocalContentDrawer result={detailResult} library={library} fallbackFocus={resultBlock} onClose={() => setDetailResult(null)} />}
 
       {hiddenCount > 0 && (
         <div className="library-batch-bar">
@@ -245,7 +256,7 @@ export function ResultTabs({
 
       {filteredResults.length === 0 && (
         <p className="text-center py-10 text-sm text-cyber-text-muted">
-          {overall === "running" && !savedView ? "正在搜索中…" : savedView && !results.length ? "还没有收藏。在搜索结果上点击“收藏”，就能在这里查看。" : "没有符合条件的结果，可清除筛选或切换平台。"}
+          {overall === "running" && !savedView ? "正在搜索中…" : savedView && !results.length ? emptyMessage ?? "还没有收藏。在搜索结果上点击“收藏”，就能在这里查看。" : "没有符合条件的结果，可清除筛选或切换平台。"}
         </p>
       )}
     </div>

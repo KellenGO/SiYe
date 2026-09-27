@@ -219,15 +219,20 @@ export function MembershipEditor({ keys, library, subject, label = "编辑归属
   </div>;
 }
 
-export function BookmarkNote({ bookmark, onSave, library }: {
+export function BookmarkNote({ bookmark, onSave, library, onDraftChange }: {
   bookmark: Bookmark & { key: string; inDefault: boolean; saved: boolean; watchLater: boolean; collections: { id: number; name: string }[] };
   onSave: (key: string, note: string) => boolean | Promise<boolean>;
   library: BookmarkLibrary;
+  onDraftChange?: (dirty: boolean) => void;
 }) {
   const [draft, setDraft] = useState(bookmark.note);
   const [editing, setEditing] = useState(false);
   const id = useId();
   useEffect(() => setDraft(bookmark.note), [bookmark.note]);
+  useEffect(() => {
+    onDraftChange?.(editing && draft !== bookmark.note);
+    return () => onDraftChange?.(false);
+  }, [draft, editing, bookmark.note, onDraftChange]);
   return (
     <div className="bookmark-note px-3 py-2">
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-cyber-text-muted mb-2">
