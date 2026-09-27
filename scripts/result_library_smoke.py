@@ -124,7 +124,10 @@ def main() -> None:
             page.goto(origin + "/#/search")
             expect(page.get_by_role("button", name="选择收藏平台 研究素材图文", exact=True)).to_be_visible()
             expect(page.locator(".local-content-card")).to_have_count(2)
-            expect(page.locator(".local-content-primary-metric")).to_have_text(["点赞 12", "阅读 约 1.2万"])
+            expect(page.locator(".local-content-primary-metric")).to_have_text(["12", "≈12k"])
+            expect(page.locator(".local-content-primary-metric svg.lucide-eye")).to_have_count(1)
+            expect(page.locator(".local-content-primary-metric svg.lucide-thumbs-up")).to_have_count(1)
+            expect(page.locator(".local-content-primary-metric").last).to_have_attribute("aria-label", "阅读 约 12,000")
             if args.screenshots:
                 page.screenshot(path=str(ROOT / "build/content-grid-search.png"), full_page=True)
             page.set_viewport_size({"width": 390, "height": 844})
@@ -342,7 +345,7 @@ def main() -> None:
             page.keyboard.press("Escape")
             blank["metrics"] = {"view_count": 0, "like_count": 99}
             page.reload()
-            expect(blank_card.locator(".local-content-primary-metric")).to_have_text("播放 0")
+            expect(blank_card.locator(".local-content-primary-metric")).to_have_text("0")
             assert not errors, errors
             assert not api_writes, api_writes
             browser.close()

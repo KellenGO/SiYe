@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { FileText, ImageOff, Play } from "lucide-react";
+import { useState, type ComponentType } from "react";
+import { Eye, FileText, ImageOff, MessageCircle, Play, Share2, Star, ThumbsUp } from "lucide-react";
+import { BilibiliCoinIcon } from "@/components/icons/BilibiliCoinIcon";
 import type { UnifiedSearchResult } from "@/types/search";
 import { highlightSegments, orderedMetrics } from "@/lib/resultTools";
 import { xhsCoverFallback } from "@/lib/localContentCover";
@@ -8,6 +9,18 @@ const CONTENT_TYPES: Record<string, string> = {
   video: "视频", short_video: "短视频", zvideo: "视频", note: "图文笔记",
   answer: "回答", article: "文章", post: "帖子",
 };
+
+const METRIC_ICONS: Record<string, ComponentType<{ className?: string }>> = {
+  view_count: Eye, like_count: ThumbsUp, coin_count: BilibiliCoinIcon,
+  comment_count: MessageCircle, collect_count: Star, share_count: Share2,
+};
+
+function compactCount(value: number): string {
+  if (value >= 1000000000) return `${Number((value / 1000000000).toFixed(1))}B`;
+  if (value >= 1000000) return `${Number((value / 1000000).toFixed(1))}M`;
+  if (value >= 1000) return `${Number((value / 1000).toFixed(1))}k`;
+  return value.toLocaleString("zh-CN");
+}
 
 export function localContentType(type: string): string {
   return CONTENT_TYPES[type] || "内容";
@@ -21,6 +34,8 @@ export function LocalContentCover({ result, showMetric = false }: { result: Unif
   const metric = showMetric ? orderedMetrics(result.metrics, 1)[0] : undefined;
   const metricLabel = metric?.key === "view_count" && !video ? "阅读" : metric?.label;
   const approximate = metric && result.metrics_approximate?.includes(metric.key) ? "约 " : "";
+  const MetricIcon = metric ? METRIC_ICONS[metric.key] : undefined;
+  const metricDescription = metric ? `${metricLabel} ${approximate}${result.metrics[metric.key].toLocaleString("zh-CN")}` : "";
   return <span className="local-content-cover">
     {cover ? <img src={cover} alt="" loading="lazy" referrerPolicy="no-referrer"
       onError={() => setFailedUrls((urls) => [...urls, cover])} />
@@ -31,8 +46,8 @@ export function LocalContentCover({ result, showMetric = false }: { result: Unif
       </span> : <span className="local-content-placeholder">{result.cover_url ? <ImageOff aria-hidden="true" /> : <FileText aria-hidden="true" />}
         <span>{result.cover_url ? "封面暂不可用" : "暂无封面"}</span></span>}
     <span className="local-content-type">{video && <Play aria-hidden="true" />}{localContentType(result.content_type)}</span>
-    {metric && <span className="local-content-primary-metric" title={`${metricLabel} ${approximate}${result.metrics[metric.key].toLocaleString("zh-CN")}`}>
-      {metricLabel} {approximate}{new Intl.NumberFormat("zh-CN", { notation: "compact", maximumFractionDigits: 1 }).format(result.metrics[metric.key])}
+    {metric && MetricIcon && <span className="local-content-primary-metric" title={metricDescription} aria-label={metricDescription}>
+      <span aria-hidden="true"><MetricIcon /></span><span aria-hidden="true">{approximate ? "≈" : ""}{compactCount(result.metrics[metric.key])}</span>
     </span>}
   </span>;
 }
