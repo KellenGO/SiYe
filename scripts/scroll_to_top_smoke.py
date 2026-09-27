@@ -84,6 +84,23 @@ def main():
             for route in ("search", "history"):
                 page.goto(f"{origin}/#/{route}")
                 expect(page.locator(".local-content-card")).to_have_count(60)
+                page.get_by_role("button", name="列表", exact=True).press("Enter")
+                expect(page.locator(".result-row")).to_have_count(60)
+                expect(page.locator(".result-title").first).to_have_text("测试结果 0")
+                page.get_by_role("button", name="查看内容信息：测试结果 0", exact=True).press("Enter")
+                list_drawer = page.get_by_role("dialog", name="内容信息", exact=True)
+                expect(list_drawer).to_contain_text("模拟列表内容")
+                page.keyboard.press("Escape")
+                expect(page.get_by_role("button", name="查看内容信息：测试结果 0", exact=True)).to_be_focused()
+                page.screenshot(path=str(ROOT / f"build/content-list-{route}-desktop.png"))
+                page.set_viewport_size({"width": 390, "height": 844})
+                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+                page.screenshot(path=str(ROOT / f"build/content-list-{route}-mobile.png"))
+                page.reload()
+                expect(page.get_by_role("button", name="列表", exact=True)).to_have_attribute("aria-pressed", "true")
+                expect(page.locator(".result-row")).to_have_count(60)
+                page.get_by_role("button", name="封面网格", exact=True).click()
+                page.set_viewport_size({"width": 1280, "height": 900})
                 trigger = page.locator(".local-content-open").first
                 trigger.press("Enter")
                 drawer = page.get_by_role("dialog", name="内容信息", exact=True)
@@ -97,6 +114,7 @@ def main():
                 page.keyboard.press("Escape")
                 expect(trigger).to_be_focused()
                 page.screenshot(path=str(ROOT / f"build/content-grid-{route}-desktop.png"))
+                page.evaluate("window.scrollTo(0, 0)")
                 button = page.get_by_role("button", name="返回顶部", include_hidden=True)
                 expect(button).to_be_hidden()
                 page.evaluate("window.scrollTo(0, 120)")
@@ -117,16 +135,20 @@ def main():
                 page.wait_for_function("window.scrollY < 5")
                 page.set_viewport_size({"width": 1280, "height": 900})
 
+            page.get_by_role("button", name="列表", exact=True).click()
+            page.locator(".result-row").first.get_by_role("button", name="从历史中移除").click()
+            expect(page.locator(".result-row")).to_have_count(59)
+            page.get_by_role("button", name="封面网格", exact=True).click()
             trigger = page.locator(".local-content-open").first
             trigger.click()
             drawer = page.get_by_role("dialog", name="内容信息", exact=True)
             with page.expect_popup() as opened:
                 drawer.get_by_role("link", name="在原平台打开").click()
             opened.value.close()
-            assert history_writes == [("POST", "/api/history/views")]
+            assert history_writes[-1] == ("POST", "/api/history/views")
             drawer.get_by_role("button", name="从历史中移除").click()
             expect(drawer).to_have_count(0)
-            expect(page.locator(".local-content-card")).to_have_count(59)
+            expect(page.locator(".local-content-card")).to_have_count(58)
             page.once("dialog", lambda dialog: dialog.accept())
             page.get_by_role("button", name="清空历史").click()
             expect(page.get_by_role("heading", name="还没有观看历史")).to_be_visible()
@@ -135,7 +157,7 @@ def main():
     finally:
         server.shutdown()
         server.server_close()
-    print("PASS search/history grids, unsaved details, history recording/delete/clear, keyboard and 390px back-to-top")
+    print("PASS search/history list/grid views and persisted preferences, unsaved details, history recording/delete/clear, keyboard and 390px back-to-top")
 
 
 if __name__ == "__main__":

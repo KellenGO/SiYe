@@ -65,6 +65,7 @@ def main() -> None:
                           for p in ("xhs", "bilibili", "zhihu")})
     serving_job = True
     api_writes = []
+    history_views = []
     fail_write = False
     client = None
     errors = []
@@ -76,6 +77,9 @@ def main() -> None:
         url = urlparse(route.request.url)
         if not route.request.url.startswith(origin + "/"):
             route.abort()
+        elif url.path == "/api/history/views" and route.request.method == "POST":
+            history_views.append(route.request.post_data_json["result"])
+            route.fulfill(json={"ok": True})
         elif url.path.startswith("/api/library/"):
             if fail_write and route.request.method != "GET":
                 route.fulfill(status=503, json={"detail": "测试收藏写入失败"})
@@ -128,6 +132,11 @@ def main() -> None:
             bounds = mobile_menu.bounding_box()
             assert bounds and bounds["x"] >= 0 and bounds["x"] + bounds["width"] <= 390
             page.keyboard.press("Escape")
+            page.get_by_role("button", name="列表", exact=True).tap()
+            expect(page.locator(".result-row")).to_have_count(2)
+            assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+            if args.screenshots:
+                page.screenshot(path=str(ROOT / "build/content-list-search-mobile.png"), full_page=True)
             page.get_by_role("button", name="查看内容信息：研究素材图文", exact=True).tap()
             mobile_drawer = page.get_by_role("dialog", name="内容信息", exact=True)
             expect(mobile_drawer.locator(".local-content-detail")).to_have_count(2)
@@ -136,6 +145,19 @@ def main() -> None:
                 page.screenshot(path=str(ROOT / "build/content-detail-search-mobile.png"))
             mobile_drawer.get_by_role("button", name="关闭内容详情").tap()
             page.set_viewport_size({"width": 1280, "height": 900})
+            page.get_by_role("button", name="展开完整内容", exact=True).first.click()
+            expect(page.get_by_text("2 个平台的内容版本", exact=True)).to_be_visible()
+            with page.expect_popup() as original:
+                page.locator(".result-expanded-sources a").filter(has_text="研究素材视频").click()
+            original.value.close()
+            assert history_views[-1]["content_id"] == "new-video"
+            with page.expect_popup() as original:
+                page.locator("a.result-title").filter(has_text="研究素材图文").click()
+            original.value.close()
+            assert history_views[-1]["content_id"] == "old-note"
+            page.get_by_role("button", name="收起完整内容", exact=True).first.click()
+            if args.screenshots:
+                page.screenshot(path=str(ROOT / "build/content-list-search-desktop.png"), full_page=True)
             expect(page.get_by_role("button", name="导出 CSV", exact=True)).to_have_count(0)
             expect(page.get_by_role("checkbox", name="选择当前全部结果", exact=True)).to_have_count(0)
             page.get_by_role("button", name="导出 / 复制", exact=True).click()
@@ -186,6 +208,15 @@ def main() -> None:
             page.get_by_role("button", name="导出 / 复制", exact=True).click()
             page.get_by_label("结果内关键词").fill("视频")
             page.get_by_role("checkbox", name="选择 研究素材视频", exact=True).check()
+            page.get_by_role("combobox", name="排序方式").select_option("latest")
+            page.get_by_role("button", name="封面网格", exact=True).click()
+            expect(page.get_by_role("checkbox", name="选择 研究素材视频", exact=True)).to_be_checked()
+            expect(page.get_by_label("结果内关键词")).to_have_value("视频")
+            expect(page.get_by_role("combobox", name="排序方式")).to_have_value("latest")
+            expect(page.locator(".local-content-card")).to_have_count(1)
+            page.get_by_role("button", name="列表", exact=True).click()
+            expect(page.locator(".result-row")).to_have_count(1)
+            expect(page.get_by_role("checkbox", name="选择 研究素材视频", exact=True)).to_be_checked()
             for label, filename in (("导出 CSV", "selected.csv"), ("导出 Markdown", "selected.md")):
                 with page.expect_download() as download:
                     page.get_by_role("button", name=label, exact=True).click()
@@ -202,21 +233,23 @@ def main() -> None:
             page.goto(origin + "/#/favorites/local")
             expect(page.get_by_role("heading", name="留住值得再看的内容", exact=True)).to_be_visible()
             page.locator('[data-local-folder="all"]').click()
+            expect(page.get_by_role("button", name="封面网格", exact=True)).to_have_attribute("aria-pressed", "true")
             page.get_by_role("button", name="查看内容信息：研究素材视频", exact=True).click()
             expect(page.get_by_role("dialog", name="内容信息").get_by_role("button", name="取消收藏 研究素材视频", exact=True)).to_be_visible()
             page.get_by_role("button", name="添加备注 研究素材视频", exact=True).click()
             page.get_by_label("备注 研究素材视频", exact=True).fill("稍后整理，保留原文")
             page.get_by_role("button", name="保存备注", exact=True).click()
-            expect(page.get_by_text("稍后整理，保留原文", exact=True)).to_be_visible()
+            expect(page.get_by_role("dialog", name="内容信息").get_by_text("稍后整理，保留原文", exact=True)).to_be_visible()
             serving_job = False
             page.reload()
             page.locator('[data-local-folder="all"]').click()
+            expect(page.get_by_role("button", name="封面网格", exact=True)).to_have_attribute("aria-pressed", "true")
             page.get_by_role("button", name="查看内容信息：研究素材视频", exact=True).click()
-            expect(page.get_by_text("稍后整理，保留原文", exact=True)).to_be_visible()
+            expect(page.get_by_role("dialog", name="内容信息").get_by_text("稍后整理，保留原文", exact=True)).to_be_visible()
             page.get_by_role("button", name="编辑备注 研究素材视频", exact=True).click()
             page.get_by_label("备注 研究素材视频", exact=True).fill("取消后不应保留")
             page.get_by_role("button", name="取消编辑", exact=True).click()
-            expect(page.get_by_text("稍后整理，保留原文", exact=True)).to_be_visible()
+            expect(page.get_by_role("dialog", name="内容信息").get_by_text("稍后整理，保留原文", exact=True)).to_be_visible()
             assert store.get_item("bilibili", "new-video")["note"] == "稍后整理，保留原文"
             if args.screenshots:
                 page.screenshot(path=str(ROOT / "build/result-bookmarks-reading.png"), full_page=True)
@@ -236,6 +269,9 @@ def main() -> None:
             job["hydration_status"] = "running"
             page.reload()
             page.get_by_role("tab", name="B站").click()
+            page.get_by_role("button", name="封面网格", exact=True).click()
+            page.get_by_role("button", name="列表", exact=True).click()
+            expect(page.get_by_role("tab", name="B站")).to_have_attribute("aria-selected", "true")
             page.get_by_role("button", name="查看内容信息：研究素材视频", exact=True).click()
             live_drawer = page.get_by_role("dialog", name="内容信息", exact=True)
             expect(live_drawer.locator(".local-content-metrics dd")).to_have_text("12")
@@ -244,6 +280,7 @@ def main() -> None:
             expect(live_drawer.locator(".local-content-metrics dd")).to_have_text("42", timeout=10000)
             assert store.get_item("bilibili", "new-video")["result"]["metrics"]["like_count"] == 12
             page.keyboard.press("Escape")
+            page.get_by_role("button", name="封面网格", exact=True).click()
             blank = source("douyin", "untitled", "", "short_video", "javascript:alert(1)", 0)
             blank["cover_url"] = "https://broken.siye.invalid/cover.jpg"
             blank["metrics"] = {}
@@ -266,7 +303,7 @@ def main() -> None:
             client.close()
         server.shutdown()
         server.server_close()
-    print(json.dumps({"result": "passed", "checks": ["grid and touch details", "live detail metrics", "missing title and broken cover", "group filters", "highlight", "per-source bookmarks",
+    print(json.dumps({"result": "passed", "checks": ["list/grid state preservation", "original list expansion and history", "independent page preferences", "grid and touch details", "live detail metrics", "missing title and broken cover", "group filters", "highlight", "per-source bookmarks",
         "SQLite bookmark and note reload", "export disclosure", "selected CSV/Markdown export", "clipboard",
         "narrow layout", "API write failure", "no platform traffic", "no page errors"]}))
 

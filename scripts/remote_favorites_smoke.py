@@ -106,6 +106,8 @@ def main():
 
                 page.locator(".remote-folder-card").click()
                 expect(page.locator(".local-content-card")).to_have_count(50)
+                page.get_by_role("button", name="列表", exact=True).click()
+                expect(page.locator(".result-row")).to_have_count(50)
                 page.get_by_role("button", name="查看内容信息：同步条目 1", exact=True).click()
                 drawer = page.get_by_role("dialog", name="内容信息", exact=True)
                 expect(drawer.get_by_role("heading", name="同步条目 1", exact=True)).to_be_visible()
@@ -115,23 +117,55 @@ def main():
                 assert library.get_item("bilibili", "BV1") is not None
                 page.keyboard.press("Escape")
                 page.get_by_role("button", name="显示更多", exact=True).click()
+                expect(page.locator(".result-row")).to_have_count(100)
+                expect(page.get_by_role("button", name="列表", exact=True)).to_have_attribute("aria-pressed", "true")
+                page.screenshot(path=str(ROOT / "build/content-list-remote-folder.png"))
+                page.get_by_role("button", name="封面网格", exact=True).click()
                 expect(page.locator(".local-content-card")).to_have_count(100)
                 page.get_by_role("textbox", name="结果内关键词").fill("同步条目 99")
                 expect(page.locator(".local-content-card")).to_have_count(1)
+                page.get_by_role("button", name="导出 / 复制", exact=True).click()
+                page.get_by_role("checkbox", name="选择当前全部结果").check()
+                page.get_by_role("button", name="列表", exact=True).click()
+                expect(page.get_by_role("textbox", name="结果内关键词")).to_have_value("同步条目 99")
+                expect(page.get_by_role("checkbox", name="选择当前全部结果")).to_be_checked()
+                expect(page.locator(".result-row")).to_have_count(1)
+                with page.expect_download() as exported:
+                    page.get_by_role("button", name="导出 CSV", exact=True).click()
+                assert "同步条目 99" in Path(exported.value.path()).read_text(encoding="utf-8-sig")
+                page.get_by_role("button", name="收起导出", exact=True).click()
                 page.get_by_role("button", name="清除筛选", exact=True).click()
-                page.screenshot(path=str(ROOT / "build/content-grid-remote-folder.png"))
+                page.set_viewport_size({"width": 390, "height": 844})
+                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+                page.screenshot(path=str(ROOT / "build/content-list-remote-folder-mobile.png"))
+                page.set_viewport_size({"width": 1440, "height": 960})
+                page.screenshot(path=str(ROOT / "build/content-list-remote-folder.png"))
                 page.get_by_role("button", name="返回收藏夹", exact=True).click()
+                expect(page.get_by_role("button", name="封面网格", exact=True)).to_have_attribute("aria-pressed", "true")
                 # 平台页签直接点着切（V0.3 的用法）
                 page.get_by_role("tab", name="B站").click()
                 expect(page.get_by_text("已显示 100 / 130 条")).to_be_visible()
-                assert page.locator(".local-content-card").count() == 100
+                expect(page.locator(".local-content-card")).to_have_count(100)
                 # 一次只渲染 100 条，点「显示更多」把剩下的铺开
                 page.get_by_role("button", name="显示更多", exact=True).click()
                 expect(page.get_by_role("button", name="显示更多", exact=True)).to_have_count(0)
                 assert page.locator(".local-content-card").count() == 130
+                page.get_by_role("button", name="列表", exact=True).click()
+                expect(page.locator(".result-row")).to_have_count(130)
+                expect(page.get_by_role("tab", name="B站")).to_have_attribute("aria-selected", "true")
+                page.screenshot(path=str(ROOT / "build/content-list-remote-all.png"))
+                page.get_by_role("button", name="查看内容信息：同步条目 2", exact=True).click()
+                expect(page.get_by_role("dialog", name="内容信息").get_by_role("heading", name="同步条目 2", exact=True)).to_be_visible()
+                page.keyboard.press("Escape")
                 page.get_by_role("tab", name="小红书").click()
                 expect(page.get_by_text("小红书条目 3", exact=False).first).to_be_visible()
-                assert page.locator(".local-content-card").count() == 10
+                expect(page.locator(".result-row")).to_have_count(10)
+                page.set_viewport_size({"width": 390, "height": 844})
+                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+                page.screenshot(path=str(ROOT / "build/content-list-remote-all-mobile.png"))
+                page.set_viewport_size({"width": 1440, "height": 960})
+                page.get_by_role("button", name="封面网格", exact=True).click()
+                expect(page.locator(".local-content-card")).to_have_count(10)
 
                 # 日常同步是主按钮；重置在可展开的高级区域内。
                 page.get_by_role("tab", name="全部").click()
@@ -178,7 +212,7 @@ def main():
             server.shutdown()
             server.server_close()
             client.close()
-    print(json.dumps({"passed": ["remote-folder-grid-pagination", "unsaved-detail-and-save", "local-cache-only", "platform-tabs", "show-more", "incremental-sync", "reset-confirmation", "mobile-advanced-controls", "no-archive-toolbar"]}))
+    print(json.dumps({"passed": ["dual-view pagination and selection", "independent remote preferences", "unsaved-detail-and-save", "local-cache-only", "platform-tabs", "show-more", "incremental-sync", "reset-confirmation", "mobile-advanced-controls", "no-archive-toolbar"]}))
 
 
 if __name__ == "__main__":

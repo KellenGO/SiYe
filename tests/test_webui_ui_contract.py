@@ -484,7 +484,7 @@ def test_mobile_favorites_actions_and_notifications_do_not_cover_each_other():
 
 
 def test_icon_view_restores_its_folder_root_after_reload():
-    """本地收藏固定图标视图，刷新回到文件夹根页。"""
+    """文件夹导航固定图标根页，与内容的列表 / 网格切换分开。"""
     favorites = (_ROOT / "components" / "favorites" / "FavoritesPage.tsx").read_text(encoding="utf-8")
     assert 'const [localFolderRoot, setLocalFolderRoot] = useState(true)' in favorites
     assert 'local-view-switch' not in favorites
@@ -681,3 +681,18 @@ def test_help_page_carries_the_page_by_page_tour():
 
     # 教程卡片的页脚要把用户指向那份速查表。
     assert "页面与功能一览" in _zh("onboarding.replayHint"), "教程页脚不再指向帮助页速查"
+
+
+def test_content_views_are_available_in_every_result_context():
+    tabs = (_ROOT / "components/search/ResultTabs.tsx").read_text(encoding="utf-8")
+    assert '<ResultCard' in tabs and '<LocalContentCard' in tabs
+    assert 'aria-label="内容浏览方式"' in tabs
+    assert 'aria-pressed={!gridView}' in tabs and 'aria-pressed={gridView}' in tabs
+    for filename, scopes in (
+        ("search/SearchPage.tsx", ["search"]),
+        ("history/HistoryPage.tsx", ["history"]),
+        ("favorites/FavoritesPage.tsx", ["local", "remote-all", "remote-folder"]),
+    ):
+        source = (_ROOT / "components" / filename).read_text(encoding="utf-8")
+        for scope in scopes:
+            assert f'viewScope="{scope}"' in source

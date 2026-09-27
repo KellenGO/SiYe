@@ -71,6 +71,7 @@ export function HistoryPage() {
         </div>
       ) : results.length ? (
         <ResultTabs
+          viewScope="history"
           results={results}
           overall="completed"
           platforms={PLATFORMS}

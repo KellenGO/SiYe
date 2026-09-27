@@ -5,7 +5,9 @@ import {
   resolveActiveTab,
   sortResults,
 } from "@/lib/searchExperience";
-import { ArrowUpRight, Trash2 } from "lucide-react";
+import { ArrowUpRight, Grid2X2, List, Trash2 } from "lucide-react";
+import { ResultCard } from "./ResultCard";
+import { readContentView, writeContentView, type ContentView, type ContentViewScope } from "@/lib/contentView";
 import { recordView } from "@/lib/historyApi";
 import { BookmarkControl, BookmarkNote, ExportActions, WatchLaterControl } from "./ResultTools";
 import type { BookmarkLibrary } from "@/hooks/useBookmarks";
@@ -14,6 +16,7 @@ import { LocalContentCard } from "@/components/favorites/LocalContentCard";
 import { LocalContentDrawer } from "@/components/favorites/LocalContentDrawer";
 
 interface ResultTabsProps {
+  viewScope: ContentViewScope;
   results: UnifiedSearchResult[];
   keyword?: string;
   overall: string;
@@ -57,6 +60,7 @@ const SORT_MODES: { key: SearchSortMode; label: string }[] = [
 ];
 
 export function ResultTabs({
+  viewScope,
   results,
   keyword = "",
   overall,
@@ -75,6 +79,13 @@ export function ResultTabs({
   onDeleteItem,
   emptyMessage,
 }: ResultTabsProps) {
+  const [views, setViews] = useState<Partial<Record<ContentViewScope, ContentView>>>(() => ({ [viewScope]: readContentView(viewScope) }));
+  const contentView = views[viewScope] ?? readContentView(viewScope);
+  const gridView = contentView === "grid";
+  const setContentView = (view: ContentView) => {
+    setViews((previous) => ({ ...previous, [viewScope]: view }));
+    writeContentView(viewScope, view);
+  };
   const resultBlock = useRef<HTMLDivElement>(null);
   const [detailResult, setDetailResult] = useState<UnifiedSearchResult | null>(null);
   const currentDetail = useMemo(() => {
@@ -205,7 +216,13 @@ export function ResultTabs({
           <input aria-label="结果内关键词" className="field filter-input" maxLength={200} placeholder={`在${savedView ? "收藏" : "结果"}中查找…`} value={filters.query} onChange={(event) => setFilters({ ...filters, query: event.target.value })} />
           {filters.query && <button type="button" className="text-link" onClick={() => setFilters({ ...filters, query: "" })}>清除筛选</button>}
         </div>
-        <button type="button" className="text-link" aria-expanded={exportOpen} onClick={() => { setExportOpen(!exportOpen); setSelected(new Set()); }}>{exportOpen ? (selectionToolLabel ? "收起" : "收起导出") : (selectionToolLabel ?? "导出 / 复制")}</button>
+        <div className="content-toolbar-actions">
+          <div className="content-view-switch" role="group" aria-label="内容浏览方式">
+            <button type="button" aria-pressed={!gridView} onClick={() => setContentView("list")}><List aria-hidden="true" />列表</button>
+            <button type="button" aria-pressed={gridView} onClick={() => setContentView("grid")}><Grid2X2 aria-hidden="true" />封面网格</button>
+          </div>
+          <button type="button" className="text-link" aria-expanded={exportOpen} onClick={() => { setExportOpen(!exportOpen); setSelected(new Set()); }}>{exportOpen ? (selectionToolLabel ? "收起" : "收起导出") : (selectionToolLabel ?? "导出 / 复制")}</button>
+        </div>
       </div>
 
       {/* 结果卡片 */}
@@ -217,16 +234,17 @@ export function ResultTabs({
         </div>
         <ExportActions rows={rows} keyword={savedView ? "本地收藏" : keyword} />
       </div>}
-      <div className="local-content-grid">
-        {renderedResults.map((result) => {
+      <div className={gridView ? "local-content-grid" : "result-list flex flex-col"}>
+        {renderedResults.map((result, index) => {
           const key = groupKey(result);
           const url = safeContentUrl(result.url);
+          const bookmark = bookmarks.get(resultKey(result));
           // 刚收藏完的一次性小框：和收藏页用同一套，省得跑到收藏页去改归属
           const promptItem = membershipPrompt?.group === key
             ? library?.items.find((item) => membershipPrompt.keys.includes(item.key))
             : undefined;
           return (
-            <div key={key} className={`local-content-card ${selected.has(key) ? "is-selected" : ""}`}>
+            <div key={key} className={gridView ? `local-content-card ${selected.has(key) ? "is-selected" : ""}` : savedView || promptItem ? "saved-result-item" : undefined}>
               {exportOpen && <div className="mb-1.5 flex items-center gap-2 px-1">
                 <label className="flex min-w-0 items-center gap-1.5 text-xs text-cyber-text-muted">
                   <input type="checkbox" aria-label={`选择 ${result.title}`} checked={selected.has(key)} onChange={() => setSelected((previous) => {
@@ -234,17 +252,29 @@ export function ResultTabs({
                   })} />选择
                 </label>
               </div>}
-              <LocalContentCard result={result} highlightQuery={filters.query || keyword} onOpen={() => setDetailResult(result)} />
-              <div className="content-card-actions">
-                {url && <a href={url} target="_blank" rel="noreferrer" aria-label={`在原平台打开：${result.title || "无标题内容"}`} onClick={() => { void recordView(result); }}><ArrowUpRight aria-hidden="true" />原文</a>}
-                {library && <>
-                  <BookmarkControl result={result} library={library} fetchedAt={fetchedAt}
+              {gridView ? <>
+                <LocalContentCard result={result} highlightQuery={filters.query || keyword} onOpen={() => setDetailResult(result)} />
+                <div className="content-card-actions">
+                  {url && <a href={url} target="_blank" rel="noreferrer" aria-label={`在原平台打开：${result.title || "无标题内容"}`} onClick={() => { void recordView(result); }}><ArrowUpRight aria-hidden="true" />原文</a>}
+                  {library && <>
+                    <BookmarkControl result={result} library={library} fetchedAt={fetchedAt}
+                      onToggled={(added, keys) => setMembershipPrompt(added ? { group: key, keys } : null)} />
+                    <WatchLaterControl result={result} library={library} fetchedAt={fetchedAt} />
+                  </>}
+                  {onDeleteItem && <button type="button" aria-label="从历史中移除" title="从历史中移除" onClick={() => onDeleteItem(result)}><Trash2 aria-hidden="true" /></button>}
+                </div>
+              </> : <ResultCard result={result} index={index} highlightQuery={filters.query || keyword}
+                onOpenDetails={() => setDetailResult(result)}
+                renderBookmark={library ? (source) => <>
+                  <BookmarkControl result={source} library={library} fetchedAt={fetchedAt}
                     onToggled={(added, keys) => setMembershipPrompt(added ? { group: key, keys } : null)} />
-                  <WatchLaterControl result={result} library={library} fetchedAt={fetchedAt} />
-                </>}
-                {onDeleteItem && <button type="button" aria-label="从历史中移除" title="从历史中移除" onClick={() => onDeleteItem(result)}><Trash2 aria-hidden="true" /></button>}
-              </div>
-              {/* 本地收藏信息在详情内；其他页面保留刚收藏成功的即时编辑入口。 */}
+                  <WatchLaterControl result={source} library={library} fetchedAt={fetchedAt} />
+                </> : undefined}
+                onDelete={onDeleteItem ? () => onDeleteItem(result) : undefined} />}
+              {/* 保持列表备注挂载，切换呈现时不丢弃尚未保存的草稿。 */}
+              {savedView && bookmark && library && <div hidden={gridView}>
+                <BookmarkNote bookmark={bookmark} onSave={library.saveNote} library={library} />
+              </div>}
               {!savedView && promptItem && library && <BookmarkNote bookmark={promptItem} onSave={library.saveNote} library={library} membershipModal />}
             </div>
           );

@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
-import { ArrowUpRight, ChevronDown, Eye, MessageCircle, Share2, Star, ThumbsUp, Trash2 } from "lucide-react";
+import { ArrowUpRight, ChevronDown, Info, Eye, MessageCircle, Share2, Star, ThumbsUp, Trash2 } from "lucide-react";
 import { BilibiliCoinIcon } from "@/components/icons/BilibiliCoinIcon";
 import type { GroupedSource, UnifiedSearchResult } from "@/types/search";
 import { PLATFORM_COLORS, PLATFORM_LABELS } from "@/types/search";
@@ -13,6 +13,7 @@ interface ResultCardProps {
   renderBookmark?: (result: UnifiedSearchResult) => ReactNode;
   /** 历史页：删除单条记录的回调（点击时不会触发跳转）。 */
   onDelete?: () => void;
+  onOpenDetails?: () => void;
 }
 
 function Highlight({ text, query }: { text: string; query: string }) {
@@ -61,7 +62,7 @@ function SourceLine({ source, query, onOpen }: { source: GroupedSource; query: s
   return url ? <a href={url} target="_blank" rel="noreferrer" onClick={onOpen}>{row}</a> : row;
 }
 
-export function ResultCard({ result, index = 0, highlightQuery = "", renderBookmark, onDelete }: ResultCardProps) {
+export function ResultCard({ result, index = 0, highlightQuery = "", renderBookmark, onDelete, onOpenDetails }: ResultCardProps) {
   const [coverFailed, setCoverFailed] = useState(false);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
   const [contentClipped, setContentClipped] = useState(false);
@@ -72,7 +73,7 @@ export function ResultCard({ result, index = 0, highlightQuery = "", renderBookm
   // 用户点开结果链接即记一条观看历史；fire-and-forget，失败不阻塞跳转。
   const handleOpen = () => { void recordView(result); };
   const groupedSources = result.grouped_sources && result.grouped_sources.length >= 2 ? result.grouped_sources : null;
-  const title = <><Highlight text={result.title} query={highlightQuery} />{url && <ArrowUpRight />}</>;
+  const title = <><Highlight text={result.title || "无标题内容"} query={highlightQuery} />{url && <ArrowUpRight />}</>;
   const metrics = orderedMetrics(result.metrics);
   const type = CONTENT_TYPE_LABELS[result.content_type] || result.content_type || "";
   const hasDetails = contentClipped || !!groupedSources;
@@ -121,10 +122,10 @@ export function ResultCard({ result, index = 0, highlightQuery = "", renderBookm
         </div>
         {detailsExpanded && groupedSources && <div className="result-expanded-sources">
           <div className="result-details-heading">{groupedSources.length} 个平台的内容版本</div>
-          {groupedSources.map((source) => <SourceLine key={`${source.platform}-${source.content_id}`} source={source} query={highlightQuery} onOpen={handleOpen} />)}
+          {groupedSources.map((source) => <SourceLine key={`${source.platform}-${source.content_id}`} source={source} query={highlightQuery} onOpen={() => { void recordView({ ...source, grouped_sources: null }); }} />)}
         </div>}
       </div>
-      {(renderBookmark || hasDetails || onDelete) && <div className="row-actions">
+      {(renderBookmark || hasDetails || onDelete || onOpenDetails) && <div className="row-actions">
         {renderBookmark?.(result)}
         {hasDetails && <button
           type="button"
@@ -134,6 +135,7 @@ export function ResultCard({ result, index = 0, highlightQuery = "", renderBookm
           title={detailsExpanded ? "收起完整内容" : "展开完整内容"}
           onClick={() => setDetailsExpanded((value) => !value)}
         ><ChevronDown /></button>}
+        {onOpenDetails && <button type="button" className="details-toggle" aria-label={`查看内容信息：${result.title || "无标题内容"}`} title="查看内容信息" onClick={onOpenDetails}><Info aria-hidden="true" /></button>}
         {onDelete && <button
           type="button"
           className="details-toggle"

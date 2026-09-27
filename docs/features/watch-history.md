@@ -20,7 +20,7 @@
 
 ## 关键决定
 
-- **历史使用封面网格与详情抽屉**：直接展示历史保存的内容快照，不依赖本地收藏记录。完整标题、简介和已有指标在详情查看，原文与单条删除在卡片和详情均可操作；保留最近浏览倒序、平台/关键词筛选、导出及分批显示，不新增收藏或备注操作。
+- **历史可切换列表与封面网格，独立记忆偏好**：直接展示历史保存的内容快照，不依赖本地收藏记录。列表保留标题链接与行内展开，两种视图都能在详情查看完整标题、简介和已有指标；原文与单条删除在卡片和详情均可操作；切换不改变当前筛选、页签、选择或已显示条数。保留最近浏览倒序、平台/关键词筛选、导出及分批显示，不新增收藏或备注操作。
 
 - **独立存储，不复用收藏表**：新建 `views` 表，与收藏库 `items` 同库（`%LOCALAPPDATA%/SiYe/data/library.db`）但完全分开。原因见 `docs/decisions/2026-09-18-观看历史独立存储.md`——收藏页「全部」视图包含库里每一条内容，写进收藏等于自动收藏、历史会污染收藏。
 - 字段照 `items` 的内容列（platform / content_id / content_type / title / snippet / author / url / published_at / cover_url / metrics JSON），去掉 note / in_default / watch_later，加 first_viewed_at / last_viewed_at / view_count。
@@ -40,4 +40,4 @@
 - 后端：`tests/test_watch_history_store.py`，跑法见 `AGENTS.md`（pytest + 临时 basetemp）。
 - 前端：`webui/tests/historyApi.test.ts`（纯函数转换），跑法见 `AGENTS.md`（`node node_modules/typescript/bin/tsc -p tsconfig.test.json` 后 `node run-compiled-tests.mjs`）。
 
-- 浏览器：`scripts/scroll_to_top_smoke.py` 使用模拟响应验证网格、未收藏详情、原文记录、删除/清空与窄屏回顶。
+- 浏览器：`scripts/scroll_to_top_smoke.py` 使用模拟响应验证双视图、独立偏好、未收藏详情、原文记录、删除/清空与窄屏回顶。

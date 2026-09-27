@@ -1979,3 +1979,14 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
   .content-card-actions > .relative > [role="group"] { position: fixed; left: 16px; right: 16px; top: auto; bottom: 16px; width: auto; max-height: calc(100dvh - 32px); overflow-y: auto; z-index: 30; }
   .content-card-actions > .relative > [role="group"] button { min-height: 44px; }
 }
+
+.content-toolbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; }
+.content-view-switch { display: inline-flex; padding: 3px; border: 1px solid var(--siye-line); border-radius: 9px; background: var(--siye-soft); }
+.content-view-switch button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 44px; padding: 6px 10px; border-radius: 6px; color: var(--siye-muted); font-size: 12px; white-space: nowrap; }
+.content-view-switch svg { width: 14px; height: 14px; }
+.content-view-switch button[aria-pressed="true"] { background: var(--siye-bg); color: var(--siye-brand-ink); box-shadow: 0 1px 3px #20294514; }
+.content-view-switch button:focus-visible { outline: 2px solid var(--siye-brand); outline-offset: 2px; }
+@media (max-width: 700px) {
+  .content-toolbar-actions { width: 100%; justify-content: space-between; }
+  .result-list .row-actions > button, .result-list .row-actions > .relative > button { width: 44px; height: 44px; }
+}

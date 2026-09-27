@@ -473,6 +473,7 @@ export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateA
             <p role="status" className="mt-3 text-xs text-cyber-text-muted">正在补充指标和简介，已有结果可以先查看。</p>
           )}
           <ResultTabs
+            viewScope="search"
             results={displayJobResponse.results}
             keyword={displayJobResponse.keyword}
             overall={displayJobResponse.overall}
