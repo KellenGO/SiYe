@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import type { PlatformSlug, UnifiedSearchResult } from "@/types/search";
 import { PLATFORM_COLORS, PLATFORM_LABELS } from "@/types/search";
 import type { SearchSortMode } from "@/lib/searchExperience";
@@ -10,7 +10,7 @@ import { ArrowUpRight, Grid2X2, List, Trash2 } from "lucide-react";
 import { ResultCard } from "./ResultCard";
 import { readContentView, writeContentView, type ContentView, type ContentViewScope } from "@/lib/contentView";
 import { recordView } from "@/lib/historyApi";
-import { BookmarkControl, BookmarkNote, ExportActions, WatchLaterControl } from "./ResultTools";
+import { BookmarkControl, BookmarkNote, ExportActions, MembershipEditor, WatchLaterControl } from "./ResultTools";
 import type { BookmarkLibrary } from "@/hooks/useBookmarks";
 import { DEFAULT_FILTERS, exportRows, filterResultGroups, groupKey, resultKey, resultSources, safeContentUrl, type ResultFilters } from "@/lib/resultTools";
 import { LocalContentCard } from "@/components/favorites/LocalContentCard";
@@ -100,7 +100,8 @@ export function ResultTabs({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [exportOpen, setExportOpen] = useState(false);
   // 收藏成功后的一次性提示：让用户当场改归属，不用跑到收藏页去找。
-  const [membershipPrompt, setMembershipPrompt] = useState<{ group: string; keys: string[] } | null>(null);
+  const [membershipPrompt, setMembershipPrompt] = useState<{ group: string; keys: string[]; modal: boolean } | null>(null);
+  const closeMembershipPrompt = useCallback(() => setMembershipPrompt(null), []);
   const nowMs = useMemo(() => Date.now(), [results, filters]);
 
   // 把勾选结果同步给外部（收藏夹页据此做批量加入 / 移出）
@@ -263,7 +264,7 @@ export function ResultTabs({
                   {url && <a href={url} target="_blank" rel="noreferrer" aria-label={`在原平台打开：${result.title || "无标题内容"}`} onClick={() => { void recordView(result); }}><ArrowUpRight aria-hidden="true" />原文</a>}
                   {library && <>
                     <BookmarkControl result={result} library={library} fetchedAt={fetchedAt}
-                      onToggled={(added, keys) => setMembershipPrompt(added ? { group: key, keys } : null)} />
+                      onToggled={(added, keys) => setMembershipPrompt(added ? { group: key, keys, modal: gridView } : null)} />
                     <WatchLaterControl result={result} library={library} fetchedAt={fetchedAt} />
                   </>}
                   {onDeleteItem && <button type="button" aria-label="从历史中移除" title="从历史中移除" onClick={() => onDeleteItem(result)}><Trash2 aria-hidden="true" /></button>}
@@ -272,7 +273,7 @@ export function ResultTabs({
                 onOpenDetails={() => setDetailResult(result)}
                 renderBookmark={library ? (source) => <>
                   <BookmarkControl result={source} library={library} fetchedAt={fetchedAt}
-                    onToggled={(added, keys) => setMembershipPrompt(added ? { group: key, keys } : null)} />
+                    onToggled={(added, keys) => setMembershipPrompt(added ? { group: key, keys, modal: gridView } : null)} />
                   <WatchLaterControl result={source} library={library} fetchedAt={fetchedAt} />
                 </> : undefined}
                 onDelete={onDeleteItem ? () => onDeleteItem(result) : undefined} />}
@@ -280,7 +281,10 @@ export function ResultTabs({
               {savedView && bookmark && library && <div hidden={gridView}>
                 <BookmarkNote bookmark={bookmark} onSave={library.saveNote} library={library} />
               </div>}
-              {!savedView && promptItem && library && <BookmarkNote bookmark={promptItem} onSave={library.saveNote} library={library} membershipModal />}
+              {gridView && promptItem && library && membershipPrompt?.modal && <MembershipEditor
+                keys={membershipPrompt.keys} library={library} subject={result.title}
+                modal defaultOpen onClose={closeMembershipPrompt} />}
+              {!gridView && !savedView && promptItem && library && <BookmarkNote bookmark={promptItem} onSave={library.saveNote} library={library} membershipModal />}
             </div>
           );
         })}

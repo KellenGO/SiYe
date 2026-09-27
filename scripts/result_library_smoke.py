@@ -132,6 +132,47 @@ def main() -> None:
             bounds = mobile_menu.bounding_box()
             assert bounds and bounds["x"] >= 0 and bounds["x"] + bounds["width"] <= 390
             page.keyboard.press("Escape")
+            # 网格收藏直接打开居中归属面板，不增高卡片；关闭后恢复焦点。
+            before = page.locator(".local-content-grid").bounding_box()
+            page.get_by_role("button", name="收藏 独立文章", exact=True).tap()
+            membership = page.get_by_role("dialog", name="编辑收藏夹归属 独立文章", exact=True)
+            expect(membership).to_be_visible()
+            expect(page.locator(".local-content-grid .bookmark-note")).to_have_count(0)
+            after = page.locator(".local-content-grid").bounding_box()
+            assert before and after and abs(before["height"] - after["height"]) < 1
+            box = membership.bounding_box()
+            assert box and abs(box["x"] + box["width"] / 2 - 195) < 2
+            if args.screenshots:
+                page.screenshot(path=str(ROOT / "build/grid-save-membership-mobile.png"))
+            membership.get_by_role("checkbox", name="默认收藏夹", exact=True).click()
+            expect(membership.get_by_role("checkbox", name="默认收藏夹", exact=True)).not_to_be_checked()
+            membership.get_by_role("button", name="完成", exact=True).focus()
+            page.keyboard.press("Shift+Tab")
+            expect(membership.get_by_role("checkbox", name="默认收藏夹", exact=True)).to_be_focused()
+            page.keyboard.press("Escape")
+            expect(membership).to_have_count(0)
+            expect(page.get_by_role("button", name="取消收藏 独立文章", exact=True)).to_be_focused()
+            page.get_by_role("button", name="取消收藏 独立文章", exact=True).click()
+            page.locator(".confirm-card").get_by_role("button", name="取消收藏", exact=True).click()
+            expect(page.get_by_role("button", name="收藏 独立文章", exact=True)).to_be_visible()
+            page.get_by_role("button", name="选择收藏平台 研究素材图文", exact=True).click()
+            page.get_by_role("button", name="全部加入收藏 研究素材图文", exact=True).click()
+            batch_membership = page.get_by_role("dialog", name="编辑收藏夹归属 研究素材图文", exact=True)
+            expect(batch_membership).to_be_visible()
+            batch_membership.get_by_role("checkbox", name="默认收藏夹", exact=True).click()
+            expect(batch_membership.get_by_role("checkbox", name="默认收藏夹", exact=True)).not_to_be_checked()
+            assert not store.get_item("xhs", "old-note")["in_default"]
+            assert not store.get_item("bilibili", "new-video")["in_default"]
+            page.set_viewport_size({"width": 1280, "height": 900})
+            if args.screenshots:
+                page.screenshot(path=str(ROOT / "build/grid-save-membership-desktop.png"))
+            page.locator(".membership-overlay").click(position={"x": 4, "y": 4})
+            expect(batch_membership).to_have_count(0)
+            page.get_by_role("button", name="选择收藏平台 研究素材图文", exact=True).click()
+            page.get_by_role("group", name="选择收藏来源", exact=True).get_by_role("button", name="取消收藏 研究素材图文", exact=True).last.click()
+            page.locator(".confirm-card").get_by_role("button", name="取消收藏", exact=True).click()
+            page.keyboard.press("Escape")
+            page.set_viewport_size({"width": 390, "height": 844})
             page.get_by_role("button", name="列表", exact=True).tap()
             expect(page.locator(".result-row")).to_have_count(2)
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")

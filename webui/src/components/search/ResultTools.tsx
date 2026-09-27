@@ -170,10 +170,10 @@ function MembershipCheckbox({ state, disabled, onChange, label }: {
  * 聚合卡片一次收藏了多个平台版本时，`keys` 会有多个，勾选框按"部分命中"显示半选。
  * `onClose` 传了表示这是一次性提示（关闭后整个入口收起），不传则保留「编辑归属」按钮可反复打开。
  */
-export function MembershipEditor({ keys, library, subject, label = "编辑归属", onClose, modal = false }: {
-  keys: string[]; library: BookmarkLibrary; subject?: string; label?: string; onClose?: () => void; modal?: boolean;
+export function MembershipEditor({ keys, library, subject, label = "编辑归属", onClose, modal = false, defaultOpen = false }: {
+  keys: string[]; library: BookmarkLibrary; subject?: string; label?: string; onClose?: () => void; modal?: boolean; defaultOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [busy, setBusy] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const card = useRef<HTMLDivElement>(null);
@@ -184,11 +184,18 @@ export function MembershipEditor({ keys, library, subject, label = "编辑归属
     .filter((item): item is LibraryItem => Boolean(item));
   useEffect(() => {
     if (!open) return;
-    const trigger = root.current?.querySelector("button");
+    const trigger = defaultOpen ? document.activeElement as HTMLElement | null : root.current?.querySelector("button");
     if (modal) card.current?.querySelector("button")?.focus({ preventScroll: true });
     const outside = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node)) close(); };
     const escape = (event: KeyboardEvent) => {
       if (event.key === "Escape") { close(); root.current?.querySelector("button")?.focus(); }
+      if (modal && event.key === "Tab") {
+        const controls = card.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled)');
+        if (!controls?.length) return;
+        const first = controls[0], last = controls[controls.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }
     };
     document.addEventListener("pointerdown", outside);
     document.addEventListener("keydown", escape);
@@ -197,7 +204,7 @@ export function MembershipEditor({ keys, library, subject, label = "编辑归属
       document.removeEventListener("keydown", escape);
       if (modal) trigger?.focus({ preventScroll: true });
     };
-  }, [open, close, modal]);
+  }, [open, close, modal, defaultOpen]);
   if (!items.length) return null;
   const membership = collectionMembership(items);
   const updateSystem = async (collection: SystemCollectionKey, enabled: boolean) => {
@@ -222,7 +229,7 @@ export function MembershipEditor({ keys, library, subject, label = "编辑归属
       })}
     </div>;
   return <div className="membership-editor" ref={root}>
-    <button type="button" className="text-link" aria-expanded={open} onClick={() => setOpen(!open)}><FolderCog />{label}</button>
+    {!defaultOpen && <button type="button" className="text-link" aria-expanded={open} onClick={() => setOpen(!open)}><FolderCog />{label}</button>}
     {open && (modal ? <div className="membership-overlay" onPointerDown={(event) => {
       if (event.target === event.currentTarget) { event.preventDefault(); event.stopPropagation(); close(); }
     }}>{content}</div> : content)}
