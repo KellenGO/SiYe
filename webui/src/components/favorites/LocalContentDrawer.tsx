@@ -70,7 +70,7 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus }: 
     }}>
     <div className="local-content-drawer" ref={panel} role="dialog" aria-modal="true" aria-labelledby={id}
       onKeyDown={(event) => {
-        const confirmation = panel.current?.querySelector<HTMLElement>(".confirm-card");
+        const confirmation = panel.current?.querySelector<HTMLElement>('.confirm-card, .membership-card[role="dialog"]');
         if (event.key === "Escape") {
           // 嵌套确认和归属选择先处理 Escape，不能连抽屉一起退出。
           if (confirmation || panel.current?.querySelector('.membership-card, [aria-expanded="true"]')) return;
@@ -105,7 +105,7 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus }: 
             {metrics.length ? <dl className="local-content-metrics">{metrics.map(({ key, label }) => <div key={key}><dt>{label}</dt><dd>{source.metrics_approximate?.includes(key) ? "约 " : ""}{source.metrics[key].toLocaleString("zh-CN")}</dd></div>)}</dl>
               : <p className="local-content-detail-meta">暂无已保存的互动数据</p>}
             <div className="local-content-actions"><span><BookmarkControl result={source} library={library} fetchedAt={{}} />{item.saved ? "已收藏" : "收藏"}</span><span><WatchLaterControl result={source} library={library} fetchedAt={{}} />{item.watchLater ? "已加入稍后再看" : "稍后再看"}</span></div>
-            <BookmarkNote bookmark={item} library={library} onDraftChange={(dirty) => { dirtyNotes.current.set(item.key, dirty); }} onSave={async (key, note) => {
+            <BookmarkNote bookmark={item} library={library} membershipModal onDraftChange={(dirty) => { dirtyNotes.current.set(item.key, dirty); }} onSave={async (key, note) => {
               setSaving(true);
               setNoteError("");
               try {

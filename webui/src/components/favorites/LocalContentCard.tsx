@@ -2,6 +2,7 @@ import { useState } from "react";
 import { FileText, ImageOff, Play } from "lucide-react";
 import type { UnifiedSearchResult } from "@/types/search";
 import { PLATFORM_LABELS } from "@/types/search";
+import { xhsCoverFallback } from "@/lib/localContentCover";
 
 const CONTENT_TYPES: Record<string, string> = {
   video: "视频", short_video: "短视频", zvideo: "视频", note: "图文笔记",
@@ -13,13 +14,18 @@ export function localContentType(type: string): string {
 }
 
 export function LocalContentCover({ result }: { result: UnifiedSearchResult }) {
-  const [failedUrl, setFailedUrl] = useState<string | null>(null);
-  const hasCover = !!result.cover_url && result.cover_url !== failedUrl;
+  const [failedUrls, setFailedUrls] = useState<string[]>([]);
+  const fallback = xhsCoverFallback(result.cover_url, result.platform);
+  const cover = [result.cover_url, fallback].find((url) => url && !failedUrls.includes(url));
   const video = ["video", "short_video", "zvideo"].includes(result.content_type);
   return <span className="local-content-cover">
-    {hasCover ? <img src={result.cover_url!} alt="" loading="lazy" referrerPolicy="no-referrer"
-      onError={() => setFailedUrl(result.cover_url)} />
-      : <span className="local-content-placeholder">{result.cover_url ? <ImageOff aria-hidden="true" /> : <FileText aria-hidden="true" />}
+    {cover ? <img src={cover} alt="" loading="lazy" referrerPolicy="no-referrer"
+      onError={() => setFailedUrls((urls) => [...urls, cover])} />
+      : result.platform === "zhihu" ? <span className="local-content-topic">
+        <span className="local-content-topic-brand">知乎 · {localContentType(result.content_type)}</span>
+        <strong>{result.title || "知乎内容"}</strong>
+        <span className="local-content-topic-summary">{result.snippet || result.author || "查看问题与讨论"}</span>
+      </span> : <span className="local-content-placeholder">{result.cover_url ? <ImageOff aria-hidden="true" /> : <FileText aria-hidden="true" />}
         <span>{result.cover_url ? "封面暂不可用" : "暂无封面"}</span></span>}
     <span className="local-content-type">{video && <Play aria-hidden="true" />}{localContentType(result.content_type)}</span>
   </span>;

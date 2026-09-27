@@ -60,7 +60,9 @@ def main():
         def route_request(route):
             req = route.request
             url = urlsplit(req.url)
-            if url.netloc == "covers.siye.invalid":
+            if url.netloc == "sns-webpic-qc.xhscdn.com":
+                route.fulfill(status=403, body="expired")
+            elif url.netloc in ("covers.siye.invalid", "sns-img-qc.xhscdn.com"):
                 route.fulfill(content_type="image/svg+xml", body='<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="#7c8cff"/><circle cx="488" cy="92" r="130" fill="#37c9bd" opacity=".72"/></svg>')
             elif not req.url.startswith(origin + "/"):
                 route.abort()
@@ -336,6 +338,26 @@ def main():
                 note_field.fill("新的学习备注")
                 drawer.get_by_role("button", name="取消编辑", exact=True).click()
                 drawer.get_by_role("button", name="编辑归属", exact=True).click()
+                membership = drawer.get_by_role("dialog", name="编辑收藏夹归属 图文收藏测试", exact=True)
+                expect(membership.get_by_role("button", name="完成", exact=True)).to_be_focused()
+                for width in (1440, 390):
+                    page.set_viewport_size({"width": width, "height": 1000})
+                    bounds = membership.bounding_box()
+                    assert bounds and bounds["width"] >= min(350, width - 32)
+                    assert abs(bounds["x"] + bounds["width"] / 2 - width / 2) < 2
+                    assert abs(bounds["y"] + bounds["height"] / 2 - 500) < 2
+                    assert membership.evaluate("el => el.scrollWidth <= el.clientWidth")
+                    page.screenshot(path=str(ROOT / "build" / f"review-membership-centered-{width}.png"))
+                page.keyboard.press("Shift+Tab")
+                expect(membership.get_by_role("checkbox").last).to_be_focused()
+                page.keyboard.press("Tab")
+                expect(membership.get_by_role("button", name="完成", exact=True)).to_be_focused()
+                page.set_viewport_size({"width": 1440, "height": 1000})
+                page.mouse.click(30, 300)
+                expect(membership).to_have_count(0)
+                expect(drawer).to_be_visible()
+                expect(drawer.get_by_role("button", name="编辑归属", exact=True)).to_be_focused()
+                drawer.get_by_role("button", name="编辑归属", exact=True).click()
                 page.keyboard.press("Escape")
                 expect(drawer).to_be_visible()
                 expect(drawer.locator(".membership-card")).to_have_count(0)
@@ -554,6 +576,9 @@ def main():
                     }
                     for index in range(500)
                 ]
+                bulk[0]["result"].update(cover_url="https://sns-webpic-qc.xhscdn.com/202609091523/0123456789abcdef0123456789abcdef/spectrum/testcover!nc_n_webp_mw_1", content_type="note")
+                bulk[1]["result"].update(platform="zhihu", content_type="answer", snippet="这是已保存的问题摘要，用来展示知乎主题封面。")
+                bulk[2]["result"].update(platform="zhihu", content_type="answer", cover_url="https://broken.siye.invalid/image.jpg")
                 assert store.add_items(bulk) == {"added": 500, "updated": 0, "skipped": 0}
                 page.evaluate("location.hash = '#/favorites/local'")
                 expect(page.locator(".saved-result-item")).to_have_count(100)
@@ -572,6 +597,17 @@ def main():
                     page.get_by_role("button", name="导出 CSV", exact=True).click()
                 csv_text = Path(exported.value.path()).read_text(encoding="utf-8-sig")
                 assert all(f"边界收藏 {index:03d}" in csv_text for index in range(500)), "grid export omitted undisplayed results"
+                page.get_by_role("button", name="收起", exact=True).click()
+                page.get_by_role("textbox", name="结果内关键词").fill("边界收藏 00")
+                recovered_cover = page.get_by_role("button", name="查看内容信息：边界收藏 000", exact=True).locator("img")
+                expect(recovered_cover).to_have_attribute("src", "https://sns-img-qc.xhscdn.com/spectrum/testcover")
+                expect(recovered_cover).to_be_visible()
+                assert recovered_cover.evaluate("el => el.complete && el.naturalWidth > 0")
+                for number in (1, 2):
+                    topic = page.get_by_role("button", name=f"查看内容信息：边界收藏 {number:03d}", exact=True).locator(".local-content-topic")
+                    expect(topic).to_contain_text("知乎 · 回答")
+                    expect(topic).to_contain_text(f"边界收藏 {number:03d}")
+                page.screenshot(path=str(ROOT / "build" / "review-content-cover-fallbacks.png"), full_page=True)
                 assert not errors, errors
                 browser.close()
         finally:

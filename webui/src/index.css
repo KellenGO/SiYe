@@ -831,6 +831,10 @@ html.dark .search-submit { color: #101525; }
 .local-content-open:hover .local-content-title { color: var(--siye-brand-ink); }
 .local-content-cover { display: block; position: relative; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 10px; background: var(--siye-soft); }
 .local-content-cover img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.local-content-topic { display: flex; flex-direction: column; justify-content: center; height: 100%; padding: 14px 18px 30px; gap: 8px; background: linear-gradient(135deg, #eaf3ff, #f6f9ff); color: #183959; text-align: left; }
+.local-content-topic-brand { font-size: 10px; color: #1769ba; letter-spacing: .04em; }
+.local-content-topic strong { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; font-size: 16px; line-height: 1.5; }
+.local-content-topic-summary { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; color: #58728c; }
 .local-content-placeholder { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 6px; color: var(--siye-muted); font-size: 12px; padding-bottom: 18px; }
 .local-content-placeholder svg { width: 24px; height: 24px; opacity: .65; }
 .local-content-type { position: absolute; bottom: 7px; left: 7px; display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 4px; background: rgb(18 25 38 / .8); color: #fff; font-size: 10px; line-height: 1.5; }
@@ -861,7 +865,11 @@ html.dark .search-submit { color: #101525; }
 .local-content-drawer .bookmark-meta-actions { flex-wrap: wrap; }
 .local-content-drawer .bookmark-note :is(button, textarea) { min-height: 44px; }
 .local-content-drawer .bookmark-note textarea { min-height: 110px; }
-.local-content-drawer .membership-card { width: 100%; max-width: 100%; }
+.membership-overlay { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center; padding: 24px 16px; background: color-mix(in srgb, #172b3d 40%, transparent); }
+.membership-overlay > .membership-card { position: relative; inset: auto; width: min(420px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 48px); padding: 20px; font-size: 14px; }
+.membership-overlay .membership-card-head p { font-size: 16px; }
+.membership-overlay .membership-card label { min-height: 44px; }
+.membership-overlay .membership-folder-name { white-space: normal; overflow-wrap: anywhere; }
 .local-content-error { margin-top: 12px; color: var(--siye-red); font-size: 13px; }
 @media (max-width: 620px) {
   .local-content-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 12px; }
@@ -870,6 +878,9 @@ html.dark .search-submit { color: #101525; }
   .local-content-drawer-head { padding: 12px 16px; }
   .local-content-drawer-body { padding: 16px; padding-bottom: max(16px, env(safe-area-inset-bottom)); }
   .local-content-title { font-size: 13px; }
+  .local-content-topic { padding: 8px 10px 26px; gap: 3px; }
+  .local-content-topic strong { font-size: 12px; -webkit-line-clamp: 2; }
+  .local-content-topic-summary { display: none; }
   .local-content-placeholder { font-size: 10px; gap: 2px; }
   .local-content-placeholder svg { width: 18px; height: 18px; }
   .local-content-layout .local-folder-detail-title h2 { white-space: normal; overflow-wrap: anywhere; }

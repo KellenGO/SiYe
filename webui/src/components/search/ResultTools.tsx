@@ -170,12 +170,13 @@ function MembershipCheckbox({ state, disabled, onChange, label }: {
  * 聚合卡片一次收藏了多个平台版本时，`keys` 会有多个，勾选框按"部分命中"显示半选。
  * `onClose` 传了表示这是一次性提示（关闭后整个入口收起），不传则保留「编辑归属」按钮可反复打开。
  */
-export function MembershipEditor({ keys, library, subject, label = "编辑归属", onClose }: {
-  keys: string[]; library: BookmarkLibrary; subject?: string; label?: string; onClose?: () => void;
+export function MembershipEditor({ keys, library, subject, label = "编辑归属", onClose, modal = false }: {
+  keys: string[]; library: BookmarkLibrary; subject?: string; label?: string; onClose?: () => void; modal?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const root = useRef<HTMLDivElement>(null);
+  const card = useRef<HTMLDivElement>(null);
   const close = useCallback(() => { setOpen(false); onClose?.(); }, [onClose]);
   const byKey = new Map(library.items.map((item) => [item.key, item]));
   const items = keys
@@ -183,14 +184,20 @@ export function MembershipEditor({ keys, library, subject, label = "编辑归属
     .filter((item): item is LibraryItem => Boolean(item));
   useEffect(() => {
     if (!open) return;
+    const trigger = root.current?.querySelector("button");
+    if (modal) card.current?.querySelector("button")?.focus({ preventScroll: true });
     const outside = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node)) close(); };
     const escape = (event: KeyboardEvent) => {
       if (event.key === "Escape") { close(); root.current?.querySelector("button")?.focus(); }
     };
     document.addEventListener("pointerdown", outside);
     document.addEventListener("keydown", escape);
-    return () => { document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", escape); };
-  }, [open, close]);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+      if (modal) trigger?.focus({ preventScroll: true });
+    };
+  }, [open, close, modal]);
   if (!items.length) return null;
   const membership = collectionMembership(items);
   const updateSystem = async (collection: SystemCollectionKey, enabled: boolean) => {
@@ -204,9 +211,7 @@ export function MembershipEditor({ keys, library, subject, label = "编辑归属
     else await library.removeFromCollection(keys, id);
     setBusy(false);
   };
-  return <div className="membership-editor" ref={root}>
-    <button type="button" className="text-link" aria-expanded={open} onClick={() => setOpen(!open)}><FolderCog />{label}</button>
-    {open && <div className="membership-card" role="group" aria-label={subject ? `编辑收藏夹归属 ${subject}` : "编辑收藏夹归属"}>
+  const content = <div ref={card} className="membership-card" role={modal ? "dialog" : "group"} aria-modal={modal || undefined} aria-label={subject ? `编辑收藏夹归属 ${subject}` : "编辑收藏夹归属"}>
       <div className="membership-card-head"><p>收藏夹归属</p><button type="button" className="text-link" onClick={close}>完成</button></div>
       {/* 「稍后再看」不在这里：它由卡片上独立的稍后再看按钮控制，和收藏体系分开 */}
       <label><input type="checkbox" checked disabled /><span className="membership-folder-name" title="全部">全部</span></label>
@@ -215,15 +220,21 @@ export function MembershipEditor({ keys, library, subject, label = "编辑归属
         const name = customCollectionLabel(collection.name);
         return <MembershipCheckbox key={collection.id} state={membership.custom[collection.id] ?? false} disabled={busy} onChange={(enabled) => void updateCustom(collection.id, enabled)} label={name} />;
       })}
-    </div>}
+    </div>;
+  return <div className="membership-editor" ref={root}>
+    <button type="button" className="text-link" aria-expanded={open} onClick={() => setOpen(!open)}><FolderCog />{label}</button>
+    {open && (modal ? <div className="membership-overlay" onPointerDown={(event) => {
+      if (event.target === event.currentTarget) { event.preventDefault(); event.stopPropagation(); close(); }
+    }}>{content}</div> : content)}
   </div>;
 }
 
-export function BookmarkNote({ bookmark, onSave, library, onDraftChange }: {
+export function BookmarkNote({ bookmark, onSave, library, onDraftChange, membershipModal = false }: {
   bookmark: Bookmark & { key: string; inDefault: boolean; saved: boolean; watchLater: boolean; collections: { id: number; name: string }[] };
   onSave: (key: string, note: string) => boolean | Promise<boolean>;
   library: BookmarkLibrary;
   onDraftChange?: (dirty: boolean) => void;
+  membershipModal?: boolean;
 }) {
   const [draft, setDraft] = useState(bookmark.note);
   const [editing, setEditing] = useState(false);
@@ -238,7 +249,7 @@ export function BookmarkNote({ bookmark, onSave, library, onDraftChange }: {
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-cyber-text-muted mb-2">
         <span>收藏于 {new Date(bookmark.savedAt).toLocaleString("zh-CN")}</span>
         <span className="bookmark-meta-actions">
-          <MembershipEditor keys={[bookmark.key]} library={library} subject={bookmark.result.title} />
+          <MembershipEditor keys={[bookmark.key]} library={library} subject={bookmark.result.title} modal={membershipModal} />
           {!editing && <button type="button" aria-label={`${bookmark.note ? "编辑备注" : "添加备注"} ${bookmark.result.title}`}
             className="rounded px-1 py-1 text-xs text-cyber-text-muted hover:text-brand-strong focus-visible:ring-2 focus-visible:ring-brand/50"
             onClick={() => { setDraft(bookmark.note); setEditing(true); }}>{bookmark.note ? "编辑备注" : "添加备注"}</button>}
