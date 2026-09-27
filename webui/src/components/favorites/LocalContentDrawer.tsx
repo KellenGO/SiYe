@@ -105,6 +105,14 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus }: 
             {metrics.length ? <dl className="local-content-metrics">{metrics.map(({ key, label }) => <div key={key}><dt>{label}</dt><dd>{source.metrics_approximate?.includes(key) ? "约 " : ""}{source.metrics[key].toLocaleString("zh-CN")}</dd></div>)}</dl>
               : <p className="local-content-detail-meta">暂无已保存的互动数据</p>}
             <div className="local-content-actions"><span><BookmarkControl result={source} library={library} fetchedAt={{}} />{item.saved ? "已收藏" : "收藏"}</span><span><WatchLaterControl result={source} library={library} fetchedAt={{}} />{item.watchLater ? "已加入稍后再看" : "稍后再看"}</span></div>
+            <div className="local-content-folders">
+              <h4>所在收藏夹</h4>
+              {item.saved || item.inDefault || item.collections.length ? <ul aria-label="所在收藏夹">
+                {item.saved && <li>全部收藏</li>}
+                {item.inDefault && <li>默认收藏夹</li>}
+                {item.collections.map((collection) => <li key={collection.id}>{["全部", "全部收藏", "默认收藏夹", "稍后再看"].includes(collection.name) ? `${collection.name}（自建）` : collection.name}</li>)}
+              </ul> : <p className="local-content-detail-meta">尚未加入收藏夹</p>}
+            </div>
             <BookmarkNote bookmark={item} library={library} membershipModal onDraftChange={(dirty) => { dirtyNotes.current.set(item.key, dirty); }} onSave={async (key, note) => {
               setSaving(true);
               setNoteError("");

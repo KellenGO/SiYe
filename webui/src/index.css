@@ -861,6 +861,10 @@ html.dark .search-submit { color: #101525; }
 .local-content-actions { display: flex; flex-wrap: wrap; gap: 16px; margin: 24px 0 16px; }
 .local-content-actions > span { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--siye-secondary); }
 .local-content-actions > span > button { width: 44px; height: 44px; }
+.local-content-folders { margin-bottom: 20px; }
+.local-content-folders h4 { margin-top: 0; }
+.local-content-folders ul { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.local-content-folders li { max-width: 100%; padding: 5px 10px; border-radius: 7px; background: var(--siye-soft); color: var(--siye-secondary); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
 .local-content-drawer .bookmark-note { padding: 16px 0; border-top: 1px solid var(--siye-line); }
 .local-content-drawer .bookmark-meta-actions { flex-wrap: wrap; }
 .local-content-drawer .bookmark-note :is(button, textarea) { min-height: 44px; }
