@@ -110,13 +110,32 @@ def main() -> None:
             client = TestClient(app)
             browser = p.chromium.launch(**({} if args.channel == "chromium" else {"channel": args.channel}))
             context = browser.new_context(viewport={"width": 1280, "height": 900},
-                                          permissions=["clipboard-read", "clipboard-write"])
-            context.add_init_script("localStorage.setItem('mediacrawler_license_accepted', 'true')")
+                                          permissions=["clipboard-read", "clipboard-write"], has_touch=True)
+            context.add_init_script("localStorage.setItem('mediacrawler_license_accepted', 'true'); localStorage.setItem('siye_onboarding_preference_v1', 'completed')")
             context.route("**/*", route_request)
             page = context.new_page()
             page.on("pageerror", lambda error: errors.append(str(error)))
             page.goto(origin + "/#/search")
             expect(page.get_by_role("button", name="选择收藏平台 研究素材图文", exact=True)).to_be_visible()
+            expect(page.locator(".local-content-card")).to_have_count(2)
+            if args.screenshots:
+                page.screenshot(path=str(ROOT / "build/content-grid-search.png"), full_page=True)
+            page.set_viewport_size({"width": 390, "height": 844})
+            if args.screenshots:
+                page.screenshot(path=str(ROOT / "build/content-grid-search-mobile.png"), full_page=True)
+            page.get_by_role("button", name="选择收藏平台 研究素材图文", exact=True).tap()
+            mobile_menu = page.get_by_role("group", name="选择收藏来源", exact=True)
+            bounds = mobile_menu.bounding_box()
+            assert bounds and bounds["x"] >= 0 and bounds["x"] + bounds["width"] <= 390
+            page.keyboard.press("Escape")
+            page.get_by_role("button", name="查看内容信息：研究素材图文", exact=True).tap()
+            mobile_drawer = page.get_by_role("dialog", name="内容信息", exact=True)
+            expect(mobile_drawer.locator(".local-content-detail")).to_have_count(2)
+            expect(mobile_drawer.get_by_role("button", name="编辑归属")).to_have_count(0)
+            if args.screenshots:
+                page.screenshot(path=str(ROOT / "build/content-detail-search-mobile.png"))
+            mobile_drawer.get_by_role("button", name="关闭内容详情").tap()
+            page.set_viewport_size({"width": 1280, "height": 900})
             expect(page.get_by_role("button", name="导出 CSV", exact=True)).to_have_count(0)
             expect(page.get_by_role("checkbox", name="选择当前全部结果", exact=True)).to_have_count(0)
             page.get_by_role("button", name="导出 / 复制", exact=True).click()
@@ -141,9 +160,16 @@ def main() -> None:
             expect(popup.get_by_role("button", name="取消收藏 研究素材视频", exact=True)).to_be_visible()
             assert store.get_item("bilibili", "new-video") is not None
             page.keyboard.press("Escape")
-            page.get_by_role("button", name="展开完整内容", exact=True).click()
-            expect(page.get_by_text("2 个平台的内容版本", exact=True)).to_be_visible()
-            page.get_by_role("button", name="收起完整内容", exact=True).click()
+            page.get_by_role("button", name="查看内容信息：研究素材图文", exact=True).click()
+            drawer = page.get_by_role("dialog", name="内容信息", exact=True)
+            expect(drawer.locator(".local-content-detail")).to_have_count(2)
+            expect(drawer.get_by_role("heading", name="研究素材图文", exact=True)).to_be_visible()
+            assert store.get_item("xhs", "old-note") is None
+            expect(drawer).to_contain_text("研究素材摘要")
+            expect(drawer).to_contain_text("12")
+            if args.screenshots:
+                page.screenshot(path=str(ROOT / "build/result-unsaved-detail.png"))
+            page.keyboard.press("Escape")
             page.get_by_role("button", name="选择收藏平台 研究素材图文", exact=True).click()
             popup.get_by_role("button", name="收藏 研究素材图文", exact=True).click()
             popup.get_by_role("button", name="取消收藏 研究素材图文", exact=True).first.click()
@@ -175,13 +201,17 @@ def main() -> None:
             assert page.evaluate("navigator.clipboard.readText()") == video["url"]
             page.goto(origin + "/#/favorites/local")
             expect(page.get_by_role("heading", name="留住值得再看的内容", exact=True)).to_be_visible()
-            expect(page.get_by_role("button", name="取消收藏 研究素材视频", exact=True)).to_be_visible()
+            page.locator('[data-local-folder="all"]').click()
+            page.get_by_role("button", name="查看内容信息：研究素材视频", exact=True).click()
+            expect(page.get_by_role("dialog", name="内容信息").get_by_role("button", name="取消收藏 研究素材视频", exact=True)).to_be_visible()
             page.get_by_role("button", name="添加备注 研究素材视频", exact=True).click()
             page.get_by_label("备注 研究素材视频", exact=True).fill("稍后整理，保留原文")
             page.get_by_role("button", name="保存备注", exact=True).click()
             expect(page.get_by_text("稍后整理，保留原文", exact=True)).to_be_visible()
             serving_job = False
             page.reload()
+            page.locator('[data-local-folder="all"]').click()
+            page.get_by_role("button", name="查看内容信息：研究素材视频", exact=True).click()
             expect(page.get_by_text("稍后整理，保留原文", exact=True)).to_be_visible()
             page.get_by_role("button", name="编辑备注 研究素材视频", exact=True).click()
             page.get_by_label("备注 研究素材视频", exact=True).fill("取消后不应保留")
@@ -193,6 +223,7 @@ def main() -> None:
             for width in (390, 1024, 1440):
                 page.set_viewport_size({"width": width, "height": 900})
                 assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), f"Overflow at {width}px"
+            page.get_by_role("button", name="关闭内容详情").click()
             # Saving failures are API failures now, not localStorage quota errors.
             serving_job = True
             page.goto(origin + "/#/search")
@@ -201,6 +232,32 @@ def main() -> None:
             expect(page.get_by_text("测试收藏写入失败", exact=True)).to_be_visible()
             expect(page.get_by_role("button", name="收藏 独立文章", exact=True)).to_have_attribute("aria-pressed", "false")
             assert store.get_item("zhihu", "article") is None
+            fail_write = False
+            job["hydration_status"] = "running"
+            page.reload()
+            page.get_by_role("tab", name="B站").click()
+            page.get_by_role("button", name="查看内容信息：研究素材视频", exact=True).click()
+            live_drawer = page.get_by_role("dialog", name="内容信息", exact=True)
+            expect(live_drawer.locator(".local-content-metrics dd")).to_have_text("12")
+            video["metrics"] = {"like_count": 42}
+            job["hydration_status"] = "completed"
+            expect(live_drawer.locator(".local-content-metrics dd")).to_have_text("42", timeout=10000)
+            assert store.get_item("bilibili", "new-video")["result"]["metrics"]["like_count"] == 12
+            page.keyboard.press("Escape")
+            blank = source("douyin", "untitled", "", "short_video", "javascript:alert(1)", 0)
+            blank["cover_url"] = "https://broken.siye.invalid/cover.jpg"
+            blank["metrics"] = {}
+            job["results"].append(blank)
+            page.reload()
+            blank_card = page.locator(".local-content-card").filter(has_text="无标题内容")
+            expect(blank_card).to_contain_text("封面暂不可用")
+            expect(blank_card.get_by_role("link")).to_have_count(0)
+            blank_card.get_by_role("button", name="查看内容信息：无标题内容", exact=True).click()
+            blank_drawer = page.get_by_role("dialog", name="内容信息", exact=True)
+            expect(blank_drawer.get_by_role("heading", name="无标题内容", exact=True)).to_be_visible()
+            expect(blank_drawer).to_contain_text("暂无互动数据")
+            expect(blank_drawer.get_by_role("link")).to_have_count(0)
+            page.keyboard.press("Escape")
             assert not errors, errors
             assert not api_writes, api_writes
             browser.close()
@@ -209,7 +266,7 @@ def main() -> None:
             client.close()
         server.shutdown()
         server.server_close()
-    print(json.dumps({"result": "passed", "checks": ["group filters", "highlight", "per-source bookmarks",
+    print(json.dumps({"result": "passed", "checks": ["grid and touch details", "live detail metrics", "missing title and broken cover", "group filters", "highlight", "per-source bookmarks",
         "SQLite bookmark and note reload", "export disclosure", "selected CSV/Markdown export", "clipboard",
         "narrow layout", "API write failure", "no platform traffic", "no page errors"]}))
 

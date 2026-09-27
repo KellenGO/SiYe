@@ -2,6 +2,7 @@ import { useState } from "react";
 import { FileText, ImageOff, Play } from "lucide-react";
 import type { UnifiedSearchResult } from "@/types/search";
 import { PLATFORM_LABELS } from "@/types/search";
+import { highlightSegments, resultSources } from "@/lib/resultTools";
 import { xhsCoverFallback } from "@/lib/localContentCover";
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -31,10 +32,10 @@ export function LocalContentCover({ result }: { result: UnifiedSearchResult }) {
   </span>;
 }
 
-export function LocalContentCard({ result, onOpen }: { result: UnifiedSearchResult; onOpen: () => void }) {
+export function LocalContentCard({ result, onOpen, highlightQuery = "" }: { result: UnifiedSearchResult; onOpen: () => void; highlightQuery?: string }) {
   return <button type="button" className="local-content-open" aria-label={`查看内容信息：${result.title || "无标题内容"}`} onClick={onOpen}>
     <LocalContentCover result={result} />
-    <span className="local-content-title">{result.title || "无标题内容"}</span>
-    <span className="local-content-meta"><span>{PLATFORM_LABELS[result.platform]}</span><span>查看信息</span></span>
+    <span className="local-content-title">{highlightSegments(result.title || "无标题内容", highlightQuery).map((segment, index) => segment.matched ? <mark key={index} className="result-highlight">{segment.text}</mark> : segment.text)}</span>
+    <span className="local-content-meta"><span>{resultSources(result).length > 1 ? `${resultSources(result).length} 个平台版本` : PLATFORM_LABELS[result.platform]}</span><span>查看信息</span></span>
   </button>;
 }

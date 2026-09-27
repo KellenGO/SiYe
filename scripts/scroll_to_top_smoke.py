@@ -43,6 +43,8 @@ def main():
     threading.Thread(target=server.serve_forever, daemon=True).start()
     origin = f"http://127.0.0.1:{server.server_port}"
 
+    history_writes = []
+
     def route_request(route):
         request = route.request
         url = urlsplit(request.url)
@@ -50,7 +52,12 @@ def main():
             return route.abort()
         if url.path in ("/api/search/jobs/current", "/api/search/jobs/mock-search"):
             return route.fulfill(json=job)
-        if url.path == "/api/history/views":
+        if url.path.startswith("/api/history/views"):
+            if request.method != "GET":
+                history_writes.append((request.method, url.path))
+                if request.method == "DELETE":
+                    views["items"] = views["items"][1:] if url.path != "/api/history/views" else []
+                return route.fulfill(json={"ok": True})
             return route.fulfill(json=views)
         if url.path == "/api/search/accounts":
             return route.fulfill(json={"accounts": []})
@@ -76,7 +83,20 @@ def main():
 
             for route in ("search", "history"):
                 page.goto(f"{origin}/#/{route}")
-                expect(page.locator("article.result-row")).to_have_count(60)
+                expect(page.locator(".local-content-card")).to_have_count(60)
+                trigger = page.locator(".local-content-open").first
+                trigger.press("Enter")
+                drawer = page.get_by_role("dialog", name="内容信息", exact=True)
+                expect(drawer).to_contain_text("模拟列表内容")
+                expect(drawer).to_contain_text("暂无互动数据")
+                assert not history_writes, "Opening details must not record a view"
+                if route == "history":
+                    expect(drawer.locator(".local-content-actions")).to_have_count(0)
+                page.keyboard.press("Shift+Tab")
+                assert drawer.evaluate("el => el.contains(document.activeElement)")
+                page.keyboard.press("Escape")
+                expect(trigger).to_be_focused()
+                page.screenshot(path=str(ROOT / f"build/content-grid-{route}-desktop.png"))
                 button = page.get_by_role("button", name="返回顶部", include_hidden=True)
                 expect(button).to_be_hidden()
                 page.evaluate("window.scrollTo(0, 120)")
@@ -97,12 +117,25 @@ def main():
                 page.wait_for_function("window.scrollY < 5")
                 page.set_viewport_size({"width": 1280, "height": 900})
 
+            trigger = page.locator(".local-content-open").first
+            trigger.click()
+            drawer = page.get_by_role("dialog", name="内容信息", exact=True)
+            with page.expect_popup() as opened:
+                drawer.get_by_role("link", name="在原平台打开").click()
+            opened.value.close()
+            assert history_writes == [("POST", "/api/history/views")]
+            drawer.get_by_role("button", name="从历史中移除").click()
+            expect(drawer).to_have_count(0)
+            expect(page.locator(".local-content-card")).to_have_count(59)
+            page.once("dialog", lambda dialog: dialog.accept())
+            page.get_by_role("button", name="清空历史").click()
+            expect(page.get_by_role("heading", name="还没有观看历史")).to_be_visible()
             assert not errors, errors
             browser.close()
     finally:
         server.shutdown()
         server.server_close()
-    print("PASS search/history back-to-top at desktop and 390px")
+    print("PASS search/history grids, unsaved details, history recording/delete/clear, keyboard and 390px back-to-top")
 
 
 if __name__ == "__main__":

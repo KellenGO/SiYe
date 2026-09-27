@@ -15,10 +15,12 @@
 | 前端 API 客户端 | `webui/src/lib/historyApi.ts` |
 | 前端状态 hook | `webui/src/hooks/useHistory.ts` |
 | 前端历史页 | `webui/src/components/history/HistoryPage.tsx` |
-| 记录触发点（点击结果链接） | `webui/src/components/search/ResultCard.tsx` |
+| 记录触发点（点击结果链接） | `webui/src/components/search/ResultTabs.tsx`、`webui/src/components/favorites/LocalContentDrawer.tsx` |
 | 导航与路由 | `webui/src/components/layout/Header.tsx`、`webui/src/App.tsx` |
 
 ## 关键决定
+
+- **历史使用封面网格与详情抽屉**：直接展示历史保存的内容快照，不依赖本地收藏记录。完整标题、简介和已有指标在详情查看，原文与单条删除在卡片和详情均可操作；保留最近浏览倒序、平台/关键词筛选、导出及分批显示，不新增收藏或备注操作。
 
 - **独立存储，不复用收藏表**：新建 `views` 表，与收藏库 `items` 同库（`%LOCALAPPDATA%/SiYe/data/library.db`）但完全分开。原因见 `docs/decisions/2026-09-18-观看历史独立存储.md`——收藏页「全部」视图包含库里每一条内容，写进收藏等于自动收藏、历史会污染收藏。
 - 字段照 `items` 的内容列（platform / content_id / content_type / title / snippet / author / url / published_at / cover_url / metrics JSON），去掉 note / in_default / watch_later，加 first_viewed_at / last_viewed_at / view_count。
@@ -29,7 +31,7 @@
 
 ## 已知坑 / 边界
 
-- 记录触发点在 `ResultCard` 的链接点击，搜索结果、收藏页、历史页点击都会记一条；聚合卡片（grouped_sources）只在主标题链接点击时记录，展开的来源行不单独记录。
+- 打开详情不记录观看；点击卡片原文或详情中的原平台链接才记录。聚合结果详情按实际打开的来源记录。
 - 历史页的删除/清空走 react-query 刷新；删除单条只在「历史」页出现，搜索结果与收藏页不展示删除入口。
 - 后端 `record_view` 对 platform/content_id/title/url 有白名单校验（url 必须是 http/https），非法内容直接拒绝，不会写库。
 
@@ -37,3 +39,5 @@
 
 - 后端：`tests/test_watch_history_store.py`，跑法见 `AGENTS.md`（pytest + 临时 basetemp）。
 - 前端：`webui/tests/historyApi.test.ts`（纯函数转换），跑法见 `AGENTS.md`（`node node_modules/typescript/bin/tsc -p tsconfig.test.json` 后 `node run-compiled-tests.mjs`）。
+
+- 浏览器：`scripts/scroll_to_top_smoke.py` 使用模拟响应验证网格、未收藏详情、原文记录、删除/清空与窄屏回顶。

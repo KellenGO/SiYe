@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import {
-  AlertTriangle, ArrowLeft, ArrowRight, Bookmark, Check, Clock3, FolderHeart, FolderPlus, Grid2X2, List, Loader2, Menu, MoreHorizontal, Pencil, RefreshCw, Trash2, X,
+  AlertTriangle, ArrowLeft, ArrowRight, Check, FolderHeart, FolderPlus, Loader2, MoreHorizontal, Pencil, RefreshCw, Trash2, X,
 } from "lucide-react";
 import { ResultTabs } from "@/components/search/ResultTabs";
 import { BookmarkBackup } from "@/components/search/BookmarkBackup";
@@ -12,7 +12,6 @@ import { parseGroupKey, resultSources } from "@/lib/resultTools";
 import type { PlatformSlug, UnifiedSearchResult } from "@/types/search";
 import { PLATFORM_COLORS, PLATFORM_LABELS, STATUS_LABELS } from "@/types/search";
 import { PLATFORM_SLUGS } from "@/lib/platformMeta";
-import { readLocalFolderView, writeLocalFolderView, type LocalFolderView } from "@/lib/localFolderView";
 import { moveCollection } from "@/lib/collectionOrder";
 
 const PLATFORMS = PLATFORM_SLUGS;
@@ -24,7 +23,7 @@ function errorMessage(error: unknown): string {
   return typeof detail === "string" ? detail : "收藏夹同步失败，请稍后重试。";
 }
 
-/** 本地收藏左侧选择：全部 / 内置分类 / 某个自建收藏夹。 */
+/** 本地收藏分类选择：全部 / 内置分类 / 某个自建收藏夹。 */
 type LibrarySelection = { kind: "all" } | { kind: "default" } | { kind: "watch_later" } | { kind: "collection"; id: number };
 type RemoteFolder = { account: string; folder: string; platform: PlatformSlug; name: string; item_count: number; cover_url?: string | null; observed_state: "present" | "not_found"; last_content_complete_at?: string | null };
 type RemoteFolderItems = { items: UnifiedSearchResult[]; total: number; offset: number; limit: number };
@@ -64,15 +63,12 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
   };
 
   const [selection, setSelection] = useState<LibrarySelection>({ kind: "all" });
-  const [localFolderView, setLocalFolderView] = useState<LocalFolderView>(() => readLocalFolderView());
-  const [localFolderRoot, setLocalFolderRoot] = useState(() => localFolderView === "icon");
+  const [localFolderRoot, setLocalFolderRoot] = useState(true);
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [selectionResetKey, setSelectionResetKey] = useState(0);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [folderMenuOpenId, setFolderMenuOpenId] = useState<number | null>(null);
-  const [orderPreview, setOrderPreview] = useState<number[] | null>(null);
-  const [draggingFolderId, setDraggingFolderId] = useState<number | null>(null);
   const [reordering, setReordering] = useState(false);
   const [organizingFolders, setOrganizingFolders] = useState(false);
   const [orderAnnouncement, setOrderAnnouncement] = useState("");
@@ -90,13 +86,6 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
   const localFolderHeading = useRef<HTMLDivElement>(null);
   const folderMenuRef = useRef<HTMLDivElement>(null);
   const folderMenuTriggerRefs = useRef(new Map<number, HTMLButtonElement>());
-  const folderDrag = useRef<{ pointerId: number; sourceId: number; startX: number; startY: number; originalIds: number[]; previewIds: number[]; moved: boolean } | null>(null);
-  const orderedCollections = useMemo(() => {
-    if (!orderPreview) return library.collections;
-    const ranks = new Map(orderPreview.map((id, index) => [id, index]));
-    return [...library.collections].sort((left, right) => (ranks.get(left.id) ?? Infinity) - (ranks.get(right.id) ?? Infinity));
-  }, [library.collections, orderPreview]);
-
   const defaultCount = useMemo(
     () => library.items.filter((item) => item.inDefault).length,
     [library.items],
@@ -269,7 +258,6 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
   const saveFolderOrder = async (ids: number[], sourceId: number) => {
     setReordering(true);
     const saved = await library.reorderCollections(ids);
-    setOrderPreview(null);
     setReordering(false);
     if (saved) {
       const name = library.collections.find((item) => item.id === sourceId)?.name ?? "收藏夹";
@@ -277,64 +265,12 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
     }
   };
 
-  const startFolderDrag = (event: ReactPointerEvent<HTMLButtonElement>, sourceId: number) => {
-    if (reordering || (event.pointerType === "mouse" && event.button !== 0)) return;
-    event.preventDefault();
-    setFolderMenuOpenId(null);
-    const ids = library.collections.map((item) => item.id);
-    folderDrag.current = { pointerId: event.pointerId, sourceId, startX: event.clientX, startY: event.clientY, originalIds: ids, previewIds: ids, moved: false };
-    event.currentTarget.setPointerCapture(event.pointerId);
-    setDraggingFolderId(sourceId);
-  };
-
-  const moveFolderDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    const drag = folderDrag.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    if (!drag.moved && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 5) return;
-    drag.moved = true;
-    const row = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-folder-id]");
-    if (!row) return;
-    const targetId = Number(row.dataset.folderId);
-    const after = event.clientY >= row.getBoundingClientRect().top + row.getBoundingClientRect().height / 2;
-    const next = moveCollection(drag.previewIds, drag.sourceId, targetId, after);
-    if (next === drag.previewIds || next.every((id, index) => id === drag.previewIds[index])) return;
-    drag.previewIds = next;
-    setOrderPreview(next);
-  };
-
-  const finishFolderDrag = (event: ReactPointerEvent<HTMLButtonElement>, cancelled = false) => {
-    const drag = folderDrag.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    folderDrag.current = null;
-    setDraggingFolderId(null);
-    if (cancelled || !drag.moved || drag.previewIds.every((id, index) => id === drag.originalIds[index])) {
-      setOrderPreview(null);
-      return;
-    }
-    void saveFolderOrder(drag.previewIds, drag.sourceId);
-  };
-
-  const moveFolderWithKeyboard = (event: ReactKeyboardEvent<HTMLButtonElement>, sourceId: number) => {
-    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
-    event.preventDefault();
-    if (reordering) return;
-    const ids = library.collections.map((item) => item.id);
-    const index = ids.indexOf(sourceId);
-    const target = ids[index + (event.key === "ArrowUp" ? -1 : 1)];
-    if (target === undefined) return;
-    const next = moveCollection(ids, sourceId, target, event.key === "ArrowDown");
-    setOrderPreview(next);
-    void saveFolderOrder(next, sourceId);
-  };
-
   const deleteDetailCollection = async (id: number) => {
     setFolderMenuOpenId(null);
     if (await library.deleteCollection(id)) {
-      if (localFolderView === "icon") {
-        setSelection({ kind: "all" });
-        setLocalFolderRoot(true);
-        requestAnimationFrame(() => window.scrollTo({ top: localGridScrollY.current }));
-      }
+      setSelection({ kind: "all" });
+      setLocalFolderRoot(true);
+      requestAnimationFrame(() => window.scrollTo({ top: localGridScrollY.current }));
     }
   };
 
@@ -399,14 +335,6 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
         ? `${watchLaterCount} 条稍后再看 · 不会修改平台原生收藏`
         : `${savedCount} 条已收藏 · 收藏与备注保存在本机`;
 
-  const setLocalView = (view: LocalFolderView) => {
-    if (view === localFolderView) return;
-    setFolderMenuOpenId(null);
-    setLocalFolderView(view);
-    writeLocalFolderView(view);
-    if (view === "icon" && selection.kind === "all") setLocalFolderRoot(true);
-    if (view === "list") setLocalFolderRoot(false);
-  };
   const openLocalFolder = (next: LibrarySelection) => {
     localGridScrollY.current = window.scrollY;
     localFolderReturnKey.current = next.kind === "collection" ? `collection-${next.id}` : next.kind;
@@ -434,10 +362,6 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
             <p className="description">{tab === "local" ? "给有用的内容一个位置，也记下自己的想法。" : "把不同平台的收藏放在一起，慢慢阅读。"}</p>
           </div>
           {tab === "local" && <div className="local-heading-actions">
-            <div className="local-view-switch" role="group" aria-label="本地收藏夹浏览方式">
-              <button type="button" className={localFolderView === "list" ? "active" : ""} aria-pressed={localFolderView === "list"} onClick={() => setLocalView("list")}><List aria-hidden="true" />列表</button>
-              <button type="button" className={localFolderView === "icon" ? "active" : ""} aria-pressed={localFolderView === "icon"} onClick={() => setLocalView("icon")}><Grid2X2 aria-hidden="true" />图标</button>
-            </div>
             <details className="backup-details"><summary className="btn">备份管理</summary><BookmarkBackup library={library} /></details>
           </div>}
         </div>
@@ -501,7 +425,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
         </div>
       )}
 
-      {tab === "local" && localFolderView === "icon" && localFolderRoot ? (
+      {tab === "local" && localFolderRoot ? (
         <section className="local-folder-browser" aria-label="本地收藏夹图标模式">
           <div className="local-folder-intro">
             <div><span className="eyebrow">LOCAL FOLDERS</span><h2>本地收藏夹</h2><p>把收藏分门别类，之后回来更容易找到。</p></div>
@@ -535,81 +459,9 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
           </section>
         </section>
       ) : tab === "local" ? (
-        <div className={localFolderView === "icon" ? "local-content-layout" : "library-layout"}>
-          {localFolderView === "list" && <aside className="library-side" aria-label="收藏夹">
-            <button
-              type="button"
-              className={`library-side-item ${selection.kind === "all" ? "active" : ""}`}
-              onClick={() => setSelection({ kind: "all" })}
-            >
-              <Bookmark aria-hidden="true" />全部<span>{savedCount}</span>
-            </button>
-            <button
-              type="button"
-              className={`library-side-item ${selection.kind === "default" ? "active" : ""}`}
-              onClick={() => setSelection({ kind: "default" })}
-            >
-              <FolderHeart aria-hidden="true" />默认收藏夹<span>{defaultCount}</span>
-            </button>
-            <button
-              type="button"
-              className={`library-side-item ${selection.kind === "watch_later" ? "active" : ""}`}
-              onClick={() => setSelection({ kind: "watch_later" })}
-            >
-              <Clock3 aria-hidden="true" />稍后再看<span>{watchLaterCount}</span>
-            </button>
-
-            <p className="library-side-title">收藏夹</p>
-            {orderedCollections.map((collection) => (
-              <div key={collection.id} data-folder-id={collection.id} className={`library-side-row ${selection.kind === "collection" && selection.id === collection.id ? "is-selected" : ""} ${draggingFolderId === collection.id ? "is-dragging" : ""}`}>
-                <button type="button" className="library-folder-grip" aria-label={`调整顺序：${collection.name}，按上下方向键移动`} title="按住拖动调整顺序；键盘可用上下方向键" onPointerDown={(event) => startFolderDrag(event, collection.id)} onPointerMove={moveFolderDrag} onPointerUp={finishFolderDrag} onPointerCancel={(event) => finishFolderDrag(event, true)} onKeyDown={(event) => moveFolderWithKeyboard(event, collection.id)}><FolderHeart className="library-folder-idle-icon" aria-hidden="true" /><Menu className="library-folder-drag-icon" aria-hidden="true" /></button>
-                <button
-                  type="button"
-                  className="library-side-item library-folder-select"
-                  aria-label={`${customCollectionLabel(collection.name)} ${collection.item_count}`}
-                  onClick={() => setSelection({ kind: "collection", id: collection.id })}
-                >
-                  <span className="library-folder-name" title={collection.name}>{customCollectionLabel(collection.name)}</span>
-                </button>
-                <div className="library-folder-actions" ref={folderMenuOpenId === collection.id ? folderMenuRef : null}>
-                  <span className="library-folder-count" aria-hidden="true">{collection.item_count}</span>
-                  <div className="library-folder-menu-anchor">
-                  <button ref={(element) => { if (element) folderMenuTriggerRefs.current.set(collection.id, element); else folderMenuTriggerRefs.current.delete(collection.id); }} type="button" className="library-folder-more" aria-label={`更多操作：${collection.name}`} aria-expanded={folderMenuOpenId === collection.id} aria-controls={folderMenuOpenId === collection.id ? "library-folder-menu" : undefined} onClick={() => setFolderMenuOpenId((openId) => openId === collection.id ? null : collection.id)}><MoreHorizontal aria-hidden="true" /></button>
-                  {folderMenuOpenId === collection.id && <div className="library-folder-menu" id="library-folder-menu">
-                    <button type="button" onClick={() => { setFolderMenuOpenId(null); setEditingCollectionId(collection.id); }}><Pencil aria-hidden="true" />编辑信息</button>
-                    <button type="button" className="danger" onClick={() => void deleteDetailCollection(collection.id)}><Trash2 aria-hidden="true" />删除</button>
-                  </div>}
-                  </div>
-                </div>
-              </div>
-            ))}
-            <span className="sr-only" role="status" aria-live="polite">{orderAnnouncement}</span>
-
-            {creating ? (
-              <span className="library-inline-form">
-                <input
-                  className="field"
-                  aria-label="新收藏夹名称"
-                  placeholder="收藏夹名称"
-                  value={newName}
-                  autoFocus
-                  maxLength={60}
-                  onChange={(event) => setNewName(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") void submitNewCollection();
-                    if (event.key === "Escape") { setCreating(false); setNewName(""); }
-                  }}
-                />
-                <button type="button" className="icon-btn" aria-label="创建收藏夹" disabled={moving} onClick={() => void submitNewCollection()}><Check /></button>
-                <button type="button" className="icon-btn" aria-label="取消创建" onClick={() => { setCreating(false); setNewName(""); }}><X /></button>
-              </span>
-            ) : (
-              <button type="button" className="library-new" onClick={() => setCreating(true)}><FolderPlus aria-hidden="true" />新建收藏夹</button>
-            )}
-          </aside>}
-
+        <div className="local-content-layout">
           <div className="library-main">
-            {localFolderView === "icon" && <div className="local-content-folder-nav" ref={localFolderHeading} tabIndex={-1}>
+            <div className="local-content-folder-nav" ref={localFolderHeading} tabIndex={-1}>
               <button type="button" className="text-link remote-folder-back" onClick={closeLocalFolder}><ArrowLeft />返回收藏夹</button>
               <span className="local-content-folder-path">/ {activeCollection ? customCollectionLabel(activeCollection.name) : selection.kind === "all" ? "全部收藏" : selection.kind === "default" ? "默认收藏夹" : "稍后再看"}</span>
               <div className="local-content-folder-tools">
@@ -623,8 +475,8 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
                   </div>}
                 </div>}
               </div>
-            </div>}
-            {localFolderView === "icon" && activeCollection && <div className="local-folder-detail-heading">
+            </div>
+            {activeCollection && <div className="local-folder-detail-heading">
               <span className="local-folder-detail-cover">{activeCover && <img src={activeCover} alt="" />}</span>
               <div className="local-folder-detail-title"><span className="eyebrow">LOCAL FOLDER</span><h2 title={customCollectionLabel(activeCollection.name)}>{customCollectionLabel(activeCollection.name)}</h2><p>{activeCollection.item_count} 条内容 · 本地收藏夹</p>{activeCollection.description && <p className="local-folder-detail-description">{activeCollection.description}</p>}</div>
             </div>}
@@ -677,7 +529,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
 
             {library.loading && !library.items.length ? (
               <div className="empty" role="status"><div className="empty-symbol"><Loader2 className="spinner" /></div><h2>正在读取本机收藏</h2><p>收藏保存在本机，清理浏览器缓存也不会丢。</p></div>
-            ) : localResults.length || localFolderView === "icon" ? (
+            ) : (
               /* key 里带上当前收藏夹：切换时强制重挂载，内部勾选/筛选/平台页签一并重置，
                  避免上一个收藏夹里勾选的内容泄漏到下一个视图的批量操作里 */
               <ResultTabs
@@ -687,7 +539,6 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
                 platforms={PLATFORMS}
                 library={library}
                 savedView
-                localContentView={localFolderView === "icon" ? "grid" : "list"}
                 emptyMessage={activeCollection ? "这个收藏夹还是空的。可从全部收藏的批量管理中加入内容。" : selection.kind === "watch_later" ? "还没有稍后再看的内容。点击内容上的稍后再看按钮即可加入。" : undefined}
                 jobId="bookmarks"
                 onSelectionChange={setSelectedKeys}
@@ -695,12 +546,6 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
                 selectionResetKey={selectionResetKey}
                 pageSize={100}
               />
-            ) : (
-              <div className="empty">
-                <div className="empty-symbol"><Bookmark /></div>
-                <h2>{activeCollection ? "这个收藏夹还是空的" : selection.kind === "default" ? "默认收藏夹还是空的" : selection.kind === "watch_later" ? "还没有稍后再看的内容" : "收藏夹还空着"}</h2>
-                <p>{activeCollection ? "在「全部」里勾选内容，再选择「加入收藏夹」。同一条内容可以同时属于多个收藏夹。" : selection.kind === "watch_later" ? "在结果右侧点“稍后再看”，需要时再回来。" : "遇到值得再读的内容，点一下结果右侧的收藏图标。"}</p>
-              </div>
             )}
           </div>
         </div>

@@ -484,9 +484,11 @@ def test_mobile_favorites_actions_and_notifications_do_not_cover_each_other():
 
 
 def test_icon_view_restores_its_folder_root_after_reload():
-    """用户选择图标视图后，刷新应回到文件夹根页，而不是误开列表页。"""
+    """本地收藏固定图标视图，刷新回到文件夹根页。"""
     favorites = (_ROOT / "components" / "favorites" / "FavoritesPage.tsx").read_text(encoding="utf-8")
-    assert 'useState(() => localFolderView === "icon")' in favorites
+    assert 'const [localFolderRoot, setLocalFolderRoot] = useState(true)' in favorites
+    assert 'local-view-switch' not in favorites
+    assert '<aside' not in favorites
 
 
 def test_very_narrow_settings_navigation_wraps_instead_of_clipping():

@@ -5,10 +5,11 @@ import {
   resolveActiveTab,
   sortResults,
 } from "@/lib/searchExperience";
-import { ResultCard } from "./ResultCard";
+import { ArrowUpRight, Trash2 } from "lucide-react";
+import { recordView } from "@/lib/historyApi";
 import { BookmarkControl, BookmarkNote, ExportActions, WatchLaterControl } from "./ResultTools";
 import type { BookmarkLibrary } from "@/hooks/useBookmarks";
-import { DEFAULT_FILTERS, exportRows, filterResultGroups, groupKey, resultKey, type ResultFilters } from "@/lib/resultTools";
+import { DEFAULT_FILTERS, exportRows, filterResultGroups, groupKey, resultKey, resultSources, safeContentUrl, type ResultFilters } from "@/lib/resultTools";
 import { LocalContentCard } from "@/components/favorites/LocalContentCard";
 import { LocalContentDrawer } from "@/components/favorites/LocalContentDrawer";
 
@@ -35,7 +36,6 @@ interface ResultTabsProps {
   /** 勾选工具按钮在收起状态的文案，默认“导出 / 复制”。 */
   selectionToolLabel?: string;
   selectionResetKey?: number;
-  localContentView?: "list" | "grid";
   emptyMessage?: string;
 }
 
@@ -73,12 +73,16 @@ export function ResultTabs({
   disableSort = false,
   pageSize,
   onDeleteItem,
-  localContentView = "list",
   emptyMessage,
 }: ResultTabsProps) {
   const resultBlock = useRef<HTMLDivElement>(null);
   const [detailResult, setDetailResult] = useState<UnifiedSearchResult | null>(null);
-  const gridView = savedView && localContentView === "grid";
+  const currentDetail = useMemo(() => {
+    if (!detailResult) return null;
+    const currentSources = new Map(results.flatMap(resultSources).map((source) => [resultKey(source), source]));
+    const sources = resultSources(detailResult).map((source) => currentSources.get(resultKey(source)) ?? source);
+    return sources.length > 1 ? { ...sources[0], grouped_sources: sources } : sources[0];
+  }, [detailResult, results]);
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [filters, setFilters] = useState<ResultFilters>({ ...DEFAULT_FILTERS });
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -213,16 +217,16 @@ export function ResultTabs({
         </div>
         <ExportActions rows={rows} keyword={savedView ? "本地收藏" : keyword} />
       </div>}
-      <div className={gridView ? "local-content-grid" : "result-list flex flex-col"}>
-        {renderedResults.map((result, index) => {
+      <div className="local-content-grid">
+        {renderedResults.map((result) => {
           const key = groupKey(result);
-          const bookmark = bookmarks.get(resultKey(result));
+          const url = safeContentUrl(result.url);
           // 刚收藏完的一次性小框：和收藏页用同一套，省得跑到收藏页去改归属
           const promptItem = membershipPrompt?.group === key
             ? library?.items.find((item) => membershipPrompt.keys.includes(item.key))
             : undefined;
           return (
-            <div key={key} className={gridView ? `local-content-card ${selected.has(key) ? "is-selected" : ""}` : savedView || promptItem ? "saved-result-item" : undefined}>
+            <div key={key} className={`local-content-card ${selected.has(key) ? "is-selected" : ""}`}>
               {exportOpen && <div className="mb-1.5 flex items-center gap-2 px-1">
                 <label className="flex min-w-0 items-center gap-1.5 text-xs text-cyber-text-muted">
                   <input type="checkbox" aria-label={`选择 ${result.title}`} checked={selected.has(key)} onChange={() => setSelected((previous) => {
@@ -230,22 +234,28 @@ export function ResultTabs({
                   })} />选择
                 </label>
               </div>}
-              {gridView ? <LocalContentCard result={result} onOpen={() => setDetailResult(result)} /> : <ResultCard result={result} index={index} highlightQuery={filters.query || keyword}
-                renderBookmark={library ? (source) => <>
-                  <BookmarkControl result={source} library={library} fetchedAt={fetchedAt}
-                    onToggled={(added, keys) => setMembershipPrompt(added ? { group: groupKey(source), keys } : null)} />
-                  <WatchLaterControl result={source} library={library} fetchedAt={fetchedAt} />
-                </> : undefined}
-                onDelete={onDeleteItem ? () => onDeleteItem(result) : undefined} />}
-              {/* 收藏页每条本来就常驻这个信息条，只有搜索结果页才需要"刚收藏完"弹出一次 */}
-              {!savedView && promptItem && library && <BookmarkNote bookmark={promptItem} onSave={library.saveNote} library={library} />}
-              {!gridView && savedView && bookmark && library && <BookmarkNote bookmark={bookmark} onSave={library.saveNote} library={library} />}
+              <LocalContentCard result={result} highlightQuery={filters.query || keyword} onOpen={() => setDetailResult(result)} />
+              <div className="content-card-actions">
+                {url && <a href={url} target="_blank" rel="noreferrer" aria-label={`在原平台打开：${result.title || "无标题内容"}`} onClick={() => { void recordView(result); }}><ArrowUpRight aria-hidden="true" />原文</a>}
+                {library && <>
+                  <BookmarkControl result={result} library={library} fetchedAt={fetchedAt}
+                    onToggled={(added, keys) => setMembershipPrompt(added ? { group: key, keys } : null)} />
+                  <WatchLaterControl result={result} library={library} fetchedAt={fetchedAt} />
+                </>}
+                {onDeleteItem && <button type="button" aria-label="从历史中移除" title="从历史中移除" onClick={() => onDeleteItem(result)}><Trash2 aria-hidden="true" /></button>}
+              </div>
+              {/* 本地收藏信息在详情内；其他页面保留刚收藏成功的即时编辑入口。 */}
+              {!savedView && promptItem && library && <BookmarkNote bookmark={promptItem} onSave={library.saveNote} library={library} membershipModal />}
             </div>
           );
         })}
       </div>
 
-      {gridView && detailResult && library && <LocalContentDrawer result={detailResult} library={library} fallbackFocus={resultBlock} onClose={() => setDetailResult(null)} />}
+      {currentDetail && <LocalContentDrawer
+        result={currentDetail}
+        library={library} savedView={savedView} fetchedAt={fetchedAt}
+        onDelete={onDeleteItem ? () => { onDeleteItem(currentDetail); setDetailResult(null); } : undefined}
+        fallbackFocus={resultBlock} onClose={() => setDetailResult(null)} />}
 
       {hiddenCount > 0 && (
         <div className="library-batch-bar">

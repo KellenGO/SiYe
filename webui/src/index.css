@@ -1966,3 +1966,16 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
 .trending-word { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .trending-heat { flex: none; color: rgb(var(--cyber-text-muted)); font-size: 11px; font-variant-numeric: tabular-nums; }
 @media (max-width: 700px) { .trending-list { grid-template-columns: 1fr; } }
+
+/* Content actions remain visible on touchscreens and keyboard navigation. */
+.content-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; border-top: 1px solid var(--siye-line); padding-top: 5px; }
+.content-card-actions > a, .content-card-actions > button, .content-card-actions > .relative > button { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; gap: 3px; font-size: 11px; color: var(--siye-secondary); }
+.content-card-actions svg { width: 16px; height: 16px; }
+.content-card-actions > a { margin-right: auto; }
+.content-card-actions :is(a, button):focus-visible { outline: 2px solid var(--siye-brand); outline-offset: 2px; }
+.local-content-card > .bookmark-note { overflow-wrap: anywhere; }
+
+@media (max-width: 700px) {
+  .content-card-actions > .relative > [role="group"] { position: fixed; left: 16px; right: 16px; top: auto; bottom: 16px; width: auto; max-height: calc(100dvh - 32px); overflow-y: auto; z-index: 30; }
+  .content-card-actions > .relative > [role="group"] button { min-height: 44px; }
+}

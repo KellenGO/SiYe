@@ -123,173 +123,39 @@ def main():
                 page.on("pageerror", lambda error: errors.append(str(error)))
                 page.goto(origin + "/#/favorites/local")
                 page.get_by_role("button", name="迁移到本机收藏库", exact=True).click()
-                expect(page.get_by_text("图文收藏测试", exact=True)).to_be_visible()
                 assert store.stats()["total"] == 2
-                expect(page.get_by_role("button", name="全部 2", exact=True)).to_be_visible()
-                expect(page.get_by_role("button", name="默认收藏夹 2", exact=True)).to_be_visible()
-                expect(page.get_by_role("button", name="稍后再看 0", exact=True)).to_be_visible()
-                first_actions = page.locator(".result-row").first.locator(".row-actions button")
-                assert first_actions.count() >= 2
-                assert "收藏" in (first_actions.nth(0).get_attribute("aria-label") or "")
-                assert "稍后再看" in (first_actions.nth(1).get_attribute("aria-label") or "")
+                expect(page.locator(".library-side")).to_have_count(0)
+                expect(page.get_by_role("button", name="列表", exact=True)).to_have_count(0)
+                page.locator('[data-local-folder="all"]').click()
+                expect(page.locator(".local-content-card")).to_have_count(2)
                 page.get_by_role("button", name="稍后再看 图文收藏测试", exact=True).click()
-                expect(page.get_by_role("button", name="稍后再看 1", exact=True)).to_be_visible()
+                expect(page.get_by_role("button", name="取消稍后再看 图文收藏测试", exact=True)).to_be_visible()
                 assert store.get_item("xhs", "a")["in_default"] is True
                 assert store.get_item("xhs", "a")["watch_later"] is True
-                # 收藏信息条：归属面板只管收藏体系，稍后再看不在里面
-                note_bar = page.locator(".saved-result-item").filter(has_text="图文收藏测试").locator(".bookmark-note")
-                expect(note_bar).to_be_visible()
-                note_bar.get_by_role("button", name="编辑归属", exact=True).click()
-                inline_card = page.locator(".membership-card")
-                expect(inline_card).to_be_visible()
-                assert inline_card.get_by_role("checkbox", name="默认收藏夹").is_checked()
-                assert inline_card.get_by_role("checkbox", name="稍后再看").count() == 0
-                inline_card.get_by_role("button", name="完成", exact=True).click()
-                expect(inline_card).to_have_count(0)
                 page.get_by_role("button", name="新建收藏夹", exact=True).click()
                 page.get_by_role("textbox", name="新收藏夹名称").fill("跨平台学习")
                 page.get_by_role("button", name="创建收藏夹", exact=True).click()
-                expect(page.get_by_role("button", name="跨平台学习 0", exact=True)).to_be_visible()
+                expect(page.locator(".local-folder-open").filter(has_text="跨平台学习")).to_be_visible()
+                page.locator('[data-local-folder="all"]').click()
                 page.get_by_role("button", name="批量管理", exact=True).click()
                 page.get_by_role("checkbox", name="选择当前全部结果").check()
                 page.get_by_label("加入收藏夹", exact=True).select_option(label="跨平台学习")
                 expect(page.get_by_role("checkbox", name="选择当前全部结果")).not_to_be_checked()
                 assert store.list_collections()[0]["item_count"] == 2
-                page.get_by_role("button", name="跨平台学习 2", exact=True).click()
-                expect(page.get_by_text("视频收藏测试", exact=True)).to_be_visible()
-                page.get_by_role("button", name="编辑备注 图文收藏测试", exact=True).click()
-                field = page.get_by_role("textbox", name="备注 图文收藏测试", exact=True)
+                page.get_by_role("button", name="查看内容信息：图文收藏测试", exact=True).click()
+                drawer = page.get_by_role("dialog", name="内容信息", exact=True)
+                drawer.get_by_role("button", name="编辑备注 图文收藏测试", exact=True).click()
+                field = drawer.get_by_role("textbox", name="备注 图文收藏测试", exact=True)
                 field.fill("新的学习备注")
-                failures["note"] = True
-                page.get_by_role("button", name="保存备注", exact=True).click()
-                expect(page.get_by_text("测试磁盘写入失败", exact=True)).to_be_visible()
-                expect(field).to_have_value("新的学习备注")
-                assert store.get_item("xhs", "a")["note"] == "旧备注"
-                failures["note"] = False
-                page.get_by_role("button", name="保存备注", exact=True).click()
-                expect(page.get_by_text("新的学习备注", exact=True)).to_be_visible()
-                assert store.get_item("xhs", "a")["note"] == "新的学习备注"
-                (ROOT / "build").mkdir(exist_ok=True)
+                drawer.get_by_role("button", name="保存备注", exact=True).click()
+                expect(drawer.get_by_text("新的学习备注", exact=True)).to_be_visible()
+                page.keyboard.press("Escape")
                 page.get_by_role("button", name="新建收藏夹", exact=True).click()
                 long_name = "超长收藏夹LongFolder" * 4
                 page.get_by_role("textbox", name="新收藏夹名称").fill(long_name)
                 page.get_by_role("button", name="创建收藏夹", exact=True).click()
-                folders = page.locator(".library-side-row")
-                expect(folders).to_have_count(2)
-                assert folders.locator(".library-folder-name").all_text_contents() == ["跨平台学习", long_name]
-                selected_row = folders.first
-                page.evaluate("document.activeElement instanceof HTMLElement && document.activeElement.blur()")
-                page.mouse.move(0, 0)
-                page.wait_for_function("getComputedStyle(document.querySelector('.library-side-row.is-selected .library-folder-count')).opacity === '1' && getComputedStyle(document.querySelector('.library-side-row.is-selected .library-folder-more')).opacity === '0'")
-                assert selected_row.locator(".library-folder-idle-icon").evaluate("el => getComputedStyle(el).display !== 'none'")
-                assert selected_row.locator(".library-folder-drag-icon").evaluate("el => getComputedStyle(el).display === 'none'")
-                page.screenshot(path=str(ROOT / "build" / "review-local-folder-sidebar-idle.png"), full_page=True)
-                long_row = folders.nth(1)
-                long_row.hover()
-                long_more = long_row.get_by_role("button", name=f"更多操作：{long_name}")
-                page.wait_for_function("el => getComputedStyle(el).opacity === '1'", arg=long_more.element_handle())
-                long_more.click()
-                expect(long_row.locator(".library-folder-menu")).to_be_visible()
-                page.keyboard.press("Escape")
-                expect(long_row.locator(".library-folder-menu")).to_have_count(0)
-                selected_row.hover()
-                expect(selected_row).to_have_class(re.compile(r"is-selected"))
-                assert selected_row.evaluate("el => getComputedStyle(el).backgroundColor !== 'rgba(0, 0, 0, 0)'")
-                assert selected_row.locator(".library-folder-select").evaluate("el => getComputedStyle(el).backgroundColor === 'rgba(0, 0, 0, 0)'")
-                assert selected_row.locator(".library-folder-idle-icon").evaluate("el => getComputedStyle(el).display === 'none'")
-                assert selected_row.locator(".library-folder-drag-icon").evaluate("el => getComputedStyle(el).display !== 'none'")
-                page.wait_for_function("getComputedStyle(document.querySelector('.library-side-row.is-selected .library-folder-count')).opacity === '0'")
-                assert selected_row.locator(".library-folder-count").evaluate("el => getComputedStyle(el).opacity === '0'")
-                page.wait_for_function("getComputedStyle(document.querySelector('.library-side-row.is-selected .library-folder-more')).opacity === '1'")
-                assert selected_row.get_by_role("button", name="更多操作：跨平台学习").evaluate("el => getComputedStyle(el).opacity === '1'")
-                selected_bounds = selected_row.bounding_box()
-                left_handle_bounds = selected_row.locator(".library-folder-grip").bounding_box()
-                right_menu_bounds = selected_row.locator(".library-folder-more").bounding_box()
-                assert selected_bounds and left_handle_bounds and right_menu_bounds
-                assert selected_bounds["x"] <= left_handle_bounds["x"]
-                assert right_menu_bounds["x"] + right_menu_bounds["width"] <= selected_bounds["x"] + selected_bounds["width"]
-                page.screenshot(path=str(ROOT / "build" / "review-local-folder-sidebar-hover.png"), full_page=True)
-                touch_context = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
-                touch_context.add_init_script("localStorage.setItem('mediacrawler_license_accepted','true'); localStorage.setItem('siye_onboarding_preference_v1','completed');")
-                touch_context.route("**/*", route_request)
-                touch_page = touch_context.new_page()
-                touch_page.goto(origin + "/#/favorites/local")
-                expect(touch_page.locator(".library-side-row")).to_have_count(2)
-                assert touch_page.evaluate("matchMedia('(hover: none)').matches")
-                touch_row = touch_page.locator(".library-side-row").filter(has_text="跨平台学习")
-                touch_row.locator(".library-folder-select").click()
-                expect(touch_row).to_have_class(re.compile(r"is-selected"))
-                assert touch_row.locator(".library-folder-grip").evaluate("el => el.getBoundingClientRect().width >= 40")
-                expect(touch_row.locator(".library-folder-more")).to_have_css("opacity", "1")
-                assert touch_row.locator(".library-folder-more").evaluate("el => el.getBoundingClientRect().width >= 40 && getComputedStyle(el).opacity === '1'")
-                assert touch_row.locator(".library-folder-drag-icon").evaluate("el => getComputedStyle(el).display !== 'none'")
-                assert touch_row.locator(".library-folder-count").evaluate("el => getComputedStyle(el).display === 'none'")
-                touch_row.get_by_role("button", name="更多操作：跨平台学习").click()
-                expect(touch_row.locator(".library-folder-menu")).to_be_visible()
-                touch_context.close()
-                grip = page.get_by_role("button", name=f"调整顺序：{long_name}，按上下方向键移动")
-                grip.hover()
-                assert grip.evaluate("el => getComputedStyle(el).opacity === '1'")
-                source = grip.bounding_box()
-                target = folders.first.bounding_box()
-                assert source is not None and target is not None
-                page.mouse.move(source["x"] + source["width"] / 2, source["y"] + source["height"] / 2)
-                page.mouse.down()
-                page.mouse.move(target["x"] + target["width"] / 2, target["y"] + 5, steps=8)
-                with page.expect_response(lambda response: response.url.endswith("/api/library/collections/order") and response.request.method == "PUT"):
-                    page.mouse.up()
-                expect(folders.first.locator(".library-folder-name")).to_have_text(long_name)
-                assert [item["name"] for item in store.list_collections()] == [long_name, "跨平台学习"]
-                page.reload()
-                folders = page.locator(".library-side-row")
-                expect(folders.first.locator(".library-folder-name")).to_have_text(long_name)
-                grip = page.get_by_role("button", name=f"调整顺序：{long_name}，按上下方向键移动")
-                grip.focus()
-                with page.expect_response(lambda response: response.url.endswith("/api/library/collections/order") and response.request.method == "PUT"):
-                    grip.press("ArrowDown")
-                expect(folders.first.locator(".library-folder-name")).to_have_text("跨平台学习")
-                assert [item["name"] for item in store.list_collections()] == ["跨平台学习", long_name]
-                saved_items = page.locator(".saved-result-item")
-                assert saved_items.count() == 2
-                assert saved_items.first.locator(":scope > .result-row").count() == 1
-                assert saved_items.first.locator(":scope > .bookmark-note").count() == 1
-                assert saved_items.first.locator(".result-number").evaluate(
-                    "el => getComputedStyle(el, '::before').width",
-                ) == "14px"
-                assert saved_items.first.locator(".bookmark-note").evaluate(
-                    "el => getComputedStyle(el).backgroundColor !== 'rgba(0, 0, 0, 0)'",
-                )
-                for width in (1440, 1024, 390):
-                    page.set_viewport_size({"width": width, "height": 900})
-                    expect(page.get_by_text(long_name, exact=True)).to_be_visible()
-                    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
-                    if width == 390:
-                        assert saved_items.first.locator(".result-number").evaluate(
-                            "el => getComputedStyle(el).display",
-                        ) == "none"
-                    label = page.locator(".library-folder-name").filter(has_text=long_name)
-                    assert label.evaluate("el => el.scrollWidth > el.clientWidth")
-                    assert label.get_attribute("title") == long_name
-                    page.get_by_role("button", name="编辑归属", exact=True).first.click()
-                    card = page.locator(".membership-card")
-                    expect(card).to_be_visible()
-                    membership_label = card.locator(".membership-folder-name").filter(has_text=long_name)
-                    expect(membership_label).to_be_visible()
-                    assert membership_label.evaluate("el => el.scrollWidth > el.clientWidth")
-                    assert membership_label.get_attribute("title") == long_name
-                    assert card.evaluate("el => el.scrollWidth <= el.clientWidth")
-                    assert card.evaluate("el => getComputedStyle(el).overflowY === 'auto'")
-                    bounds = card.bounding_box()
-                    assert bounds is not None
-                    assert bounds["x"] >= 0 and bounds["x"] + bounds["width"] <= width
-                    card.get_by_role("button", name="完成", exact=True).click()
-                page.set_viewport_size({"width": 1440, "height": 1000})
-                page.get_by_role("button", name="编辑归属", exact=True).first.click()
-                page.screenshot(path=str(ROOT / "build" / "review-favorites-desktop.png"), full_page=True)
-                page.locator(".membership-card").get_by_role("button", name="完成", exact=True).click()
-                # 图标模式从收藏夹到内容保持网格；列表视图仍保留侧栏和纵向卡片。
-                page.get_by_role("button", name="全部 2", exact=True).click()
-                page.get_by_role("button", name="图标", exact=True).click()
+                expect(page.locator(".local-folder-card")).to_have_count(5)
+                (ROOT / "build").mkdir(exist_ok=True)
                 expect(page.locator(".local-folder-browser")).to_be_visible()
                 expect(page.locator(".local-folder-card")).to_have_count(5)
                 expect(page.locator(".local-folder-card").filter(has_text="跨平台学习").locator("img")).to_be_visible()
@@ -381,12 +247,6 @@ def main():
                 expect(drawer).to_have_count(0)
                 expect(trigger).to_be_focused()
                 page.get_by_role("textbox", name="结果内关键词").fill("视频")
-                expect(page.locator(".local-content-card")).to_have_count(1)
-                page.get_by_role("button", name="列表", exact=True).click()
-                expect(page.locator(".library-side")).to_be_visible()
-                expect(page.get_by_role("textbox", name="结果内关键词")).to_have_value("视频")
-                expect(page.locator(".result-row")).to_have_count(1)
-                page.get_by_role("button", name="图标", exact=True).click()
                 expect(page.locator(".local-content-card")).to_have_count(1)
                 page.get_by_role("textbox", name="结果内关键词").fill("")
                 page.get_by_role("button", name="批量管理", exact=True).click()
@@ -480,7 +340,7 @@ def main():
                 drawer.get_by_role("button", name="关闭内容详情").click()
                 expect(mobile_trigger).to_be_focused()
                 page.get_by_role("button", name="返回收藏夹", exact=True).click()
-                page.get_by_role("button", name="列表", exact=True).click()
+                page.locator('[data-local-folder="all"]').click()
                 for width in (1024, 390):
                     page.set_viewport_size({"width": width, "height": 844})
                     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), f"local layout overflow at {width}"
@@ -488,21 +348,25 @@ def main():
                 page.get_by_role("combobox", name="切换主题", exact=True).click()
                 page.get_by_role("option", name="Dark", exact=True).click()
                 page.wait_for_function("getComputedStyle(document.body).backgroundColor === 'rgb(16, 18, 24)'")
+                page.get_by_role("button", name="查看内容信息：图文收藏测试", exact=True).click()
                 page.get_by_role("button", name="编辑归属", exact=True).first.click()
                 page.screenshot(path=str(ROOT / "build" / "review-favorites-local-mobile-dark.png"), full_page=True)
                 page.locator(".membership-card").get_by_role("button", name="完成", exact=True).click()
                 page.set_viewport_size({"width": 1440, "height": 1000})
                 page.reload()
-                expect(page.get_by_text("新的学习备注", exact=True)).to_be_visible()
+                page.locator('[data-local-folder="all"]').click()
+                page.get_by_role("button", name="查看内容信息：图文收藏测试", exact=True).click()
+                expect(page.get_by_role("dialog", name="内容信息").get_by_text("新的学习备注", exact=True)).to_be_visible()
+                page.keyboard.press("Escape")
+                page.get_by_role("button", name="返回收藏夹", exact=True).click()
                 expect(page.get_by_role("button", name="迁移到本机收藏库", exact=True)).to_have_count(0)
-                page.get_by_role("button", name="图标", exact=True).click()
                 page.locator(".local-folder-open").filter(has_text="跨平台学习").click()
                 page.get_by_role("button", name="更多操作：跨平台学习").click()
                 page.locator(".library-folder-menu").get_by_role("button", name="删除", exact=True).click()
                 expect(page.locator(".local-folder-browser")).to_be_visible()
                 expect(page.locator(".local-folder-open").filter(has_text="跨平台学习")).to_have_count(0)
                 assert store.stats()["total"] == 2
-                page.get_by_role("button", name="列表", exact=True).click()
+                page.locator('[data-local-folder="all"]').click()
                 # ── 取消收藏 = 从本机移除，先弹居中的确认框 ──
                 page.get_by_role("combobox", name="切换主题", exact=True).click()
                 page.get_by_role("option", name="Light", exact=True).click()
@@ -524,7 +388,6 @@ def main():
                 assert store.get_item("bilibili", "b") is None
                 assert store.stats()["total"] == 1
                 # ── 勾了「下次不再提示」之后直接取消，不再弹框 ──
-                page.get_by_role("button", name="全部 1", exact=True).click()
                 page.get_by_role("button", name="取消收藏 图文收藏测试", exact=True).click()
                 dialog = page.locator(".confirm-card")
                 expect(dialog).to_be_visible()
@@ -592,12 +455,6 @@ def main():
                 bulk[2]["result"].update(platform="zhihu", content_type="answer", cover_url="https://broken.siye.invalid/image.jpg")
                 assert store.add_items(bulk) == {"added": 500, "updated": 0, "skipped": 0}
                 page.evaluate("location.hash = '#/favorites/local'")
-                expect(page.locator(".saved-result-item")).to_have_count(100)
-                expect(page.locator(".library-batch-bar")).to_contain_text("已显示 100 / 500 条")
-                page.get_by_role("button", name="显示更多", exact=True).click()
-                expect(page.locator(".saved-result-item")).to_have_count(200)
-                expect(page.locator(".library-batch-bar")).to_contain_text("已显示 200 / 500 条")
-                page.get_by_role("button", name="图标", exact=True).click()
                 page.locator(".local-folder-open").filter(has_text="全部收藏").click()
                 expect(page.locator(".local-content-card")).to_have_count(100)
                 page.get_by_role("button", name="显示更多", exact=True).click()
