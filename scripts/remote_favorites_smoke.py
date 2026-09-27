@@ -120,7 +120,7 @@ def main():
                 expect(page.locator(".result-row")).to_have_count(100)
                 expect(page.get_by_role("button", name="列表", exact=True)).to_have_attribute("aria-pressed", "true")
                 page.screenshot(path=str(ROOT / "build/content-list-remote-folder.png"))
-                page.get_by_role("button", name="封面网格", exact=True).click()
+                page.get_by_role("button", name="网格", exact=True).click()
                 expect(page.locator(".local-content-card")).to_have_count(100)
                 page.get_by_role("textbox", name="结果内关键词").fill("同步条目 99")
                 expect(page.locator(".local-content-card")).to_have_count(1)
@@ -141,7 +141,7 @@ def main():
                 page.set_viewport_size({"width": 1440, "height": 960})
                 page.screenshot(path=str(ROOT / "build/content-list-remote-folder.png"))
                 page.get_by_role("button", name="返回收藏夹", exact=True).click()
-                expect(page.get_by_role("button", name="封面网格", exact=True)).to_have_attribute("aria-pressed", "true")
+                expect(page.get_by_role("button", name="网格", exact=True)).to_have_attribute("aria-pressed", "true")
                 # 平台页签直接点着切（V0.3 的用法）
                 page.get_by_role("tab", name="B站").click()
                 expect(page.get_by_text("已显示 100 / 130 条")).to_be_visible()
@@ -164,7 +164,7 @@ def main():
                 assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
                 page.screenshot(path=str(ROOT / "build/content-list-remote-all-mobile.png"))
                 page.set_viewport_size({"width": 1440, "height": 960})
-                page.get_by_role("button", name="封面网格", exact=True).click()
+                page.get_by_role("button", name="网格", exact=True).click()
                 expect(page.locator(".local-content-card")).to_have_count(10)
 
                 # 日常同步是主按钮；重置在可展开的高级区域内。

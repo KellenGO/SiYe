@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import type { PlatformSlug, UnifiedSearchResult } from "@/types/search";
+import { PLATFORM_COLORS, PLATFORM_LABELS } from "@/types/search";
 import type { SearchSortMode } from "@/lib/searchExperience";
 import {
   resolveActiveTab,
@@ -219,7 +220,7 @@ export function ResultTabs({
         <div className="content-toolbar-actions">
           <div className="content-view-switch" role="group" aria-label="内容浏览方式">
             <button type="button" aria-pressed={!gridView} onClick={() => setContentView("list")}><List aria-hidden="true" />列表</button>
-            <button type="button" aria-pressed={gridView} onClick={() => setContentView("grid")}><Grid2X2 aria-hidden="true" />封面网格</button>
+            <button type="button" aria-pressed={gridView} onClick={() => setContentView("grid")}><Grid2X2 aria-hidden="true" />网格</button>
           </div>
           <button type="button" className="text-link" aria-expanded={exportOpen} onClick={() => { setExportOpen(!exportOpen); setSelected(new Set()); }}>{exportOpen ? (selectionToolLabel ? "收起" : "收起导出") : (selectionToolLabel ?? "导出 / 复制")}</button>
         </div>
@@ -255,6 +256,10 @@ export function ResultTabs({
               {gridView ? <>
                 <LocalContentCard result={result} highlightQuery={filters.query || keyword} onOpen={() => setDetailResult(result)} />
                 <div className="content-card-actions">
+                  <span className="content-card-platform" title={resultSources(result).map((source) => PLATFORM_LABELS[source.platform]).join(" / ")}>
+                    {Array.from(new Set(resultSources(result).map((source) => source.platform))).map((platform) => <i key={platform} className="pd" style={{ backgroundColor: PLATFORM_COLORS[platform] }} aria-hidden="true" />)}
+                    {resultSources(result).length > 1 ? `${resultSources(result).length} 个平台版本` : PLATFORM_LABELS[result.platform]}
+                  </span>
                   {url && <a href={url} target="_blank" rel="noreferrer" aria-label={`在原平台打开：${result.title || "无标题内容"}`} onClick={() => { void recordView(result); }}><ArrowUpRight aria-hidden="true" />原文</a>}
                   {library && <>
                     <BookmarkControl result={result} library={library} fetchedAt={fetchedAt}

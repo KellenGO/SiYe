@@ -99,7 +99,7 @@ def main():
                 page.reload()
                 expect(page.get_by_role("button", name="列表", exact=True)).to_have_attribute("aria-pressed", "true")
                 expect(page.locator(".result-row")).to_have_count(60)
-                page.get_by_role("button", name="封面网格", exact=True).click()
+                page.get_by_role("button", name="网格", exact=True).click()
                 page.set_viewport_size({"width": 1280, "height": 900})
                 trigger = page.locator(".local-content-open").first
                 trigger.press("Enter")
@@ -138,7 +138,7 @@ def main():
             page.get_by_role("button", name="列表", exact=True).click()
             page.locator(".result-row").first.get_by_role("button", name="从历史中移除").click()
             expect(page.locator(".result-row")).to_have_count(59)
-            page.get_by_role("button", name="封面网格", exact=True).click()
+            page.get_by_role("button", name="网格", exact=True).click()
             trigger = page.locator(".local-content-open").first
             trigger.click()
             drawer = page.get_by_role("dialog", name="内容信息", exact=True)

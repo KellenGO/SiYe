@@ -209,7 +209,7 @@ def main() -> None:
             page.get_by_label("结果内关键词").fill("视频")
             page.get_by_role("checkbox", name="选择 研究素材视频", exact=True).check()
             page.get_by_role("combobox", name="排序方式").select_option("latest")
-            page.get_by_role("button", name="封面网格", exact=True).click()
+            page.get_by_role("button", name="网格", exact=True).click()
             expect(page.get_by_role("checkbox", name="选择 研究素材视频", exact=True)).to_be_checked()
             expect(page.get_by_label("结果内关键词")).to_have_value("视频")
             expect(page.get_by_role("combobox", name="排序方式")).to_have_value("latest")
@@ -233,7 +233,7 @@ def main() -> None:
             page.goto(origin + "/#/favorites/local")
             expect(page.get_by_role("heading", name="留住值得再看的内容", exact=True)).to_be_visible()
             page.locator('[data-local-folder="all"]').click()
-            expect(page.get_by_role("button", name="封面网格", exact=True)).to_have_attribute("aria-pressed", "true")
+            expect(page.get_by_role("button", name="网格", exact=True)).to_have_attribute("aria-pressed", "true")
             page.get_by_role("button", name="查看内容信息：研究素材视频", exact=True).click()
             expect(page.get_by_role("dialog", name="内容信息").get_by_role("button", name="取消收藏 研究素材视频", exact=True)).to_be_visible()
             page.get_by_role("button", name="添加备注 研究素材视频", exact=True).click()
@@ -243,7 +243,7 @@ def main() -> None:
             serving_job = False
             page.reload()
             page.locator('[data-local-folder="all"]').click()
-            expect(page.get_by_role("button", name="封面网格", exact=True)).to_have_attribute("aria-pressed", "true")
+            expect(page.get_by_role("button", name="网格", exact=True)).to_have_attribute("aria-pressed", "true")
             page.get_by_role("button", name="查看内容信息：研究素材视频", exact=True).click()
             expect(page.get_by_role("dialog", name="内容信息").get_by_text("稍后整理，保留原文", exact=True)).to_be_visible()
             page.get_by_role("button", name="编辑备注 研究素材视频", exact=True).click()
@@ -269,7 +269,7 @@ def main() -> None:
             job["hydration_status"] = "running"
             page.reload()
             page.get_by_role("tab", name="B站").click()
-            page.get_by_role("button", name="封面网格", exact=True).click()
+            page.get_by_role("button", name="网格", exact=True).click()
             page.get_by_role("button", name="列表", exact=True).click()
             expect(page.get_by_role("tab", name="B站")).to_have_attribute("aria-selected", "true")
             page.get_by_role("button", name="查看内容信息：研究素材视频", exact=True).click()
@@ -280,7 +280,7 @@ def main() -> None:
             expect(live_drawer.locator(".local-content-metrics dd")).to_have_text("42", timeout=10000)
             assert store.get_item("bilibili", "new-video")["result"]["metrics"]["like_count"] == 12
             page.keyboard.press("Escape")
-            page.get_by_role("button", name="封面网格", exact=True).click()
+            page.get_by_role("button", name="网格", exact=True).click()
             blank = source("douyin", "untitled", "", "short_video", "javascript:alert(1)", 0)
             blank["cover_url"] = "https://broken.siye.invalid/cover.jpg"
             blank["metrics"] = {}
