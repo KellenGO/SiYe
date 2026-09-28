@@ -198,7 +198,7 @@ export function ResultTabs({
   return (
     <div className="results-block" ref={resultBlock} tabIndex={-1}>
       <div className="tabs" role="tablist" aria-label="结果平台" ref={tabsRef}>
-          {tabIndicator && <span className="tabs-indicator" aria-hidden="true" style={{ width: tabIndicator.width, transform: `translateX(${tabIndicator.left}px)` }} />}
+          {tabIndicator && <span className="tabs-indicator" aria-hidden="true" style={{ width: tabIndicator.width + 8, transform: `translateX(${tabIndicator.left - 4}px)` }} />}
           {visibleTabs.map((tab) => {
             const count = counts[tab.key] || 0;
             const active = effectiveTab === tab.key;

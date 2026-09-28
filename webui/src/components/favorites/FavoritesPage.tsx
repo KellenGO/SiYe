@@ -8,6 +8,7 @@ import { BookmarkBackup } from "@/components/search/BookmarkBackup";
 import { CollectionInfoDialog, type CollectionInfoDraft } from "@/components/favorites/CollectionInfoDialog";
 import { useBookmarks } from "@/hooks/useBookmarks";
 import { useFavorites } from "@/hooks/useFavorites";
+import { useSlidingIndicator } from "@/hooks/useSlidingIndicator";
 import { parseGroupKey, resultSources } from "@/lib/resultTools";
 import type { PlatformSlug, UnifiedSearchResult } from "@/types/search";
 import { PLATFORM_COLORS, PLATFORM_LABELS, STATUS_LABELS } from "@/types/search";
@@ -48,6 +49,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
   const library = useBookmarks();
   const [localTab, setLocalTab] = useState<"local" | "remote">("local");
   const tab = activeTab ?? localTab;
+  const { containerRef: collectionTabsRef, position: collectionIndicator } = useSlidingIndicator<HTMLElement>(tab);
   const setTab = (next: "local" | "remote") => {
     setLocalTab(next);
     onTabChange?.(next);
@@ -366,9 +368,10 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
           </div>}
         </div>
 
-        <nav className="tabs collection-switch" aria-label="收藏类型">
-          <button type="button" className={`tab ${tab === "local" ? "active" : ""}`} onClick={() => setTab("local")}>本地收藏 <span>{library.items.length}</span></button>
-          <button type="button" className={`tab ${tab === "remote" ? "active" : ""}`} onClick={() => setTab("remote")}>跨平台收藏</button>
+        <nav className="tabs collection-switch" aria-label="收藏类型" ref={collectionTabsRef}>
+          {collectionIndicator && <span className="tabs-indicator" aria-hidden="true" style={{ width: collectionIndicator.width + 8, transform: `translateX(${collectionIndicator.left - 4}px)` }} />}
+          <button type="button" className={`tab ${tab === "local" ? "active" : ""}`} onClick={() => setTab("local")}><span className="tab-label" data-indicator-active={tab === "local"}>本地收藏</span><span className="tab-count">{library.items.length}</span></button>
+          <button type="button" className={`tab ${tab === "remote" ? "active" : ""}`} onClick={() => setTab("remote")}><span className="tab-label" data-indicator-active={tab === "remote"}>跨平台收藏</span></button>
         </nav>
 
         {tab === "local" ? (
