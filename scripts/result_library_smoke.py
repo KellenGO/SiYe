@@ -411,8 +411,11 @@ def main() -> None:
                         expect(portrait).to_be_visible()
                         page.wait_for_function("[...document.images].some(img => img.naturalWidth === 180 && img.naturalHeight === 240)")
                         shape = portrait.evaluate("el => ({w: el.clientWidth, h: el.clientHeight, fit: getComputedStyle(el).objectFit})")
-                        limit = (156 if width <= 700 else 192) if view == "列表" else 360
-                        assert abs(shape["h"] - min(shape["w"] * 240 / 180, limit)) <= 1, shape
+                        if view == "列表":
+                            assert shape["h"] == (128 if width <= 700 else 144), shape
+                            assert abs(shape["w"] / shape["h"] - 180 / 240) < .02, shape
+                        else:
+                            assert abs(shape["w"] / shape["h"] - 16 / 9) < .03, shape
                         assert shape["fit"] == "cover"
                         if view == "列表":
                             rich_row = page.locator(".result-row").filter(has_text=rich["title"])
@@ -426,6 +429,8 @@ def main() -> None:
                             assert rich_row.locator("h2").evaluate("el => el.scrollHeight <= el.clientHeight + 1")
                             rich_row.get_by_role("button", name="收起完整内容", exact=True).click()
                             buttons = rich_row.locator(".row-actions > button, .row-actions > .relative > button")
+                            positions = buttons.evaluate_all("els => els.map(el => el.getBoundingClientRect().y)")
+                            assert all(b > a for a, b in zip(positions, positions[1:])), positions
                             minimum = 44 if width <= 700 or page.evaluate("matchMedia('(pointer: coarse)').matches") else 32
                             for box in buttons.evaluate_all("els => els.map(el => { const r = el.getBoundingClientRect(); return {x:r.x, right:r.right, width:r.width, height:r.height}; })"):
                                 assert box["width"] >= minimum and box["height"] >= minimum
