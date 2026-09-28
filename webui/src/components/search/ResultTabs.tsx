@@ -207,12 +207,11 @@ export function ResultTabs({
                 key={tab.key}
                 role="tab"
                 aria-selected={active}
-                data-indicator-active={active}
                 onClick={() => setActiveTab(tab.key)}
                 className={`tab ${active ? "active" : ""}`}
               >
-                {tab.label}
-                <span>{count}</span>
+                <span className="tab-label" data-indicator-active={active}>{tab.label}</span>
+                <span className="tab-count">{count}</span>
               </button>
             );
           })}

@@ -639,7 +639,8 @@ html.dark .search-submit { color: #101525; }
 .tab { padding: 0 0 13px; border-bottom: 2px solid transparent; margin-bottom: -1px; color: var(--siye-secondary); font-size: 13px; white-space: nowrap; }
 .tab.active { color: var(--siye-ink); font-weight: 600; }
 .tab:hover { color: var(--siye-brand-ink); }
-.tab span { margin-left: 5px; color: var(--siye-muted); font-size: 11px; font-weight: 400; }
+.tab-label { display: inline-block; }
+.tab-count { margin-left: 5px; color: var(--siye-muted); font-size: 11px; font-weight: 400; }
 .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 4px; }
 .toolbar-left { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .field { min-width: 0; padding: 8px 11px; border: 1px solid var(--siye-line-strong); border-radius: 8px; background: var(--siye-bg); color: var(--siye-secondary); font-size: 12px; }
@@ -1169,7 +1170,7 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
   .tabs { gap: 19px; overflow-x: auto; margin-bottom: 21px; scrollbar-width: none; }
   .tabs::-webkit-scrollbar { display: none; }
   .tab { padding-bottom: 11px; font-size: 12px; }
-  .tab span { margin-left: 3px; font-size: 10px; }
+  .tab-count { margin-left: 3px; font-size: 10px; }
   .result-row { gap: 8px; padding: 20px 0; }
   .result-number { display: none; }
   .result-cover { width: 256px; }
