@@ -25,6 +25,10 @@
 | --- | --- |
 | ![本机收藏列表](docs/images/shot-favorites.png) | ![本机收藏图标视图](docs/images/shot-favorites-grid.png) |
 
+| 收藏夹内容：列表视图 | 收藏夹内容：网格视图 |
+| --- | --- |
+| ![B站收藏夹内容列表视图](docs/images/shot-favorites-platform-list.png) | ![B站收藏夹内容网格视图](docs/images/shot-favorites-platform-grid.png) |
+
 | 跨平台收藏 | 看过的历史 |
 | --- | --- |
 | ![跨平台收藏](docs/images/shot-fav-cross.png) | ![看过的历史](docs/images/shot-history.png) |
