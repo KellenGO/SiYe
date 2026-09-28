@@ -847,7 +847,8 @@ html.dark .search-submit { color: #101525; }
 .local-content-topic-summary { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; color: #58728c; }
 .local-content-placeholder { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 6px; color: var(--siye-muted); font-size: 12px; padding-bottom: 18px; }
 .local-content-placeholder svg { width: 24px; height: 24px; opacity: .65; }
-.local-content-badges { position: absolute; bottom: 0; left: 0; right: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 24px 8px 7px; background: linear-gradient(transparent, rgb(0 0 0 / .72)); color: #fff; text-shadow: 0 1px 2px rgb(0 0 0 / .65); }
+.local-content-badges { position: absolute; bottom: 0; left: 0; right: 0; display: flex; align-items: flex-end; gap: 6px; padding: 5px 6px 4px; background: linear-gradient(transparent, rgb(0 0 0 / .72)); color: #fff; text-shadow: 0 1px 2px rgb(0 0 0 / .65); }
+.local-content-labels { display: flex; flex: 1; min-width: 0; flex-wrap: wrap; align-items: center; gap: 2px 6px; }
 .local-content-type { display: inline-flex; align-items: center; gap: 4px; color: #fff; font-size: 10px; line-height: 1.5; }
 .local-content-type svg { width: 11px; height: 11px; }
 .local-content-primary-metric { display: inline-flex; align-items: center; gap: 3px; color: #fff; font-size: 10px; line-height: 1.5; white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -2017,7 +2018,7 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
 }
 
 .local-content-primary-metric svg { display: block; width: 11px; height: 11px; }
-.local-content-duration { margin-left: auto; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.local-content-duration { flex: 0 0 auto; margin-left: auto; font-size: 10px; line-height: 1.5; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 @media (prefers-reduced-motion: reduce) {
   .details-toggle svg { transition: none; }

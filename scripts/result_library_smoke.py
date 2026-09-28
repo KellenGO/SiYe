@@ -28,6 +28,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from api.routers.library import library_router
 from api.services.library_store import LibraryStore, get_library_store
+from aggregate_search.adapters.douyin import DouyinAdapter
+from aggregate_search.adapters.xhs import XhsAdapter
+from aggregate_search.adapters.zhihu import ZhihuAdapter
 BOOKMARKS_KEY = "aggregate_search_bookmarks_v1"
 
 
@@ -369,6 +372,15 @@ def main() -> None:
                                  "comment_count": 1000000000, "collect_count": 80, "share_count": 5},
                         metrics_approximate=["view_count"], duration_seconds=94)
             job["results"].append(rich)
+            duration_samples = [
+                (DouyinAdapter(), {"aweme_id": "duration-dy", "desc": "抖音时长", "video": {"duration": 94500}}),
+                (XhsAdapter(), {"id": "duration-xhs", "note_card": {"type": "video", "display_title": "小红书时长", "video": {"capa": {"duration": 94}}}}),
+                (ZhihuAdapter(), {"id": "12345", "type": "zvideo", "title": "知乎时长", "video": {"duration": 94.5}}),
+            ]
+            for adapter, raw in duration_samples:
+                adapted = adapter.adapt([raw])[0].model_dump(mode="json")
+                adapted["cover_url"] = rich["cover_url"]
+                job["results"].append(adapted)
             page.reload()
             for dark in (False, True):
                 page.evaluate("dark => document.documentElement.classList.toggle('dark', dark)", dark)
@@ -377,6 +389,21 @@ def main() -> None:
                     for view in ("列表", "网格"):
                         page.get_by_role("button", name=view, exact=True).click()
                         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), (dark, width, view)
+                        for title in ("抖音时长", "小红书时长", "知乎时长"):
+                            card = page.locator(".result-row" if view == "列表" else ".local-content-card").filter(has_text=title)
+                            expect(card.locator(".local-content-duration")).to_have_text("01:34")
+                        for duration in page.locator(".local-content-duration").all():
+                            geometry = duration.evaluate("""el => {
+                                const cover = el.closest('.local-content-cover').getBoundingClientRect();
+                                const time = el.getBoundingClientRect();
+                                const labels = el.previousElementSibling.getBoundingClientRect();
+                                return {right: cover.right - time.right, bottom: cover.bottom - time.bottom,
+                                    overlap: labels.right > time.left, left: time.left - cover.left};
+                            }""")
+                            assert 0 <= geometry["right"] <= 7 and 0 <= geometry["bottom"] <= 5, geometry
+                            assert not geometry["overlap"] and geometry["left"] >= 0, geometry
+                        for badges in page.locator(".local-content-badges").all():
+                            assert badges.evaluate("el => parseFloat(getComputedStyle(el).paddingTop) <= 6")
                         if view == "列表":
                             rich_row = page.locator(".result-row").filter(has_text=rich["title"])
                             expect(rich_row.locator(".result-metric")).to_have_text(["≈1.2M", "15.4k", "0", "1B", "80", "5"])

@@ -27,6 +27,7 @@ Each platform adapter receives *native* data from the crawler client
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+import math
 from typing import Any, Dict, List, Optional
 
 from aggregate_search.models import UnifiedSearchResult
@@ -66,6 +67,20 @@ class BasePlatformAdapter(ABC):
             return int(value)
         except (ValueError, TypeError):
             return default
+
+    @staticmethod
+    def _numeric_duration_seconds(value: Any, *, milliseconds: bool = False) -> Optional[int]:
+        """Normalize a known numeric duration; units come from the source field."""
+        if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+            return None
+        try:
+            seconds = float(value) / (1000 if milliseconds else 1)
+        except (ValueError, OverflowError):
+            return None
+        if not math.isfinite(seconds) or not 0 < seconds <= 2**53 - 1:
+            return None
+        # Display whole seconds, retaining a positive sub-second video as 00:01.
+        return max(1, int(seconds))
 
     def _extract_cover_url(self, raw_item: Dict) -> Optional[str]:
         """Extract cover image URL with platform-specific fallbacks."""

@@ -99,12 +99,28 @@ class DouyinAdapter(BasePlatformAdapter):
                     url=url,
                     published_at=published_at,
                     cover_url=cover_url,
+                    duration_seconds=self._extract_duration(item),
                     metrics=metrics,
                     rank=rank,
                     collection_names=[str(item["_collection_name"])] if item.get("_collection_name") else [],
                 )
             )
         return results
+
+    def _extract_duration(self, item: Dict) -> Optional[int]:
+        # Image posts can carry an audio/video wrapper: do not use its music length.
+        if item.get("images") or item.get("image_post_info"):
+            return None
+        video = item.get("video")
+        if not isinstance(video, dict):
+            return None
+        duration = self._numeric_duration_seconds(video.get("duration"), milliseconds=True)
+        if duration is not None:
+            return duration
+        download = video.get("download_addr")
+        if isinstance(download, dict):
+            return self._numeric_duration_seconds(download.get("duration"), milliseconds=True)
+        return None
 
     def _get_author(self, item: Dict) -> Optional[str]:
         author = item.get("author") or item.get("user")

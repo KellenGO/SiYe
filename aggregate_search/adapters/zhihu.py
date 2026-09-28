@@ -106,12 +106,22 @@ class ZhihuAdapter(BasePlatformAdapter):
                     url=url,
                     published_at=published_at,
                     cover_url=cover_url,
+                    duration_seconds=self._extract_duration(item),
                     metrics=metrics,
                     rank=rank,
                     collection_names=[str(item["_collection_name"])] if item.get("_collection_name") else [],
                 )
             )
         return results
+
+    def _extract_duration(self, item: Dict) -> Optional[int]:
+        # An answer/article may embed a video; that is not the duration of the content.
+        if item.get("type") != "zvideo":
+            return None
+        video = item.get("video")
+        if isinstance(video, dict):
+            return self._numeric_duration_seconds(video.get("duration"))
+        return None
 
     def _get_public_author(self, item: Dict) -> Optional[str]:
         """Extract PUBLIC nickname directly from raw JSON author field.

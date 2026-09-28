@@ -109,7 +109,7 @@ class XhsAdapter(BasePlatformAdapter):
     PLATFORM = "xhs"
 
     def adapt(self, raw_results: List[Any], keyword: str = "") -> List[UnifiedSearchResult]:
-        """同时兼容两种数据形状（Round 17）：
+        """同时兼容搜索列表项与详情对象：
 
         A. 原详情对象：``note_id`` / ``title`` / ``user`` / ``interact_info`` /
            ``image_list`` / ``video`` / ``type`` / ``time`` / ``note_url``；
@@ -187,12 +187,44 @@ class XhsAdapter(BasePlatformAdapter):
                     url=url,
                     published_at=published_at,
                     cover_url=cover_url,
+                    duration_seconds=(self._extract_duration(card) or self._extract_duration(item))
+                    if content_type == "video" else None,
                     metrics=metrics,
                     rank=rank,
                     collection_names=[str(item["_collection_name"])] if item.get("_collection_name") else [],
                 )
             )
         return results
+
+    def _extract_duration(self, item: Dict) -> Optional[int]:
+        video = item.get("video")
+        if not isinstance(video, dict):
+            return None
+        capa = video.get("capa")
+        if isinstance(capa, dict):
+            duration = self._numeric_duration_seconds(capa.get("duration"))
+            if duration is not None:
+                return duration
+        media = video.get("media")
+        if not isinstance(media, dict):
+            return None
+        metadata = media.get("video")
+        if isinstance(metadata, dict):
+            duration = self._numeric_duration_seconds(metadata.get("duration"))
+            if duration is not None:
+                return duration
+        # Overall metadata uses seconds; individual encoded streams use milliseconds.
+        streams = media.get("stream")
+        if isinstance(streams, dict):
+            for variants in streams.values():
+                if not isinstance(variants, list):
+                    continue
+                for variant in variants:
+                    if isinstance(variant, dict):
+                        duration = self._numeric_duration_seconds(variant.get("duration"), milliseconds=True)
+                        if duration is not None:
+                            return duration
+        return None
 
     def _get_public_nickname(self, item: Dict) -> Optional[str]:
         user = item.get("user") or item.get("author")

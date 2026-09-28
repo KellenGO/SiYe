@@ -68,9 +68,11 @@ export function LocalContentCover({ result, showMetric = false }: { result: Unif
       </span> : <span className="local-content-placeholder">{result.cover_url ? <ImageOff aria-hidden="true" /> : <FileText aria-hidden="true" />}
         <span>{result.cover_url ? "封面暂不可用" : "暂无封面"}</span></span>}
     <span className="local-content-badges">
-    <span className="local-content-type">{video && <Play aria-hidden="true" />}{localContentType(result.content_type)}</span>
-    {metric && <ContentMetric result={result} metric={metric} className="local-content-primary-metric" />}
-    {duration && <span className="local-content-duration" aria-label={`播放时长 ${duration}`}>{duration}</span>}
+      <span className="local-content-labels">
+        <span className="local-content-type">{video && <Play aria-hidden="true" />}{localContentType(result.content_type)}</span>
+        {metric && <ContentMetric result={result} metric={metric} className="local-content-primary-metric" />}
+      </span>
+      {duration && <span className="local-content-duration" aria-label={`播放时长 ${duration}`}>{duration}</span>}
     </span>
   </span>;
 }
