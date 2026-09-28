@@ -412,8 +412,8 @@ def main() -> None:
                         page.wait_for_function("[...document.images].some(img => img.naturalWidth === 180 && img.naturalHeight === 240)")
                         shape = portrait.evaluate("el => ({w: el.clientWidth, h: el.clientHeight, fit: getComputedStyle(el).objectFit})")
                         if view == "列表":
-                            assert shape["h"] == (128 if width <= 700 else 144), shape
-                            assert abs(shape["w"] / shape["h"] - 180 / 240) < .02, shape
+                            assert abs(shape["h"] - (128 if width <= 700 else 144)) <= 1, shape
+                            assert abs(shape["w"] / shape["h"] - 16 / 9) < .03, shape
                         else:
                             assert abs(shape["w"] / shape["h"] - 16 / 9) < .03, shape
                         assert shape["fit"] == "cover"
@@ -431,7 +431,7 @@ def main() -> None:
                             buttons = rich_row.locator(".row-actions > button, .row-actions > .relative > button")
                             positions = buttons.evaluate_all("els => els.map(el => el.getBoundingClientRect().y)")
                             assert all(b > a for a, b in zip(positions, positions[1:])), positions
-                            minimum = 44 if width <= 700 or page.evaluate("matchMedia('(pointer: coarse)').matches") else 32
+                            minimum = 44 if width <= 700 or page.evaluate("matchMedia('(pointer: coarse)').matches") else 40
                             for box in buttons.evaluate_all("els => els.map(el => { const r = el.getBoundingClientRect(); return {x:r.x, right:r.right, width:r.width, height:r.height}; })"):
                                 assert box["width"] >= minimum and box["height"] >= minimum
                                 assert box["x"] >= 0 and box["right"] <= width

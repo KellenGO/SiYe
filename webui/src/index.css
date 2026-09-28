@@ -680,7 +680,7 @@ html.dark .search-submit { color: #101525; }
 .folder-info-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--siye-line); }
 .folder-info-actions .btn { min-width: 92px; justify-content: center; }
 @media (max-width: 620px) { .folder-info-card { padding: 18px; } .folder-info-cover { width: min(168px, 65%); } }
-.result-cover { width: auto; max-width: 38%; border-radius: 10px; background: var(--siye-soft); flex: 0 0 auto; }
+.result-cover { width: 256px; max-width: 38%; border-radius: 10px; background: var(--siye-soft); flex: 0 0 auto; }
 .result-cover .local-content-topic { padding: 8px 10px 24px; gap: 3px; }
 .result-cover .local-content-topic strong { font-size: 12px; -webkit-line-clamp: 2; }
 .result-cover .local-content-topic-brand, .result-cover .local-content-topic-summary { display: none; }
@@ -842,9 +842,8 @@ html.dark .search-submit { color: #101525; }
 .local-content-cover { display: block; position: relative; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 10px; background: var(--siye-soft); }
 .local-content-cover img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .local-content-card .local-content-cover img { object-fit: cover; }
-.result-cover .local-content-cover { height: 144px; width: 256px; max-width: 100%; aspect-ratio: auto; }
-.result-cover .local-content-cover.has-image { width: auto; }
-.result-cover .local-content-cover.has-image img { width: auto; max-width: 100%; height: 144px; object-fit: cover; }
+.result-cover .local-content-cover { width: 100%; aspect-ratio: 16 / 9; }
+.result-cover .local-content-cover img { width: 100%; height: 100%; object-fit: cover; }
 .result-content { min-height: 144px; }
 .local-content-topic { display: flex; flex-direction: column; justify-content: center; height: 100%; padding: 14px 18px 30px; gap: 8px; background: linear-gradient(135deg, #eaf3ff, #f6f9ff); color: #183959; text-align: left; }
 .local-content-topic-brand { font-size: 10px; color: #1769ba; letter-spacing: .04em; }
@@ -1158,7 +1157,7 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
   .tab span { margin-left: 3px; font-size: 10px; }
   .result-row { gap: 8px; padding: 20px 0; }
   .result-number { display: none; }
-  .result-cover { width: auto; }
+  .result-cover { width: 256px; }
   .result-title { font-size: 15px; }
   .result-description { font-size: 12px; line-height: 1.85; }
   .result-meta { gap: 6px 9px; font-size: 10px; }
@@ -2034,14 +2033,18 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
   .result-row { display: grid; grid-template-columns: minmax(0, 1fr) 44px; }
   .result-row > .result-number { display: none; }
   .result-row > .row-actions { grid-column: 2; grid-row: 1 / span 2; justify-content: flex-start; }
-  .result-cover { grid-column: 1; grid-row: 1; justify-self: start; max-width: 100%; }
+  .result-cover { grid-column: 1; grid-row: 1; justify-self: start; width: calc(128px * 16 / 9); max-width: 100%; }
   .result-content { grid-column: 1; grid-row: 2; min-height: 0; }
-  .result-cover .local-content-cover { height: 128px; width: 228px; }
-  .result-cover .local-content-cover.has-image { width: auto; }
-  .result-cover .local-content-cover.has-image img { height: 128px; }
+
 }
 
 .local-content-cover:not(.has-image) .local-content-badges { text-shadow: none; color: var(--siye-secondary); }
 .local-content-cover:not(.has-image) :is(.local-content-type, .local-content-primary-metric) { color: inherit; }
 
 .local-content-cover:not(.has-image) .local-content-topic + .local-content-badges { color: #58728c; }
+
+.result-row > .row-actions > button, .result-row > .row-actions > .relative > button { min-width: 40px; min-height: 40px; height: 40px; }
+.result-row > .row-actions > button > svg, .result-row > .row-actions > .relative > button > svg { width: 18px; height: 18px; }
+@media (max-width: 700px), (pointer: coarse) {
+  .result-row > .row-actions > button, .result-row > .row-actions > .relative > button { min-width: 44px; min-height: 44px; height: 44px; }
+}
