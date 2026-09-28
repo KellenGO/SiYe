@@ -98,6 +98,8 @@ export function ResultTabs({
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [filters, setFilters] = useState<ResultFilters>({ ...DEFAULT_FILTERS });
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  useEffect(() => setExpanded(new Set()), [jobId, viewScope]);
   const [exportOpen, setExportOpen] = useState(false);
   // 收藏成功后的一次性提示：让用户当场改归属，不用跑到收藏页去找。
   const [membershipPrompt, setMembershipPrompt] = useState<{ group: string; keys: string[]; modal: boolean } | null>(null);
@@ -246,7 +248,7 @@ export function ResultTabs({
             ? library?.items.find((item) => membershipPrompt.keys.includes(item.key))
             : undefined;
           return (
-            <div key={key} className={gridView ? `local-content-card ${selected.has(key) ? "is-selected" : ""}` : savedView || promptItem ? "saved-result-item" : undefined}>
+            <div key={key} className={`${gridView ? "local-content-card" : `result-list-item ${savedView || promptItem ? "saved-result-item" : ""}`} ${selected.has(key) ? "is-selected" : ""}`}>
               {exportOpen && <div className="mb-1.5 flex items-center gap-2 px-1">
                 <label className="flex min-w-0 items-center gap-1.5 text-xs text-cyber-text-muted">
                   <input type="checkbox" aria-label={`选择 ${result.title}`} checked={selected.has(key)} onChange={() => setSelected((previous) => {
@@ -270,6 +272,10 @@ export function ResultTabs({
                   {onDeleteItem && <button type="button" aria-label="从历史中移除" title="从历史中移除" onClick={() => onDeleteItem(result)}><Trash2 aria-hidden="true" /></button>}
                 </div>
               </> : <ResultCard result={result} index={index} highlightQuery={filters.query || keyword}
+                detailsExpanded={expanded.has(key)}
+                onExpandedChange={(open) => setExpanded((previous) => {
+                  const next = new Set(previous); if (open) next.add(key); else next.delete(key); return next;
+                })}
                 onOpenDetails={() => setDetailResult(result)}
                 renderBookmark={library ? (source) => <>
                   <BookmarkControl result={source} library={library} fetchedAt={fetchedAt}

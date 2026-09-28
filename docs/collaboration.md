@@ -8,7 +8,6 @@
 
 | 任务 ID | 负责人 / 会话 | worktree / 分支 / 起始 HEAD | 修改范围 | 状态 / 下一步 |
 |---|---|---|---|---|
-| VIEW-CONTINUITY-20260928 | Codex 当前会话 | 主工作区 / master / 282d370 | ResultTabs、ResultCard、LocalContentCard、index.css；相关浏览器测试、功能文档与 CHANGELOG | 统一双视图视觉与切换上下文，验证后提交 |
 
 ## 待接手事项
 

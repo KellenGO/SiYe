@@ -83,9 +83,23 @@ def main():
 
             for route in ("search", "history"):
                 page.goto(f"{origin}/#/{route}")
+                page.evaluate("() => document.fonts.ready")
                 expect(page.locator(".local-content-card")).to_have_count(60)
                 page.get_by_role("button", name="列表", exact=True).press("Enter")
                 expect(page.locator(".result-row")).to_have_count(60)
+                for view, selector in (("网格", ".local-content-card"), ("列表", ".result-row")):
+                    switch = page.get_by_role("button", name=view, exact=True)
+                    switch.focus()
+                    page.evaluate("window.scrollTo(0, 200)")
+                    page.evaluate("() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
+                    before_scroll = page.evaluate("window.scrollY")
+                    # DOM activation isolates layout changes from the browser scrolling a focused control into view.
+                    switch.evaluate("el => el.click()")
+                    expect(page.locator(selector)).to_have_count(60)
+                    page.evaluate("() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
+                    after_scroll = page.evaluate("window.scrollY")
+                    assert abs(after_scroll - before_scroll) <= 2, (route, view, before_scroll, after_scroll)
+                    expect(switch).to_be_focused()
                 expect(page.locator(".result-title").first).to_have_text("测试结果 0")
                 page.get_by_role("button", name="查看内容信息：测试结果 0", exact=True).press("Enter")
                 list_drawer = page.get_by_role("dialog", name="内容信息", exact=True)

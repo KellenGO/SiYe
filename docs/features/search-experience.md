@@ -16,11 +16,15 @@
 | 结果状态 → UI 文案（含"正在搜索，暂时显示上次结果"） | `webui/src/lib/searchExperience.ts` 的 `summarizeSearchError` / `selectSearchPresentation` |
 | React 接线层 | `webui/src/hooks/useSearchExperience.ts`、`useAggregateSearch.ts` |
 | 内容视图偏好 | `webui/src/lib/contentView.ts` |
+| 两种视图共用封面与指标展示 | `webui/src/components/favorites/LocalContentCard.tsx` 的 `LocalContentCover` / `ContentMetric` |
 | 页面与卡片 | `webui/src/components/search/{SearchPage,SearchBar,ResultTabs,ResultCard,ResultTools,SearchPopover,PlatformStatus}.tsx` |
 | 结果缓存（90s，按平台+关键词+数量+账号代数） | `api/services/result_cache.py` |
 | 平台级冷却 | `api/services/search_metrics.py` 的 `PlatformCooldowns` |
 
 ## 关键决定
+
+- **双视图共用视觉语言**：列表保持详细阅读、网格保持封面浏览。两者沿用同一字体与颜色，封面均完整适配、圆角一致；列表以紧凑缩略图复用缺图占位、知乎主题卡与小红书地址回退。类型与可靠视频时长放封面，列表多项指标放正文，网格只显示主要指标；两者统一 k / M / B 与近似值 ≈，悬停和无障碍名称提供完整数值及播放／阅读含义。平台品牌圆点与名称一致，聚合内容均标明平台版本数，不累加各来源数据。
+- 列表的平台身份独立显示，摘要、作者和时间仍可阅读，长内容可行内展开；操作横排在正文下方，窄屏换行。两种视图的操作尺寸、焦点及批量选中轮廓一致，收藏与稍后再看仍独立。切回列表恢复已展开条目，新任务或页面范围变化时清理展开状态；切换不主动滚动或搬移焦点，页面变短时允许浏览器自然限制滚动位置。
 
 - 视频有可靠时长时，在封面右下角显示分秒或时分秒；目前接入 B 站列表已有时长，不为此追加请求。其他平台和旧记录缺失时不显示，不推算。时长随历史、收藏和备份快照保留，旧数据兼容。
 

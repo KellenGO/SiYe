@@ -1,6 +1,6 @@
-import { useLayoutEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
-import { ArrowUpRight, ChevronDown, Info, Eye, MessageCircle, Share2, Star, ThumbsUp, Trash2 } from "lucide-react";
-import { BilibiliCoinIcon } from "@/components/icons/BilibiliCoinIcon";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { ArrowUpRight, ChevronDown, Info, Trash2 } from "lucide-react";
+import { ContentMetric, LocalContentCover } from "@/components/favorites/LocalContentCard";
 import type { GroupedSource, UnifiedSearchResult } from "@/types/search";
 import { PLATFORM_COLORS, PLATFORM_LABELS } from "@/types/search";
 import { highlightSegments, orderedMetrics, safeContentUrl as safeUrl } from "@/lib/resultTools";
@@ -14,6 +14,8 @@ interface ResultCardProps {
   /** 历史页：删除单条记录的回调（点击时不会触发跳转）。 */
   onDelete?: () => void;
   onOpenDetails?: () => void;
+  detailsExpanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
 }
 
 function Highlight({ text, query }: { text: string; query: string }) {
@@ -36,38 +38,17 @@ function formatTime(iso: string | null): string {
   return date.toLocaleDateString("zh-CN");
 }
 
-function formatCount(value: number): string {
-  if (value >= 10000) return `${(value / 10000).toFixed(1)} 万`;
-  return value.toLocaleString("zh-CN");
-}
-
-const CONTENT_TYPE_LABELS: Record<string, string> = {
-  note: "图文笔记", video: "视频", short_video: "短视频", answer: "回答", article: "文章", post: "帖子",
-};
-
-type MetricIcon = ComponentType<{ className?: string }>;
-
-const METRIC_ICONS: Record<string, MetricIcon> = {
-  view_count: Eye,
-  like_count: ThumbsUp,
-  coin_count: BilibiliCoinIcon,
-  comment_count: MessageCircle,
-  collect_count: Star,
-  share_count: Share2,
-};
-
 function SourceLine({ source, query, onOpen }: { source: GroupedSource; query: string; onOpen?: () => void }) {
   const url = safeUrl(source.url);
   const row = <div className="result-source-line"><i className="pd" style={{ backgroundColor: PLATFORM_COLORS[source.platform] }} /><span className="result-source-platform">{PLATFORM_LABELS[source.platform]}</span><span className="result-source-title"><Highlight text={source.title} query={query} /></span><span className="result-source-meta">{source.author}</span><ArrowUpRight className="result-source-arrow" /></div>;
   return url ? <a href={url} target="_blank" rel="noreferrer" onClick={onOpen}>{row}</a> : row;
 }
 
-export function ResultCard({ result, index = 0, highlightQuery = "", renderBookmark, onDelete, onOpenDetails }: ResultCardProps) {
-  const [coverFailed, setCoverFailed] = useState(false);
-  const [detailsExpanded, setDetailsExpanded] = useState(false);
+export function ResultCard({ result, index = 0, highlightQuery = "", renderBookmark, onDelete, onOpenDetails, detailsExpanded, onExpandedChange }: ResultCardProps) {
   const [contentClipped, setContentClipped] = useState(false);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const descriptionRef = useRef<HTMLParagraphElement>(null);
+  const bylineRef = useRef<HTMLDivElement>(null);
   const metaRef = useRef<HTMLDivElement>(null);
   const url = safeUrl(result.url);
   // 用户点开结果链接即记一条观看历史；fire-and-forget，失败不阻塞跳转。
@@ -75,12 +56,12 @@ export function ResultCard({ result, index = 0, highlightQuery = "", renderBookm
   const groupedSources = result.grouped_sources && result.grouped_sources.length >= 2 ? result.grouped_sources : null;
   const title = <><Highlight text={result.title || "无标题内容"} query={highlightQuery} />{url && <ArrowUpRight />}</>;
   const metrics = orderedMetrics(result.metrics);
-  const type = CONTENT_TYPE_LABELS[result.content_type] || result.content_type || "";
-  const hasDetails = contentClipped || !!groupedSources;
+  const platforms = Array.from(new Set((groupedSources || [result]).map((source) => source.platform)));
+  const hasDetails = detailsExpanded || contentClipped || !!groupedSources;
 
   useLayoutEffect(() => {
     if (detailsExpanded) return;
-    const elements = [titleRef.current, descriptionRef.current, metaRef.current].filter(Boolean) as HTMLElement[];
+    const elements = [titleRef.current, descriptionRef.current, bylineRef.current, metaRef.current].filter(Boolean) as HTMLElement[];
     const checkOverflow = () => setContentClipped(elements.some((element) =>
       element.scrollHeight > element.clientHeight + 1 || element.scrollWidth > element.clientWidth + 1));
     checkOverflow();
@@ -88,62 +69,52 @@ export function ResultCard({ result, index = 0, highlightQuery = "", renderBookm
     const observer = new ResizeObserver(checkOverflow);
     elements.forEach((element) => observer.observe(element));
     return () => observer.disconnect();
-  }, [detailsExpanded, result.title, result.snippet, result.metrics, type]);
+  }, [detailsExpanded, result.title, result.snippet, result.author, result.published_at, result.metrics]);
 
   return (
     <article className="result-row">
       <span className="result-number">{String(index + 1).padStart(2, "0")}</span>
-      {result.cover_url && !coverFailed && (
-        <div className="result-cover">
-          <img
-            src={result.cover_url}
-            alt={result.title}
-            loading="lazy"
-            referrerPolicy="no-referrer"
-            onError={() => setCoverFailed(true)}
-          />
+      <div className="result-cover"><LocalContentCover result={result} /></div>
+      <div className="result-content">
+        <div className={`result-preview ${detailsExpanded ? "is-expanded" : ""}`}>
+          <h2 ref={titleRef}>{url ? <a className="result-title" href={url} target="_blank" rel="noreferrer" onClick={handleOpen}>{title}</a> : <span className="result-title">{title}</span>}</h2>
+          {result.snippet && <p ref={descriptionRef} className="result-description"><Highlight text={result.snippet} query={highlightQuery} /></p>}
+          <div className="content-card-platform result-platform" title={platforms.map((platform) => PLATFORM_LABELS[platform]).join(" / ")}>
+            {platforms.map((platform) => <i key={platform} className="pd" style={{ backgroundColor: PLATFORM_COLORS[platform] }} aria-hidden="true" />)}
+            {groupedSources ? `${groupedSources.length} 个平台版本` : PLATFORM_LABELS[result.platform]}
+          </div>
+          <div ref={bylineRef} className="result-byline">
+            {result.author && <span>{result.author}</span>}
+            {result.published_at && <span>{formatTime(result.published_at)}</span>}
+          </div>
+          {metrics.length > 0 && <div ref={metaRef} className="result-meta">
+            {metrics.map((metric) => <ContentMetric key={metric.key} result={result} metric={metric} className="result-metric" />)}
+          </div>}
+          {detailsExpanded && groupedSources && <div className="result-expanded-sources">
+            <div className="result-details-heading">{groupedSources.length} 个平台的内容版本</div>
+            {groupedSources.map((source) => <SourceLine key={`${source.platform}-${source.content_id}`} source={source} query={highlightQuery} onOpen={() => { void recordView({ ...source, grouped_sources: null }); }} />)}
+          </div>}
         </div>
-      )}
-      <div className={`result-content result-preview ${detailsExpanded ? "is-expanded" : ""}`}>
-        <h2 ref={titleRef}>{url ? <a className="result-title" href={url} target="_blank" rel="noreferrer" onClick={handleOpen}>{title}</a> : <span className="result-title">{title}</span>}</h2>
-        {result.snippet && <p ref={descriptionRef} className="result-description"><Highlight text={result.snippet} query={highlightQuery} /></p>}
-        <div ref={metaRef} className="result-meta">
-          <span className="source"><i className="pd" style={{ backgroundColor: PLATFORM_COLORS[result.platform] }} />{groupedSources ? "跨平台聚合" : PLATFORM_LABELS[result.platform]}</span>
-          {result.author && <span>{result.author}</span>}
-          {result.published_at && <span>{formatTime(result.published_at)}</span>}
-          {(type || metrics.length > 0) && <span className="meta-divider" />}
-          {type && <span>{type}</span>}
-          {metrics.map(({ key, label }) => {
-            const Icon = METRIC_ICONS[key];
-            if (!Icon) return null;
-            const value = formatCount(result.metrics[key] || 0);
-            return <span key={key} className="result-metric" title={`${label} ${value}`} aria-label={`${label} ${value}`}><Icon />{value}</span>;
-          })}
-        </div>
-        {detailsExpanded && groupedSources && <div className="result-expanded-sources">
-          <div className="result-details-heading">{groupedSources.length} 个平台的内容版本</div>
-          {groupedSources.map((source) => <SourceLine key={`${source.platform}-${source.content_id}`} source={source} query={highlightQuery} onOpen={() => { void recordView({ ...source, grouped_sources: null }); }} />)}
+        {(renderBookmark || hasDetails || onDelete || onOpenDetails) && <div className="row-actions content-card-actions">
+          {renderBookmark?.(result)}
+          {hasDetails && <button
+            type="button"
+            className="details-toggle"
+            aria-expanded={detailsExpanded}
+            aria-label={detailsExpanded ? "收起完整内容" : "展开完整内容"}
+            title={detailsExpanded ? "收起完整内容" : "展开完整内容"}
+            onClick={() => onExpandedChange(!detailsExpanded)}
+          ><ChevronDown /></button>}
+          {onOpenDetails && <button type="button" className="details-toggle" aria-label={`查看内容信息：${result.title || "无标题内容"}`} title="查看内容信息" onClick={onOpenDetails}><Info aria-hidden="true" /></button>}
+          {onDelete && <button
+            type="button"
+            className="details-toggle"
+            aria-label="从历史中移除"
+            title="从历史中移除"
+            onClick={(event) => { event.stopPropagation(); onDelete(); }}
+          ><Trash2 /></button>}
         </div>}
       </div>
-      {(renderBookmark || hasDetails || onDelete || onOpenDetails) && <div className="row-actions">
-        {renderBookmark?.(result)}
-        {hasDetails && <button
-          type="button"
-          className="details-toggle"
-          aria-expanded={detailsExpanded}
-          aria-label={detailsExpanded ? "收起完整内容" : "展开完整内容"}
-          title={detailsExpanded ? "收起完整内容" : "展开完整内容"}
-          onClick={() => setDetailsExpanded((value) => !value)}
-        ><ChevronDown /></button>}
-        {onOpenDetails && <button type="button" className="details-toggle" aria-label={`查看内容信息：${result.title || "无标题内容"}`} title="查看内容信息" onClick={onOpenDetails}><Info aria-hidden="true" /></button>}
-        {onDelete && <button
-          type="button"
-          className="details-toggle"
-          aria-label="从历史中移除"
-          title="从历史中移除"
-          onClick={(event) => { event.stopPropagation(); onDelete(); }}
-        ><Trash2 /></button>}
-      </div>}
     </article>
   );
 }

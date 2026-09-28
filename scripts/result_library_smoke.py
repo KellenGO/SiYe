@@ -183,6 +183,10 @@ def main() -> None:
             page.set_viewport_size({"width": 390, "height": 844})
             page.get_by_role("button", name="列表", exact=True).tap()
             expect(page.locator(".result-row")).to_have_count(2)
+            expect(page.locator(".result-cover .local-content-cover")).to_have_count(2)
+            expect(page.locator(".result-platform").first).to_have_text("2 个平台版本")
+            expect(page.locator(".result-platform").first.locator(".pd")).to_have_count(2)
+            expect(page.locator(".result-metric").filter(has_text="≈12k")).to_have_attribute("aria-label", "阅读 约 12,000")
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
             if args.screenshots:
                 page.screenshot(path=str(ROOT / "build/content-list-search-mobile.png"), full_page=True)
@@ -196,6 +200,10 @@ def main() -> None:
             page.set_viewport_size({"width": 1280, "height": 900})
             page.get_by_role("button", name="展开完整内容", exact=True).first.click()
             expect(page.get_by_text("2 个平台的内容版本", exact=True)).to_be_visible()
+            page.get_by_role("button", name="网格", exact=True).click()
+            page.get_by_role("button", name="列表", exact=True).click()
+            expect(page.get_by_text("2 个平台的内容版本", exact=True)).to_be_visible()
+            expect(page.get_by_role("button", name="收起完整内容", exact=True).first).to_have_attribute("aria-expanded", "true")
             with page.expect_popup() as original:
                 page.locator(".result-expanded-sources a").filter(has_text="研究素材视频").click()
             original.value.close()
@@ -354,6 +362,39 @@ def main() -> None:
             page.set_viewport_size({"width": 390, "height": 844})
             if args.screenshots:
                 page.screenshot(path=str(ROOT / "build/content-duration-mobile.png"), full_page=True)
+            rich = source("bilibili", "rich", "长标题与多指标内容用于检查窄屏阅读和操作区域" * 12,
+                          "video", "https://www.bilibili.com/video/rich", 1)
+            rich.update(cover_url='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="320" height="180" fill="teal"/><circle cx="200" cy="80" r="50" fill="gold"/></svg>',
+                        metrics={"view_count": 1200000, "like_count": 15400, "coin_count": 0,
+                                 "comment_count": 1000000000, "collect_count": 80, "share_count": 5},
+                        metrics_approximate=["view_count"], duration_seconds=94)
+            job["results"].append(rich)
+            page.reload()
+            for dark in (False, True):
+                page.evaluate("dark => document.documentElement.classList.toggle('dark', dark)", dark)
+                for width in (1280, 390, 320):
+                    page.set_viewport_size({"width": width, "height": 900})
+                    for view in ("列表", "网格"):
+                        page.get_by_role("button", name=view, exact=True).click()
+                        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), (dark, width, view)
+                        if view == "列表":
+                            rich_row = page.locator(".result-row").filter(has_text=rich["title"])
+                            expect(rich_row.locator(".result-metric")).to_have_text(["≈1.2M", "15.4k", "0", "1B", "80", "5"])
+                            expect(rich_row.locator(".result-cover img")).to_be_visible()
+                            expect(rich_row.locator(".local-content-duration")).to_have_text("01:34")
+                            blank_row = page.locator(".result-row").filter(has_text="无标题内容")
+                            expect(blank_row).to_contain_text("封面暂不可用")
+                            expect(blank_row.locator(".result-metric").first).to_have_attribute("aria-label", "播放 0")
+                            rich_row.get_by_role("button", name="展开完整内容", exact=True).click()
+                            assert rich_row.locator("h2").evaluate("el => el.scrollHeight <= el.clientHeight + 1")
+                            rich_row.get_by_role("button", name="收起完整内容", exact=True).click()
+                            buttons = rich_row.locator(".row-actions > button, .row-actions > .relative > button")
+                            minimum = 44 if width <= 700 or page.evaluate("matchMedia('(pointer: coarse)').matches") else 32
+                            for box in buttons.evaluate_all("els => els.map(el => { const r = el.getBoundingClientRect(); return {x:r.x, right:r.right, width:r.width, height:r.height}; })"):
+                                assert box["width"] >= minimum and box["height"] >= minimum
+                                assert box["x"] >= 0 and box["right"] <= width
+                        if args.screenshots:
+                            page.screenshot(path=str(ROOT / "build" / f"continuity-{view}-{width}-{'dark' if dark else 'light'}.png"), full_page=True)
             assert not errors, errors
             assert not api_writes, api_writes
             browser.close()
