@@ -9,10 +9,15 @@ METRIC_NAMES = ("like_count", "view_count", "collect_count", "comment_count", "s
 _STATUS_RANK = {"failed": 0, "unavailable": 1, "pending": 2, "partial": 3, "complete": 4}
 
 
+def _duration(value):
+    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else None
+
+
 def encode_metrics(result: dict) -> str:
     counts = result.get("metrics")
     counts = counts if isinstance(counts, dict) else {}
     metadata = {
+        "duration_seconds": _duration(result.get("duration_seconds")),
         "collection_names": result.get("collection_names", []),
         "metrics_status": result.get("metrics_status"),
         "metrics_updated_at": result.get("metrics_updated_at"),
@@ -36,6 +41,7 @@ def decode_metrics(raw: str) -> dict:
     names = metadata.get("collection_names")
     approximate = metadata.get("metrics_approximate")
     return {
+        "duration_seconds": _duration(metadata.get("duration_seconds")),
         "metrics": counts,
         "metrics_status": status if status in ("pending", "complete", "partial", "unavailable", "failed") else None,
         "metrics_updated_at": metadata.get("metrics_updated_at") if isinstance(metadata.get("metrics_updated_at"), (float, int)) else None,
@@ -86,6 +92,7 @@ def merge_snapshot(previous: dict, current: dict) -> dict:
     current_counts = current.get("metrics") or {}
     updated_at = current.get("metrics_updated_at")
     return {
+        "duration_seconds": _duration(current.get("duration_seconds")) or _duration(previous.get("duration_seconds")),
         "metrics": merge_counts(previous_counts, current_counts),
         "metrics_status": merge_metrics_status(previous.get("metrics_status"), current.get("metrics_status")),
         "metrics_updated_at": updated_at if updated_at is not None else previous.get("metrics_updated_at"),

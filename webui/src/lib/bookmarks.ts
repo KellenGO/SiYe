@@ -50,6 +50,7 @@ export function publicResult(value: unknown): UnifiedSearchResult {
     author: optionalText(value.author), snippet: optionalText(value.snippet),
     published_at: validTime(value.published_at) ? value.published_at : null,
     cover_url: optionalText(value.cover_url), metrics,
+    duration_seconds: typeof value.duration_seconds === "number" && Number.isSafeInteger(value.duration_seconds) && value.duration_seconds > 0 ? value.duration_seconds : null,
     rank: typeof value.rank === "number" && Number.isFinite(value.rank) ? value.rank : 0,
     grouped_sources: null,
     collection_names: collectionNames,

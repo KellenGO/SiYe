@@ -38,6 +38,8 @@ personal homepages / internal user IDs.
 
 from __future__ import annotations
 
+import re
+
 from typing import Any, Dict, List, Optional
 
 from aggregate_search.models import UnifiedSearchResult, _parse_timestamp, clean_snippet, clean_title
@@ -98,12 +100,30 @@ class BilibiliAdapter(BasePlatformAdapter):
                     url=url,
                     published_at=published_at,
                     cover_url=cover_url,
+                    duration_seconds=self._duration_seconds(view.get("duration")),
                     metrics=metrics,
                     rank=rank,
                     collection_names=[str(item["_collection_name"])] if item.get("_collection_name") else [],
                 )
             )
         return results
+
+    @staticmethod
+    def _duration_seconds(value: Any) -> Optional[int]:
+        # Search lists use m:ss (or h:mm:ss); detail/favourite lists use seconds.
+        if isinstance(value, int) and not isinstance(value, bool):
+            return value if value > 0 else None
+        if isinstance(value, str):
+            value = value.strip()
+            if re.fullmatch(r"[0-9]+", value):
+                seconds = int(value)
+                return seconds if seconds > 0 else None
+            if re.fullmatch(r"[0-9]+:[0-5][0-9](?::[0-5][0-9])?", value):
+                seconds = 0
+                for part in value.split(":"):
+                    seconds = seconds * 60 + int(part)
+                return seconds if seconds > 0 else None
+        return None
 
     def _get_author(self, view: Dict) -> Optional[str]:
         # Detail shape: owner: {name, mid}. Flat search shape: author: "名".

@@ -22,6 +22,14 @@ function compactCount(value: number): string {
   return value.toLocaleString("zh-CN");
 }
 
+function durationLabel(seconds: number | null | undefined): string | null {
+  if (!Number.isSafeInteger(seconds) || !seconds || seconds < 0) return null;
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor(seconds % 3600 / 60);
+  const rest = String(seconds % 60).padStart(2, "0");
+  return hours ? `${hours}:${String(minutes).padStart(2, "0")}:${rest}` : `${String(minutes).padStart(2, "0")}:${rest}`;
+}
+
 export function localContentType(type: string): string {
   return CONTENT_TYPES[type] || "内容";
 }
@@ -31,6 +39,7 @@ export function LocalContentCover({ result, showMetric = false }: { result: Unif
   const fallback = xhsCoverFallback(result.cover_url, result.platform);
   const cover = [result.cover_url, fallback].find((url) => url && !failedUrls.includes(url));
   const video = ["video", "short_video", "zvideo"].includes(result.content_type);
+  const duration = video ? durationLabel(result.duration_seconds) : null;
   const metric = showMetric ? orderedMetrics(result.metrics, 1)[0] : undefined;
   const metricLabel = metric?.key === "view_count" && !video ? "阅读" : metric?.label;
   const approximate = metric && result.metrics_approximate?.includes(metric.key) ? "约 " : "";
@@ -50,6 +59,7 @@ export function LocalContentCover({ result, showMetric = false }: { result: Unif
     {metric && MetricIcon && <span className="local-content-primary-metric" title={metricDescription} aria-label={metricDescription}>
       <span aria-hidden="true"><MetricIcon /></span><span aria-hidden="true">{approximate ? "≈" : ""}{compactCount(result.metrics[metric.key])}</span>
     </span>}
+    {duration && <span className="local-content-duration" aria-label={`播放时长 ${duration}`}>{duration}</span>}
     </span>
   </span>;
 }

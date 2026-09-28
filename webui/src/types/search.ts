@@ -25,6 +25,7 @@ export interface GroupedSource {
   snippet?: string | null;
   metrics: Record<string, number>;
   cover_url: string | null;
+  duration_seconds?: number | null;
   /** 原平台 rank，用于单平台 Tab 的稳定排序。 */
   rank: number;
 }
@@ -39,6 +40,7 @@ export interface UnifiedSearchResult {
   url: string;
   published_at: string | null;
   cover_url: string | null;
+  duration_seconds?: number | null;
   metrics: Record<string, number>;
   rank: number;
   grouped_sources?: GroupedSource[] | null;

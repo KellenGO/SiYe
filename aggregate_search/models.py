@@ -111,6 +111,7 @@ class GroupedSource(BaseModel):
     published_at: Optional[str] = None
     snippet: Optional[str] = None
     metrics: Dict[str, int] = Field(default_factory=dict)
+    duration_seconds: Optional[int] = Field(default=None, gt=0)
     cover_url: Optional[str] = None
     # Kept for stable reconstruction of a single-platform tab.  It is the
     # existing platform rank, not a new grouping score.
@@ -129,6 +130,7 @@ class GroupedSource(BaseModel):
             snippet=result.snippet,
             metrics=dict(result.metrics),
             cover_url=result.cover_url,
+            duration_seconds=result.duration_seconds,
             rank=result.rank,
         )
 
@@ -143,6 +145,7 @@ class UnifiedSearchResult(BaseModel):
     author: Optional[str] = None  # public display name only
     url: str
     published_at: Optional[str] = None  # ISO 8601
+    duration_seconds: Optional[int] = Field(default=None, gt=0)
     cover_url: Optional[str] = None
     metrics: Dict[str, int] = Field(default_factory=dict)
     rank: int = 0  # original platform rank (0-based)

@@ -58,6 +58,7 @@ def main() -> None:
     article = source("zhihu", "article", "独立文章", "article", "https://zhuanlan.zhihu.com/p/article", 2)
     article["metrics"] = {"view_count": 12000, "like_count": 12}
     article["metrics_approximate"] = ["view_count"]
+    video["duration_seconds"] = 3723
     group = {**note, "grouped_sources": [note, video]}
     job = dict(job_id="library-smoke", overall="completed", keyword="研究素材",
                created_at=fetched, completed_at=fetched, total_ms=100,
@@ -125,6 +126,7 @@ def main() -> None:
             expect(page.get_by_role("button", name="选择收藏平台 研究素材图文", exact=True)).to_be_visible()
             expect(page.locator(".local-content-card")).to_have_count(2)
             expect(page.locator(".local-content-primary-metric")).to_have_text(["12", "≈12k"])
+            expect(page.locator(".local-content-duration")).to_have_count(0)
             expect(page.locator(".local-content-primary-metric svg.lucide-eye")).to_have_count(1)
             expect(page.locator(".local-content-primary-metric svg.lucide-thumbs-up")).to_have_count(1)
             expect(page.locator(".local-content-primary-metric").last).to_have_attribute("aria-label", "阅读 约 12,000")
@@ -227,11 +229,12 @@ def main() -> None:
                 page.screenshot(path=str(ROOT / "build/result-bookmark-menu.png"), full_page=True)
             popup.get_by_role("button", name="收藏 研究素材视频", exact=True).click()
             expect(popup.get_by_role("button", name="取消收藏 研究素材视频", exact=True)).to_be_visible()
-            assert store.get_item("bilibili", "new-video") is not None
+            assert store.get_item("bilibili", "new-video")["result"]["duration_seconds"] == 3723
             page.keyboard.press("Escape")
             page.get_by_role("button", name="查看内容信息：研究素材图文", exact=True).click()
             drawer = page.get_by_role("dialog", name="内容信息", exact=True)
             expect(drawer.locator(".local-content-detail")).to_have_count(2)
+            expect(drawer.locator(".local-content-duration")).to_have_text("1:02:03")
             expect(drawer.get_by_role("heading", name="研究素材图文", exact=True)).to_be_visible()
             assert store.get_item("xhs", "old-note") is None
             expect(drawer).to_contain_text("研究素材摘要")
@@ -343,9 +346,14 @@ def main() -> None:
             expect(blank_drawer).to_contain_text("暂无互动数据")
             expect(blank_drawer.get_by_role("link")).to_have_count(0)
             page.keyboard.press("Escape")
+            blank["duration_seconds"] = 94
             blank["metrics"] = {"view_count": 0, "like_count": 99}
             page.reload()
             expect(blank_card.locator(".local-content-primary-metric")).to_have_text("0")
+            expect(blank_card.locator(".local-content-duration")).to_have_text("01:34")
+            page.set_viewport_size({"width": 390, "height": 844})
+            if args.screenshots:
+                page.screenshot(path=str(ROOT / "build/content-duration-mobile.png"), full_page=True)
             assert not errors, errors
             assert not api_writes, api_writes
             browser.close()
