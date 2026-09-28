@@ -10,7 +10,7 @@ import { ArrowUpRight, Grid2X2, List, Trash2 } from "lucide-react";
 import { ResultCard } from "./ResultCard";
 import { readContentView, writeContentView, type ContentView, type ContentViewScope } from "@/lib/contentView";
 import { recordView } from "@/lib/historyApi";
-import { BookmarkControl, BookmarkNote, ExportActions, MembershipEditor, WatchLaterControl } from "./ResultTools";
+import { BookmarkControl, ExportActions, MembershipEditor, WatchLaterControl } from "./ResultTools";
 import type { BookmarkLibrary } from "@/hooks/useBookmarks";
 import { DEFAULT_FILTERS, exportRows, filterResultGroups, groupKey, resultKey, resultSources, safeContentUrl, type ResultFilters } from "@/lib/resultTools";
 import { LocalContentCard } from "@/components/favorites/LocalContentCard";
@@ -102,7 +102,7 @@ export function ResultTabs({
   useEffect(() => setExpanded(new Set()), [jobId, viewScope]);
   const [exportOpen, setExportOpen] = useState(false);
   // 收藏成功后的一次性提示：让用户当场改归属，不用跑到收藏页去找。
-  const [membershipPrompt, setMembershipPrompt] = useState<{ group: string; keys: string[]; modal: boolean } | null>(null);
+  const [membershipPrompt, setMembershipPrompt] = useState<{ group: string; keys: string[] } | null>(null);
   const closeMembershipPrompt = useCallback(() => setMembershipPrompt(null), []);
   const nowMs = useMemo(() => Date.now(), [results, filters]);
 
@@ -242,13 +242,12 @@ export function ResultTabs({
         {renderedResults.map((result, index) => {
           const key = groupKey(result);
           const url = safeContentUrl(result.url);
-          const bookmark = bookmarks.get(resultKey(result));
           // 刚收藏完的一次性小框：和收藏页用同一套，省得跑到收藏页去改归属
           const promptItem = membershipPrompt?.group === key
             ? library?.items.find((item) => membershipPrompt.keys.includes(item.key))
             : undefined;
           return (
-            <div key={key} className={`${gridView ? "local-content-card" : `result-list-item ${savedView || promptItem ? "saved-result-item" : ""}`} ${selected.has(key) ? "is-selected" : ""}`}>
+            <div key={key} className={`${gridView ? "local-content-card" : "result-list-item"} ${selected.has(key) ? "is-selected" : ""}`}>
               {exportOpen && <div className="mb-1.5 flex items-center gap-2 px-1">
                 <label className="flex min-w-0 items-center gap-1.5 text-xs text-cyber-text-muted">
                   <input type="checkbox" aria-label={`选择 ${result.title}`} checked={selected.has(key)} onChange={() => setSelected((previous) => {
@@ -266,7 +265,7 @@ export function ResultTabs({
                   {url && <a href={url} target="_blank" rel="noreferrer" aria-label={`在原平台打开：${result.title || "无标题内容"}`} onClick={() => { void recordView(result); }}><ArrowUpRight aria-hidden="true" />原文</a>}
                   {library && <>
                     <BookmarkControl result={result} library={library} fetchedAt={fetchedAt}
-                      onToggled={(added, keys) => setMembershipPrompt(added ? { group: key, keys, modal: gridView } : null)} />
+                      onToggled={(added, keys) => setMembershipPrompt(added ? { group: key, keys } : null)} />
                     <WatchLaterControl result={result} library={library} fetchedAt={fetchedAt} />
                   </>}
                   {onDeleteItem && <button type="button" aria-label="从历史中移除" title="从历史中移除" onClick={() => onDeleteItem(result)}><Trash2 aria-hidden="true" /></button>}
@@ -279,18 +278,13 @@ export function ResultTabs({
                 onOpenDetails={() => setDetailResult(result)}
                 renderBookmark={library ? (source) => <>
                   <BookmarkControl result={source} library={library} fetchedAt={fetchedAt}
-                    onToggled={(added, keys) => setMembershipPrompt(added ? { group: key, keys, modal: gridView } : null)} />
+                    onToggled={(added, keys) => setMembershipPrompt(added ? { group: key, keys } : null)} />
                   <WatchLaterControl result={source} library={library} fetchedAt={fetchedAt} />
                 </> : undefined}
                 onDelete={onDeleteItem ? () => onDeleteItem(result) : undefined} />}
-              {/* 保持列表备注挂载，切换呈现时不丢弃尚未保存的草稿。 */}
-              {savedView && bookmark && library && <div hidden={gridView}>
-                <BookmarkNote bookmark={bookmark} onSave={library.saveNote} library={library} />
-              </div>}
-              {gridView && promptItem && library && membershipPrompt?.modal && <MembershipEditor
+              {promptItem && library && membershipPrompt && <MembershipEditor
                 keys={membershipPrompt.keys} library={library} subject={result.title}
                 modal defaultOpen onClose={closeMembershipPrompt} />}
-              {!gridView && !savedView && promptItem && library && <BookmarkNote bookmark={promptItem} onSave={library.saveNote} library={library} membershipModal />}
             </div>
           );
         })}

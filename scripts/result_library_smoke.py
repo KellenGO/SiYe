@@ -255,6 +255,8 @@ def main() -> None:
             page.keyboard.press("Escape")
             page.get_by_role("button", name="选择收藏平台 研究素材图文", exact=True).click()
             popup.get_by_role("button", name="收藏 研究素材图文", exact=True).click()
+            page.get_by_role("dialog", name="编辑收藏夹归属 研究素材图文", exact=True).get_by_role("button", name="完成", exact=True).click()
+            page.get_by_role("button", name="选择收藏平台 研究素材图文", exact=True).click()
             popup.get_by_role("button", name="取消收藏 研究素材图文", exact=True).first.click()
             # 取消收藏会先弹居中的确认框（见 docs/features/favorites-library.md）
             page.locator(".confirm-card").get_by_role("button", name="取消收藏", exact=True).click()
@@ -379,7 +381,7 @@ def main() -> None:
             ]
             for adapter, raw in duration_samples:
                 adapted = adapter.adapt([raw])[0].model_dump(mode="json")
-                adapted["cover_url"] = rich["cover_url"]
+                adapted["cover_url"] = rich["cover_url"] if adapter.PLATFORM != "xhs" else rich["cover_url"].replace('width="320" height="180"', 'width="180" height="240"')
                 job["results"].append(adapted)
             page.reload()
             for dark in (False, True):
@@ -403,7 +405,15 @@ def main() -> None:
                             assert 0 <= geometry["right"] <= 7 and 0 <= geometry["bottom"] <= 5, geometry
                             assert not geometry["overlap"] and geometry["left"] >= 0, geometry
                         for badges in page.locator(".local-content-badges").all():
-                            assert badges.evaluate("el => parseFloat(getComputedStyle(el).paddingTop) <= 6")
+                            assert badges.evaluate("el => getComputedStyle(el).backgroundImage === 'none'")
+                        portrait = page.locator(".result-row" if view == "列表" else ".local-content-card").filter(has_text="小红书时长").locator(".local-content-cover img")
+                        portrait.scroll_into_view_if_needed()
+                        expect(portrait).to_be_visible()
+                        page.wait_for_function("[...document.images].some(img => img.naturalWidth === 180 && img.naturalHeight === 240)")
+                        shape = portrait.evaluate("el => ({w: el.clientWidth, h: el.clientHeight, fit: getComputedStyle(el).objectFit})")
+                        limit = (156 if width <= 700 else 192) if view == "列表" else 360
+                        assert abs(shape["h"] - min(shape["w"] * 240 / 180, limit)) <= 1, shape
+                        assert shape["fit"] == "cover"
                         if view == "列表":
                             rich_row = page.locator(".result-row").filter(has_text=rich["title"])
                             expect(rich_row.locator(".result-metric")).to_have_text(["≈1.2M", "15.4k", "0", "1B", "80", "5"])

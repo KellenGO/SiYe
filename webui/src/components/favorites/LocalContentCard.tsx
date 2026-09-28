@@ -58,7 +58,7 @@ export function LocalContentCover({ result, showMetric = false }: { result: Unif
   const video = ["video", "short_video", "zvideo"].includes(result.content_type);
   const duration = video ? durationLabel(result.duration_seconds) : null;
   const metric = showMetric ? orderedMetrics(result.metrics, 1)[0] : undefined;
-  return <span className="local-content-cover">
+  return <span className={`local-content-cover ${cover ? "has-image" : ""}`}>
     {cover ? <img src={cover} alt="" loading="lazy" referrerPolicy="no-referrer"
       onError={() => setFailedUrls((urls) => [...urls, cover])} />
       : result.platform === "zhihu" ? <span className="local-content-topic">

@@ -95,26 +95,26 @@ export function ResultCard({ result, index = 0, highlightQuery = "", renderBookm
             {groupedSources.map((source) => <SourceLine key={`${source.platform}-${source.content_id}`} source={source} query={highlightQuery} onOpen={() => { void recordView({ ...source, grouped_sources: null }); }} />)}
           </div>}
         </div>
-        {(renderBookmark || hasDetails || onDelete || onOpenDetails) && <div className="row-actions content-card-actions">
-          {renderBookmark?.(result)}
-          {hasDetails && <button
-            type="button"
-            className="details-toggle"
-            aria-expanded={detailsExpanded}
-            aria-label={detailsExpanded ? "收起完整内容" : "展开完整内容"}
-            title={detailsExpanded ? "收起完整内容" : "展开完整内容"}
-            onClick={() => onExpandedChange(!detailsExpanded)}
-          ><ChevronDown /></button>}
-          {onOpenDetails && <button type="button" className="details-toggle" aria-label={`查看内容信息：${result.title || "无标题内容"}`} title="查看内容信息" onClick={onOpenDetails}><Info aria-hidden="true" /></button>}
-          {onDelete && <button
-            type="button"
-            className="details-toggle"
-            aria-label="从历史中移除"
-            title="从历史中移除"
-            onClick={(event) => { event.stopPropagation(); onDelete(); }}
-          ><Trash2 /></button>}
-        </div>}
       </div>
+      {(renderBookmark || hasDetails || onDelete || onOpenDetails) && <div className="row-actions content-card-actions">
+        {renderBookmark?.(result)}
+        {hasDetails && <button
+          type="button"
+          className="details-toggle"
+          aria-expanded={detailsExpanded}
+          aria-label={detailsExpanded ? "收起完整内容" : "展开完整内容"}
+          title={detailsExpanded ? "收起完整内容" : "展开完整内容"}
+          onClick={() => onExpandedChange(!detailsExpanded)}
+        ><ChevronDown /></button>}
+        {onOpenDetails && <button type="button" className="details-toggle" aria-label={`查看内容信息：${result.title || "无标题内容"}`} title="查看内容信息" onClick={onOpenDetails}><Info aria-hidden="true" /></button>}
+        {onDelete && <button
+          type="button"
+          className="details-toggle"
+          aria-label="从历史中移除"
+          title="从历史中移除"
+          onClick={(event) => { event.stopPropagation(); onDelete(); }}
+        ><Trash2 /></button>}
+      </div>}
     </article>
   );
 }
