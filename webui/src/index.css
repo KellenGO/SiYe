@@ -837,9 +837,10 @@ html.dark .search-submit { color: #101525; }
 .local-content-topic-summary { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; color: #58728c; }
 .local-content-placeholder { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 6px; color: var(--siye-muted); font-size: 12px; padding-bottom: 18px; }
 .local-content-placeholder svg { width: 24px; height: 24px; opacity: .65; }
-.local-content-type { position: absolute; bottom: 7px; left: 7px; display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 4px; background: rgb(18 25 38 / .8); color: #fff; font-size: 10px; line-height: 1.5; }
+.local-content-badges { position: absolute; bottom: 7px; left: 7px; right: 7px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.local-content-type { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 4px; background: rgb(18 25 38 / .8); color: #fff; font-size: 10px; line-height: 1.5; }
 .local-content-type svg { width: 11px; height: 11px; }
-.local-content-primary-metric { display: inline-flex; align-items: center; gap: 3px; position: absolute; right: 7px; bottom: 7px; max-width: calc(100% - 80px); padding: 2px 6px; border-radius: 4px; background: rgb(18 25 38 / .8); color: #fff; font-size: 10px; line-height: 1.5; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.local-content-primary-metric { display: inline-flex; align-items: center; gap: 3px; padding: 2px 6px; border-radius: 4px; background: rgb(18 25 38 / .8); color: #fff; font-size: 10px; line-height: 1.5; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .local-content-title { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; margin-top: 11px; min-height: 42px; font-size: 14px; line-height: 1.5; font-weight: 600; }
 .local-content-overlay { position: fixed; inset: 0; z-index: 110; display: flex; justify-content: flex-end; background: color-mix(in srgb, #172b3d 32%, transparent); }
 .local-content-drawer { width: min(520px, 100%); height: 100%; overflow-y: auto; overscroll-behavior: contain; background: var(--siye-bg); color: var(--siye-ink); box-shadow: -12px 0 50px #172b3d29; }

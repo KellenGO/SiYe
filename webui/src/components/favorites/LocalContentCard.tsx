@@ -45,10 +45,12 @@ export function LocalContentCover({ result, showMetric = false }: { result: Unif
         <span className="local-content-topic-summary">{result.snippet || result.author || "查看问题与讨论"}</span>
       </span> : <span className="local-content-placeholder">{result.cover_url ? <ImageOff aria-hidden="true" /> : <FileText aria-hidden="true" />}
         <span>{result.cover_url ? "封面暂不可用" : "暂无封面"}</span></span>}
+    <span className="local-content-badges">
     <span className="local-content-type">{video && <Play aria-hidden="true" />}{localContentType(result.content_type)}</span>
     {metric && MetricIcon && <span className="local-content-primary-metric" title={metricDescription} aria-label={metricDescription}>
       <span aria-hidden="true"><MetricIcon /></span><span aria-hidden="true">{approximate ? "≈" : ""}{compactCount(result.metrics[metric.key])}</span>
     </span>}
+    </span>
   </span>;
 }
 
