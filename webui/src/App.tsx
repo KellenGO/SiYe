@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { Toaster } from 'sonner'
 import { Header, type SettingsSection, type ViewMode } from '@/components/layout/Header'
 import { AuthorFooter } from '@/components/layout/AuthorFooter'
@@ -58,6 +58,8 @@ function App() {
   const [showDisclaimer, setShowDisclaimer] = useState(false)
   // View mode toggle
   const [viewMode, setViewMode] = useState<ViewMode>(initialRoute.view)
+  const previousView = useRef(initialRoute.view)
+  const [animatedView, setAnimatedView] = useState<ViewMode | null>(null)
   const [settingsSection, setSettingsSection] = useState<SettingsSection>(initialRoute.settings)
   const [accountsVisited, setAccountsVisited] = useState(initialRoute.view === 'accounts')
   const [compactNotifications, setCompactNotifications] = useState(
@@ -78,6 +80,10 @@ function App() {
   useEffect(() => {
     const syncRoute = () => {
       const route = routeFromHash()
+      if (route.view !== previousView.current) {
+        setAnimatedView(route.view)
+        previousView.current = route.view
+      }
       setViewMode(route.view)
       setSettingsSection(route.settings)
       setFavoritesSection(route.favorites)
@@ -149,18 +155,20 @@ function App() {
             <GettingStarted step={onboarding.step} onGoTo={onboarding.goTo} onDismiss={onboarding.dismiss} />
             {!onboarding.preferenceSaved && <p role="status" className="guide-storage-warning">{t("onboarding.storageUnavailable")}</p>}
             <Suspense fallback={<PageLoading />}>
-              {viewMode === 'search' ? (
-                <SearchPage homeRequested={homeRoute} onSearchStarted={showSearchResultsRoute} onNavigateAccounts={() => navigate('accounts', 'accounts')} />
-              ) : viewMode === 'favorites' ? (
-                <FavoritesPage activeTab={favoritesSection} onTabChange={changeFavoritesSection} onNavigateAccounts={() => navigate('accounts', 'accounts')} />
-              ) : viewMode === 'help' ? (
-                <HelpPage onShowDisclaimer={handleShowDisclaimer} onStartGuide={() => onboarding.goTo(0)} />
-              ) : viewMode === 'history' ? (
-                <HistoryPage />
-              ) : null}
+              {viewMode !== 'accounts' && <div key={viewMode} className={animatedView === viewMode ? 'app-page-enter' : undefined}>
+                {viewMode === 'search' ? (
+                  <SearchPage homeRequested={homeRoute} onSearchStarted={showSearchResultsRoute} onNavigateAccounts={() => navigate('accounts', 'accounts')} />
+                ) : viewMode === 'favorites' ? (
+                  <FavoritesPage activeTab={favoritesSection} onTabChange={changeFavoritesSection} onNavigateAccounts={() => navigate('accounts', 'accounts')} />
+                ) : viewMode === 'help' ? (
+                  <HelpPage onShowDisclaimer={handleShowDisclaimer} onStartGuide={() => onboarding.goTo(0)} />
+                ) : viewMode === 'history' ? (
+                  <HistoryPage />
+                ) : null}
+              </div>}
             </Suspense>
             {/* Keep active login polling alive when navigating back to search. */}
-            {(accountsVisited || viewMode === 'accounts') && <div hidden={viewMode !== 'accounts'}>
+            {(accountsVisited || viewMode === 'accounts') && <div hidden={viewMode !== 'accounts'} className={animatedView === 'accounts' && viewMode === 'accounts' ? 'app-page-enter' : undefined}>
               <Suspense fallback={<PageLoading />}>
                 <AccountsPage
                   activeSection={settingsSection}

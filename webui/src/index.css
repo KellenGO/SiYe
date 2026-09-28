@@ -483,6 +483,12 @@ body {
 
 .app-main-inner { width: 100%; }
 
+.app-page-enter { animation: app-page-enter .18s ease-out backwards; }
+@keyframes app-page-enter {
+  from { opacity: .86; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
 .app-header {
   min-height: 84px;
   padding: 0;
@@ -2000,10 +2006,12 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
 }
 
 .content-toolbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; }
-.content-view-switch { display: inline-flex; padding: 2px; border: 1px solid var(--siye-line); border-radius: 7px; background: var(--siye-soft); }
-.content-view-switch button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 30px; padding: 4px 9px; border-radius: 5px; color: var(--siye-muted); font-size: 12px; white-space: nowrap; }
+.content-view-switch { position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 2px; border: 1px solid var(--siye-line); border-radius: 7px; background: var(--siye-soft); }
+.content-view-switch::before { content: ""; position: absolute; top: 2px; bottom: 2px; left: 2px; width: calc(50% - 2px); border-radius: 5px; background: var(--siye-bg); box-shadow: 0 1px 3px #20294514; transition: transform .18s ease-out; }
+.content-view-switch[data-view="grid"]::before { transform: translateX(100%); }
+.content-view-switch button { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 30px; padding: 4px 9px; border-radius: 5px; color: var(--siye-muted); font-size: 12px; white-space: nowrap; }
 .content-view-switch svg { width: 14px; height: 14px; }
-.content-view-switch button[aria-pressed="true"] { background: var(--siye-bg); color: var(--siye-brand-ink); box-shadow: 0 1px 3px #20294514; }
+.content-view-switch button[aria-pressed="true"] { color: var(--siye-brand-ink); }
 .content-view-switch button:focus-visible { outline: 2px solid var(--siye-brand); outline-offset: 2px; }
 @media (max-width: 700px) {
   .content-toolbar-actions { width: 100%; justify-content: space-between; }
@@ -2025,6 +2033,8 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
 .local-content-duration { flex: 0 0 auto; margin-left: auto; font-size: 12px; line-height: 1.5; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 @media (prefers-reduced-motion: reduce) {
+  .app-page-enter { animation: none; }
+  .content-view-switch::before { transition: none; }
   .details-toggle svg { transition: none; }
 }
 

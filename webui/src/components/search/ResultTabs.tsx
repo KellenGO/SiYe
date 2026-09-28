@@ -221,7 +221,7 @@ export function ResultTabs({
           {filters.query && <button type="button" className="text-link" onClick={() => setFilters({ ...filters, query: "" })}>清除筛选</button>}
         </div>
         <div className="content-toolbar-actions">
-          <div className="content-view-switch" role="group" aria-label="内容浏览方式">
+          <div className="content-view-switch" data-view={contentView} role="group" aria-label="内容浏览方式">
             <button type="button" aria-pressed={!gridView} onClick={() => setContentView("list")}><List aria-hidden="true" />列表</button>
             <button type="button" aria-pressed={gridView} onClick={() => setContentView("grid")}><Grid2X2 aria-hidden="true" />网格</button>
           </div>
