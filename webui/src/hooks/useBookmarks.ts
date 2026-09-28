@@ -228,13 +228,16 @@ export function useBookmarks() {
   }, []);
 
   const createCollection = useCallback(
-    async (name: string) => {
+    async (draft: { name: string; description: string; coverData?: string }) => {
       try {
-        await apiCreateCollection(name);
+        const collection = await apiCreateCollection(draft.name);
+        if (draft.description || draft.coverData) {
+          await apiUpdateCollectionInfo(collection.id, draft);
+        }
         await refresh();
         return true;
       } catch (error) {
-        toast.error(errorText(error, "新建收藏夹失败"));
+        toast.error(errorText(error, "新建收藏夹失败；若收藏夹已创建，可在其信息中继续编辑"));
         return false;
       }
     },

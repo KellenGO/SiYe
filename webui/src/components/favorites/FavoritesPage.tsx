@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import {
-  AlertTriangle, ArrowLeft, ArrowRight, Check, FolderHeart, FolderPlus, Loader2, MoreHorizontal, Pencil, RefreshCw, Trash2, X,
+  AlertTriangle, ArrowLeft, ArrowRight, Check, FolderHeart, FolderPlus, Loader2, MoreHorizontal, Pencil, RefreshCw, Trash2,
 } from "lucide-react";
 import { ResultTabs } from "@/components/search/ResultTabs";
 import { BookmarkBackup } from "@/components/search/BookmarkBackup";
@@ -69,7 +69,6 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [selectionResetKey, setSelectionResetKey] = useState(0);
   const [creating, setCreating] = useState(false);
-  const [newName, setNewName] = useState("");
   const [folderMenuOpenId, setFolderMenuOpenId] = useState<number | null>(null);
   const [reordering, setReordering] = useState(false);
   const [organizingFolders, setOrganizingFolders] = useState(false);
@@ -238,16 +237,11 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
     return next;
   });
 
-  const submitNewCollection = async () => {
-    const name = newName.trim();
-    if (!name) return;
+  const createNewCollection = async (draft: CollectionInfoDraft) => {
     setMoving(true);
-    const ok = await library.createCollection(name);
+    const ok = await library.createCollection(draft);
     setMoving(false);
-    if (ok) {
-      setNewName("");
-      setCreating(false);
-    }
+    return ok;
   };
 
   const saveCollectionInfo = async (id: number, draft: CollectionInfoDraft) => {
@@ -432,7 +426,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
         <section className="local-folder-browser" aria-label="本地收藏夹图标模式">
           <div className="local-folder-intro">
             <div><span className="eyebrow">LOCAL FOLDERS</span><h2>本地收藏夹</h2><p>把收藏分门别类，之后回来更容易找到。</p></div>
-            {creating ? <span className="library-inline-form local-folder-create"><input className="field" aria-label="新收藏夹名称" placeholder="收藏夹名称" value={newName} autoFocus maxLength={60} onChange={(event) => setNewName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void submitNewCollection(); if (event.key === "Escape") { setCreating(false); setNewName(""); } }} /><button type="button" className="icon-btn" aria-label="创建收藏夹" disabled={moving} onClick={() => void submitNewCollection()}><Check /></button><button type="button" className="icon-btn" aria-label="取消创建" onClick={() => { setCreating(false); setNewName(""); }}><X /></button></span> : <button type="button" className="btn small" onClick={() => setCreating(true)}><FolderPlus aria-hidden="true" />新建收藏夹</button>}
+            <button type="button" className="btn small" onClick={() => setCreating(true)}><FolderPlus aria-hidden="true" />新建收藏夹</button>
           </div>
           <section className="local-folder-section" aria-label="快捷分类"><h3>快捷分类</h3><div className="local-folder-grid">
             {([
@@ -468,7 +462,6 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
               <button type="button" className="text-link remote-folder-back" onClick={closeLocalFolder}><ArrowLeft />返回收藏夹</button>
               <span className="local-content-folder-path">/ {activeCollection ? customCollectionLabel(activeCollection.name) : selection.kind === "all" ? "全部收藏" : selection.kind === "default" ? "默认收藏夹" : "稍后再看"}</span>
               <div className="local-content-folder-tools">
-                <button type="button" className="btn small" onClick={() => { closeLocalFolder(); setCreating(true); }}><FolderPlus aria-hidden="true" />新建收藏夹</button>
                 {activeCollection && <div className="library-folder-menu-anchor" ref={folderMenuOpenId === activeCollection.id ? folderMenuRef : null}>
                   <button type="button" className="btn small" ref={(element) => { if (element) folderMenuTriggerRefs.current.set(activeCollection.id, element); else folderMenuTriggerRefs.current.delete(activeCollection.id); }}
                     aria-label={`更多操作：${activeCollection.name}`} aria-expanded={folderMenuOpenId === activeCollection.id} onClick={() => setFolderMenuOpenId((id) => id === activeCollection.id ? null : activeCollection.id)}><MoreHorizontal aria-hidden="true" />收藏夹信息</button>
@@ -595,7 +588,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
       ) : (
         <div className="empty"><div className="empty-symbol"><FolderHeart /></div><h2>把喜欢的内容，放到一起</h2><p>选择平台后点击同步，四处散落的收藏会汇到这里。</p><button type="button" className="btn" onClick={() => void remote.sync([...selected])}>同步收藏</button></div>
       )}
-      {editingCollection && <CollectionInfoDialog key={editingCollection.id} collection={editingCollection} fallbackCover={editingFallbackCover} busy={moving} onSave={saveCollectionInfo} onClose={() => { const id = editingCollectionId; setEditingCollectionId(null); if (id !== null) folderMenuTriggerRefs.current.get(id)?.focus(); }} />}
+      {(editingCollection || creating) && <CollectionInfoDialog key={creating ? "create" : editingCollection?.id} collection={creating ? null : editingCollection} fallbackCover={creating ? null : editingFallbackCover} busy={moving} onSave={saveCollectionInfo} onCreate={createNewCollection} onClose={() => { const id = editingCollectionId; setCreating(false); setEditingCollectionId(null); if (id !== null) folderMenuTriggerRefs.current.get(id)?.focus(); }} />}
     </div>
   );
 }

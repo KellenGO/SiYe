@@ -9,21 +9,23 @@ export interface CollectionInfoDraft {
   removeCover?: boolean;
 }
 
-export function CollectionInfoDialog({ collection, fallbackCover, busy, onSave, onClose }: {
-  collection: LibraryCollection;
+export function CollectionInfoDialog({ collection, fallbackCover, busy, onSave, onCreate, onClose }: {
+  collection: LibraryCollection | null;
   fallbackCover: string | null;
   busy: boolean;
   onSave: (id: number, draft: CollectionInfoDraft) => Promise<boolean>;
+  onCreate?: (draft: CollectionInfoDraft) => Promise<boolean>;
   onClose: () => void;
 }) {
-  const [name, setName] = useState(collection.name);
-  const [description, setDescription] = useState(collection.description);
+  const creating = collection === null;
+  const [name, setName] = useState(collection?.name ?? "");
+  const [description, setDescription] = useState(collection?.description ?? "");
   const [coverData, setCoverData] = useState<string | null>(null);
   const [removeCover, setRemoveCover] = useState(false);
   const [fileError, setFileError] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
   const card = useRef<HTMLDivElement>(null);
-  const coverSrc = coverData ?? (removeCover ? null : collection.coverUrl) ?? fallbackCover;
+  const coverSrc = coverData ?? (removeCover ? null : collection?.coverUrl) ?? fallbackCover;
 
   useEffect(() => {
     const onEscape = (event: KeyboardEvent) => {
@@ -60,11 +62,12 @@ export function CollectionInfoDialog({ collection, fallbackCover, busy, onSave, 
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!name.trim() || busy) return;
-    const ok = await onSave(collection.id, {
+    const draft = {
       name: name.trim(), description: description.trim(),
       ...(coverData ? { coverData } : {}),
       ...(removeCover ? { removeCover: true } : {}),
-    });
+    };
+    const ok = creating ? await onCreate?.(draft) : await onSave(collection.id, draft);
     if (ok) onClose();
   };
 
@@ -78,18 +81,18 @@ export function CollectionInfoDialog({ collection, fallbackCover, busy, onSave, 
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     }}>
-      <div className="folder-info-top"><h2 id="folder-info-title">编辑收藏夹信息</h2><button type="button" className="folder-info-close" aria-label="关闭编辑卡片" disabled={busy} onClick={onClose}><X aria-hidden="true" /></button></div>
+      <div className="folder-info-top"><h2 id="folder-info-title">{creating ? "新建收藏夹" : "编辑收藏夹信息"}</h2><button type="button" className="folder-info-close" aria-label="关闭编辑卡片" disabled={busy} onClick={onClose}><X aria-hidden="true" /></button></div>
       <form onSubmit={(event) => void save(event)}>
         <button type="button" className="folder-info-cover" aria-label="点击更换收藏夹封面" disabled={busy} onClick={() => fileInput.current?.click()}>
           {coverSrc ? <img src={coverSrc} alt="当前收藏夹封面" /> : <span className="folder-info-cover-empty"><ImagePlus aria-hidden="true" />选择封面</span>}
           <span className="folder-info-cover-action">点击更换封面</span>
         </button>
         <input ref={fileInput} className="sr-only" type="file" accept="image/*" tabIndex={-1} onChange={(event) => { selectCover(event.target.files?.[0]); event.target.value = ""; }} />
-        {(collection.coverUrl || coverData) && <button type="button" className="folder-info-reset-cover" disabled={busy} onClick={() => { setCoverData(null); setRemoveCover(true); setFileError(""); }}>恢复自动封面</button>}
+        {(collection?.coverUrl || coverData) && <button type="button" className="folder-info-reset-cover" disabled={busy} onClick={() => { setCoverData(null); setRemoveCover(!creating); setFileError(""); }}>{creating ? "取消选择封面" : "恢复自动封面"}</button>}
         {fileError && <p className="folder-info-error" role="alert">{fileError}</p>}
         <label className="folder-info-field" htmlFor="folder-info-name">名称 <span aria-hidden="true">*</span><input id="folder-info-name" className="field" autoFocus maxLength={60} value={name} onChange={(event) => setName(event.target.value)} /><small>{name.length}/60</small></label>
         <label className="folder-info-field" htmlFor="folder-info-description">简介<textarea id="folder-info-description" className="field" maxLength={200} rows={4} placeholder="简单描述这个收藏夹" value={description} onChange={(event) => setDescription(event.target.value)} /><small>{description.length}/200</small></label>
-        <div className="folder-info-actions"><button type="button" className="btn" disabled={busy} onClick={onClose}>取消</button><button type="submit" className="btn primary" disabled={busy || !name.trim() || !!fileError}>{busy ? "正在保存" : "保存"}</button></div>
+        <div className="folder-info-actions"><button type="button" className="btn" disabled={busy} onClick={onClose}>取消</button><button type="submit" className="btn primary" disabled={busy || !name.trim() || !!fileError}>{busy ? (creating ? "正在创建" : "正在保存") : creating ? "创建" : "保存"}</button></div>
       </form>
     </div>
   </div>;
