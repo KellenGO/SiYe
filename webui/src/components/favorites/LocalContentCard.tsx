@@ -34,6 +34,23 @@ export function localContentType(type: string): string {
   return CONTENT_TYPES[type] || "内容";
 }
 
+export function ContentMetric({ result, metric, className }: {
+  result: UnifiedSearchResult;
+  metric: { key: string; label: string };
+  className: string;
+}) {
+  const video = ["video", "short_video", "zvideo"].includes(result.content_type);
+  const label = metric.key === "view_count" && !video ? "阅读" : metric.label;
+  const approximate = result.metrics_approximate?.includes(metric.key);
+  const Icon = METRIC_ICONS[metric.key];
+  const value = result.metrics[metric.key];
+  const description = `${label} ${approximate ? "约 " : ""}${value.toLocaleString("zh-CN")}`;
+  if (!Icon) return null;
+  return <span className={className} title={description} aria-label={description}>
+    <span aria-hidden="true"><Icon /></span><span aria-hidden="true">{approximate ? "≈" : ""}{compactCount(value)}</span>
+  </span>;
+}
+
 export function LocalContentCover({ result, showMetric = false }: { result: UnifiedSearchResult; showMetric?: boolean }) {
   const [failedUrls, setFailedUrls] = useState<string[]>([]);
   const fallback = xhsCoverFallback(result.cover_url, result.platform);
@@ -41,10 +58,6 @@ export function LocalContentCover({ result, showMetric = false }: { result: Unif
   const video = ["video", "short_video", "zvideo"].includes(result.content_type);
   const duration = video ? durationLabel(result.duration_seconds) : null;
   const metric = showMetric ? orderedMetrics(result.metrics, 1)[0] : undefined;
-  const metricLabel = metric?.key === "view_count" && !video ? "阅读" : metric?.label;
-  const approximate = metric && result.metrics_approximate?.includes(metric.key) ? "约 " : "";
-  const MetricIcon = metric ? METRIC_ICONS[metric.key] : undefined;
-  const metricDescription = metric ? `${metricLabel} ${approximate}${result.metrics[metric.key].toLocaleString("zh-CN")}` : "";
   return <span className="local-content-cover">
     {cover ? <img src={cover} alt="" loading="lazy" referrerPolicy="no-referrer"
       onError={() => setFailedUrls((urls) => [...urls, cover])} />
@@ -56,9 +69,7 @@ export function LocalContentCover({ result, showMetric = false }: { result: Unif
         <span>{result.cover_url ? "封面暂不可用" : "暂无封面"}</span></span>}
     <span className="local-content-badges">
     <span className="local-content-type">{video && <Play aria-hidden="true" />}{localContentType(result.content_type)}</span>
-    {metric && MetricIcon && <span className="local-content-primary-metric" title={metricDescription} aria-label={metricDescription}>
-      <span aria-hidden="true"><MetricIcon /></span><span aria-hidden="true">{approximate ? "≈" : ""}{compactCount(result.metrics[metric.key])}</span>
-    </span>}
+    {metric && <ContentMetric result={result} metric={metric} className="local-content-primary-metric" />}
     {duration && <span className="local-content-duration" aria-label={`播放时长 ${duration}`}>{duration}</span>}
     </span>
   </span>;
