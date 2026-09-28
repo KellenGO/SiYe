@@ -510,6 +510,8 @@ body {
 .brand-name { font-size: 25px; font-weight: 700; letter-spacing: -1px; }
 .brand-caption { font-size: 11px; color: var(--siye-muted); border-left: 1px solid var(--siye-line); padding-left: 12px; letter-spacing: 1px; }
 .nav { display: flex; gap: 6px; align-items: center; }
+.main-nav { position: relative; }
+.main-nav-indicator { position: absolute; bottom: 2px; left: 0; height: 2px; border-radius: 2px; background: var(--siye-brand); pointer-events: none; transition: transform .22s ease, width .22s ease; }
 .header-actions { margin-left: auto; }
 .app-header .nav > button,
 .app-header .nav .account-status-link { padding: 9px 12px; height: auto; border-radius: 0; background: none; color: var(--siye-secondary); font-size: 13px; white-space: nowrap; }
@@ -632,9 +634,10 @@ html.dark .search-submit { color: #101525; }
 .spinner { animation: siye-spin 1.1s linear infinite; }
 @keyframes siye-spin { to { transform: rotate(360deg); } }
 .results-block { margin-top: 20px; }
-.tabs { display: flex; align-items: center; gap: 25px; border-bottom: 1px solid var(--siye-line); margin-bottom: 25px; }
+.tabs { position: relative; display: flex; align-items: center; gap: 25px; border-bottom: 1px solid var(--siye-line); margin-bottom: 25px; }
+.tabs-indicator { position: absolute; bottom: 0; left: 0; height: 2px; border-radius: 2px; background: var(--siye-brand); pointer-events: none; transition: transform .22s ease, width .22s ease; }
 .tab { padding: 0 0 13px; border-bottom: 2px solid transparent; margin-bottom: -1px; color: var(--siye-secondary); font-size: 13px; white-space: nowrap; }
-.tab.active { border-color: var(--siye-brand); color: var(--siye-ink); font-weight: 600; }
+.tab.active { color: var(--siye-ink); font-weight: 600; }
 .tab:hover { color: var(--siye-brand-ink); }
 .tab span { margin-left: 5px; color: var(--siye-muted); font-size: 11px; font-weight: 400; }
 .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 4px; }
@@ -1011,13 +1014,19 @@ html.dark .search-submit { color: #101525; }
 }
 
 .settings-layout { display: grid; grid-template-columns: 195px minmax(0, 1fr); gap: 60px; }
-.settings-nav { display: flex; flex-direction: column; align-self: start; gap: 7px; padding-top: 2px; }
-.settings-nav button { display: flex; align-items: center; gap: 11px; padding: 11px 14px; border-radius: 9px; color: var(--siye-secondary); font-size: 13px; text-align: left; }
-.settings-nav button.active { background: var(--siye-brand-soft); color: var(--siye-brand-ink); font-weight: 600; }
+.settings-nav { position: relative; display: flex; flex-direction: column; align-self: start; gap: 7px; padding-top: 2px; }
+.settings-nav-indicator { position: absolute; top: 0; left: 0; border-radius: 9px; background: var(--siye-brand-soft); pointer-events: none; transition: transform .22s ease, width .22s ease, height .22s ease; }
+.settings-nav button { position: relative; display: flex; align-items: center; gap: 11px; padding: 11px 14px; border-radius: 9px; color: var(--siye-secondary); font-size: 13px; text-align: left; }
+.settings-nav button.active { color: var(--siye-brand-ink); font-weight: 600; }
 .settings-nav button:hover { color: var(--siye-brand-ink); }
 .settings-nav svg { width: 16px; height: 16px; }
 .settings-nav .aside-note { margin: 22px 14px; color: var(--siye-muted); font-size: 11px; line-height: 1.9; }
 .settings-content { min-width: 0; }
+.settings-section-enter { animation: settings-section-enter .16s ease-out backwards; }
+@keyframes settings-section-enter {
+  from { opacity: .84; }
+  to { opacity: 1; }
+}
 .settings-title { padding-bottom: 23px; border-bottom: 1px solid var(--siye-line); }
 .settings-title h2 { margin: 0; color: var(--siye-ink); font-size: 20px; font-weight: 600; }
 .settings-title p { margin: 7px 0 0; color: var(--siye-secondary); font-size: 13px; }
@@ -2034,6 +2043,8 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
 
 @media (prefers-reduced-motion: reduce) {
   .app-page-enter { animation: none; }
+  .settings-section-enter { animation: none; }
+  .main-nav-indicator, .tabs-indicator, .settings-nav-indicator { transition: none; }
   .content-view-switch::before { transition: none; }
   .details-toggle svg { transition: none; }
 }

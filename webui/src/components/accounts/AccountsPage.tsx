@@ -7,6 +7,7 @@ import { PLATFORM_LABELS, PLATFORM_COLORS } from "@/types/search";
 import type { PlatformSlug } from "@/types/search";
 import { invalidateAccounts, useAccounts } from "@/hooks/useAccounts";
 import { usePlatformLimits } from "@/hooks/usePlatformLimits";
+import { useSlidingIndicator } from "@/hooks/useSlidingIndicator";
 import {
   accountSearchVerdict,
   accountActionHint,
@@ -612,22 +613,24 @@ export function AccountsPage({ activeSection, onSectionChange, onNavigateHelp }:
   /** 已真实验证登录的平台数（只统计 connected + verified）。 */
   const verifiedCount = accounts ? summarizeAccounts(accounts).verified : 0;
   const totalPlatforms = PLATFORM_ORDER.length;
+  const { containerRef: settingsNavRef, position: settingsIndicator } = useSlidingIndicator<HTMLElement>(activeSection);
 
   // ── 渲染 ─────────────────────────────────────────────────────────────
   return (
     <div className="accounts-page preview-container">
       <div className="settings-layout">
-        <aside className="settings-nav" aria-label="设置分类">
-          <button type="button" className={activeSection === "search" ? "active" : ""} onClick={() => onSectionChange("search")}><SlidersHorizontal />搜索设置</button>
-          <button type="button" className={activeSection === "accounts" ? "active" : ""} onClick={() => onSectionChange("accounts")}><UserRound />账号与登录</button>
-          <button type="button" className={activeSection === "appearance" ? "active" : ""} onClick={() => onSectionChange("appearance")}><Palette />外观与首页</button>
+        <aside className="settings-nav" aria-label="设置分类" ref={settingsNavRef}>
+          {settingsIndicator && <span className="settings-nav-indicator" aria-hidden="true" style={{ width: settingsIndicator.width, height: settingsIndicator.height, transform: `translate(${settingsIndicator.left}px, ${settingsIndicator.top}px)` }} />}
+          <button type="button" className={activeSection === "search" ? "active" : ""} data-indicator-active={activeSection === "search"} onClick={() => onSectionChange("search")}><SlidersHorizontal />搜索设置</button>
+          <button type="button" className={activeSection === "accounts" ? "active" : ""} data-indicator-active={activeSection === "accounts"} onClick={() => onSectionChange("accounts")}><UserRound />账号与登录</button>
+          <button type="button" className={activeSection === "appearance" ? "active" : ""} data-indicator-active={activeSection === "appearance"} onClick={() => onSectionChange("appearance")}><Palette />外观与首页</button>
           <p className="aside-note">让工具适应你的习惯。<br />设置保存在当前浏览器。</p>
         </aside>
 
         <div className="settings-content">
 
       {/* ── 搜索设置（） ── */}
-      {activeSection === "search" && <section>
+      {activeSection === "search" && <section className="settings-section-enter">
         <div className="settings-title"><h2>搜索设置</h2><p>为不同平台，留出合适的搜索数量。</p></div>
         <div>
           {PLATFORM_ORDER.map((p) => (
@@ -644,7 +647,7 @@ export function AccountsPage({ activeSection, onSectionChange, onNavigateHelp }:
       </section>}
 
       {/* ── 账号与登录 ── */}
-      {activeSection === "accounts" && <section>
+      {activeSection === "accounts" && <section className="settings-section-enter">
         <div className="settings-title"><h2>账号与登录</h2><p>连接你的平台账号，让搜索与收藏顺畅一点。</p></div>
         <div className="account-top">
           <p>
@@ -930,7 +933,7 @@ export function AccountsPage({ activeSection, onSectionChange, onNavigateHelp }:
       </div>
       </section>}
 
-      {activeSection === "appearance" && <section>
+      {activeSection === "appearance" && <section className="settings-section-enter">
         <div className="settings-title"><h2>外观与首页</h2><p>安静一点，或多一些内容。按你的习惯来。</p></div>
         <div className="setting-label">主题色</div>
         <div className="accent-grid" role="group" aria-label="主题色">

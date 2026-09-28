@@ -15,6 +15,7 @@ import type { BookmarkLibrary } from "@/hooks/useBookmarks";
 import { DEFAULT_FILTERS, exportRows, filterResultGroups, groupKey, resultKey, resultSources, safeContentUrl, type ResultFilters } from "@/lib/resultTools";
 import { LocalContentCard } from "@/components/favorites/LocalContentCard";
 import { LocalContentDrawer } from "@/components/favorites/LocalContentDrawer";
+import { useSlidingIndicator } from "@/hooks/useSlidingIndicator";
 
 interface ResultTabsProps {
   viewScope: ContentViewScope;
@@ -119,6 +120,7 @@ export function ResultTabs({
     visibleTabs.map(t => t.key),
     "all"
   );
+  const { containerRef: tabsRef, position: tabIndicator } = useSlidingIndicator<HTMLDivElement>(effectiveTab);
 
   // 【组件 state 接线，人工验证】真正重置 activeTab state（而非仅钳制显示）：
   // - 失效时通过 effect 在渲染后 setActiveTab("all")，避免 render 阶段 setState；
@@ -195,7 +197,8 @@ export function ResultTabs({
 
   return (
     <div className="results-block" ref={resultBlock} tabIndex={-1}>
-      <div className="tabs" role="tablist" aria-label="结果平台">
+      <div className="tabs" role="tablist" aria-label="结果平台" ref={tabsRef}>
+          {tabIndicator && <span className="tabs-indicator" aria-hidden="true" style={{ width: tabIndicator.width, transform: `translateX(${tabIndicator.left}px)` }} />}
           {visibleTabs.map((tab) => {
             const count = counts[tab.key] || 0;
             const active = effectiveTab === tab.key;
@@ -204,6 +207,7 @@ export function ResultTabs({
                 key={tab.key}
                 role="tab"
                 aria-selected={active}
+                data-indicator-active={active}
                 onClick={() => setActiveTab(tab.key)}
                 className={`tab ${active ? "active" : ""}`}
               >

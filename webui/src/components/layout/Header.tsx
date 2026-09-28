@@ -20,6 +20,7 @@ import {
 } from '@/lib/accounts'
 import { PLATFORM_LABELS, PLATFORM_COLORS } from '@/types/search'
 import { PLATFORM_SLUGS } from '@/lib/platformMeta'
+import { useSlidingIndicator } from '@/hooks/useSlidingIndicator'
 
 const PLATFORM_ORDER = PLATFORM_SLUGS
 
@@ -138,6 +139,7 @@ export function Header({ viewMode, settingsSection, onNavigate }: HeaderProps) {
   const { accounts, loading, initialLoaded, error } = useAccounts()
   const [accountOpen, setAccountOpen] = useState(false)
   const accountRef = useRef<HTMLDivElement>(null)
+  const { containerRef: navRef, position: navIndicator } = useSlidingIndicator<HTMLElement>(viewMode)
 
   const badge: LoginBadge = loginBadgeFrom(accounts, { loading, initialLoaded, error })
   const badgeDot =
@@ -223,12 +225,14 @@ export function Header({ viewMode, settingsSection, onNavigate }: HeaderProps) {
         </div>
 
         {/* 导航 */}
-        <nav className="nav" aria-label="主导航">
+        <nav className="nav main-nav" aria-label="主导航" ref={navRef}>
+          {navIndicator && <span className="main-nav-indicator" aria-hidden="true" style={{ width: navIndicator.width, transform: `translateX(${navIndicator.left}px)` }} />}
           {navItems.map(({ key, label, section }) => (
             <button
               key={key}
               type="button"
               onClick={() => onNavigate(key, section)}
+              data-indicator-active={viewMode === key}
               className={`${
                 viewMode === key
                   ? 'active'
