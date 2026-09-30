@@ -66,8 +66,10 @@ def test_duration_survives_stores_and_backup(tmp_path, adapter, raw):
     (XhsAdapter(), {"id": "1", "note_card": {"type": "video", "video": {"capa": {"duration": "94"}}}}, 94),
     (XhsAdapter(), {"note_id": "1", "type": "video", "video": {"media": {"video": {"duration": 94}}}}, 94),
     (XhsAdapter(), {"note_id": "1", "type": "video", "video": {"media": {"stream": {"h264": [None, {"duration": "94500"}]}}}}, 94),
+    (XhsAdapter(), {"id": "1", "note_card": {"type": "video", "image_list": [{}], "video": {"media": {"stream": {"h264": [{"video_duration": 94500}]}}}}}, 94),
     (XhsAdapter(), {"id": "1", "note_card": {"type": "video", "video": None}, "video": {"capa": {"duration": 94}}}, 94),
     (XhsAdapter(), {"note_id": "1", "type": "normal", "video": {"capa": {"duration": 94}}}, None),
+    (XhsAdapter(), {"note_id": "1", "type": "normal", "video": {"media": {"stream": {"h264": [{"video_duration": 94500}]}}}}, None),
     (ZhihuAdapter(), {"id": "1", "type": "zvideo", "video": {"duration": "146.333"}}, 146),
     (ZhihuAdapter(), {"id": "1", "type": "answer", "video": {"duration": 94}}, None),
     (ZhihuAdapter(), {"id": "1", "type": "article", "video": {"duration": 94}}, None),
@@ -83,6 +85,7 @@ def test_invalid_duration_does_not_break_result(value):
     samples = [
         (DouyinAdapter(), {"aweme_id": "1", "video": {"duration": value}}),
         (XhsAdapter(), {"note_id": "1", "type": "video", "video": {"capa": {"duration": value}}}),
+        (XhsAdapter(), {"note_id": "1", "type": "video", "video": {"media": {"stream": {"h264": [{"video_duration": value}]}}}}),
         (ZhihuAdapter(), {"id": "1", "type": "zvideo", "video": {"duration": value}}),
     ]
     for adapter, raw in samples:

@@ -221,9 +221,10 @@ class XhsAdapter(BasePlatformAdapter):
                     continue
                 for variant in variants:
                     if isinstance(variant, dict):
-                        duration = self._numeric_duration_seconds(variant.get("duration"), milliseconds=True)
-                        if duration is not None:
-                            return duration
+                        for field in ("duration", "video_duration"):
+                            duration = self._numeric_duration_seconds(variant.get(field), milliseconds=True)
+                            if duration is not None:
+                                return duration
         return None
 
     def _get_public_nickname(self, item: Dict) -> Optional[str]:
