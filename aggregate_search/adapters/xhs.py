@@ -36,6 +36,10 @@ and similar methods. Typical fields:
 
 from __future__ import annotations
 
+import json
+import os
+import re
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
@@ -176,6 +180,12 @@ class XhsAdapter(BasePlatformAdapter):
             content_type = "video" \
                 if (card.get("type") or item.get("type")) == "video" else "note"
 
+            duration_seconds = (self._extract_duration(card) or self._extract_duration(item)) \
+                if content_type == "video" else None
+            if (content_type == "video" and duration_seconds is None
+                    and os.environ.get("SIYE_XHS_DURATION_DIAG") == "1"):
+                self._record_missing_duration_shape(item)
+
             results.append(
                 UnifiedSearchResult(
                     platform="xhs",
@@ -187,14 +197,39 @@ class XhsAdapter(BasePlatformAdapter):
                     url=url,
                     published_at=published_at,
                     cover_url=cover_url,
-                    duration_seconds=(self._extract_duration(card) or self._extract_duration(item))
-                    if content_type == "video" else None,
+                    duration_seconds=duration_seconds,
                     metrics=metrics,
                     rank=rank,
                     collection_names=[str(item["_collection_name"])] if item.get("_collection_name") else [],
                 )
             )
         return results
+
+    @staticmethod
+    def _record_missing_duration_shape(item: Dict) -> None:
+        """Opt-in local diagnostic: field structure only, never note content or tokens."""
+        def shape(value: Any, field: str = "", depth: int = 0) -> Any:
+            if depth >= 7:
+                return type(value).__name__
+            if isinstance(value, dict):
+                return {key: shape(child, key, depth + 1)
+                        for key, child in value.items()
+                        if isinstance(key, str) and re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{0,49}", key)}
+            if isinstance(value, list):
+                return {"count": len(value), "first": shape(value[0], field, depth + 1) if value else None}
+            if "duration" in field.lower() and isinstance(value, (int, float, str)):
+                number = str(value)
+                if re.fullmatch(r"\d+(?:\.\d+)?", number):
+                    return number
+            return type(value).__name__
+
+        try:
+            output = Path(__file__).resolve().parents[2] / "build" / f"xhs-duration-shape-{os.getpid()}.jsonl"
+            output.parent.mkdir(exist_ok=True)
+            with output.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(shape(item), ensure_ascii=False) + "\n")
+        except OSError:
+            pass
 
     def _extract_duration(self, item: Dict) -> Optional[int]:
         video = item.get("video")

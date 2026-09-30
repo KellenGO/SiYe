@@ -1,6 +1,7 @@
 """Duration uses public snapshots; old records need no database migration."""
 import pytest
 
+import aggregate_search.adapters.xhs as xhs_module
 from aggregate_search.adapters.bilibili import BilibiliAdapter
 from aggregate_search.adapters.douyin import DouyinAdapter
 from aggregate_search.adapters.xhs import XhsAdapter
@@ -100,3 +101,16 @@ def test_missing_or_malformed_video_shapes(video):
         (ZhihuAdapter(), {"id": "1", "type": "zvideo", "video": video}),
     ]:
         assert adapter.adapt([raw])[0].duration_seconds is None
+
+
+def test_xhs_missing_duration_diagnostic_excludes_content(tmp_path, monkeypatch):
+    monkeypatch.setenv("SIYE_XHS_DURATION_DIAG", "1")
+    monkeypatch.setattr(xhs_module, "__file__", str(tmp_path / "aggregate_search" / "adapters" / "xhs.py"))
+    XhsAdapter().adapt([{
+        "id": "PRIVATE-ID", "xsec_token": "PRIVATE-TOKEN",
+        "note_card": {"type": "video", "title": "PRIVATE-TITLE",
+                      "video": {"media": {"stream": {"h264": [{"video_duration": "bad"}]}}}},
+    }])
+    captured = next((tmp_path / "build").glob("xhs-duration-shape-*.jsonl")).read_text(encoding="utf-8")
+    assert "h264" in captured and "video_duration" in captured
+    assert "PRIVATE" not in captured
