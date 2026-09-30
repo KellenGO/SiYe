@@ -56,6 +56,45 @@ def no_page_delay(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("fallback_seconds, expected_wait", [(0, 2), (1.25, 0.75), (3, 0)])
+async def test_fallback_work_counts_toward_request_interval(monkeypatch, fallback_seconds, expected_wait):
+    monkeypatch.setattr(config, "CRAWLER_MAX_SLEEP_SEC", 2)
+    now, sleeps = [0.0], []
+    monkeypatch.setattr("aggregate_search.pagination.time.perf_counter", lambda: now[0])
+    async def sleep(delay):
+        sleeps.append(delay)
+        now[0] += delay
+    monkeypatch.setattr("aggregate_search.pagination.asyncio.sleep", sleep)
+    run, emitted, _ = run_for("bilibili", 1)
+    with pytest.raises(RuntimeError):
+        await run.run(Client([RuntimeError("first provider failed")]))
+    now[0] += fallback_seconds
+    await run.run(Client([page("bilibili", [1], more=False)]))
+    assert sum(sleeps) == expected_wait
+    assert now[0] >= 2  # The platform still receives the full quiet interval.
+    assert run.requests == 2 and len(emitted) == 1
+
+
+@pytest.mark.asyncio
+async def test_douyin_requests_twenty_once_when_platform_returns_twenty():
+    run, emitted, _ = run_for("douyin", 20)
+    client = Client([page("douyin", list(range(1, 21)))])
+    await run.run(client)
+    assert len(emitted) == 20 and len(client.calls) == 1
+    assert client.calls[0][1]["count"] == 20
+
+
+@pytest.mark.asyncio
+async def test_douyin_short_page_still_fills_twenty_and_preserves_cursor():
+    run, emitted, _ = run_for("douyin", 20)
+    client = Client([page("douyin", list(range(1, 16))), page("douyin", list(range(16, 21)))])
+    await run.run(client)
+    assert len(emitted) == 20
+    assert [kw["count"] for _, kw in client.calls] == [20, 5]
+    assert client.calls[1][1]["offset"] == 30
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("platform", ["xhs", "bilibili", "douyin", "zhihu"])
 async def test_all_platforms_keep_page_tail_and_resume_position(platform):
     client = Client([page(platform, [1, 2, 3]), page(platform, [3, 4], more=False)])
@@ -215,6 +254,56 @@ async def test_continuation_cache_round_history_and_stale_identity(manager, monk
     assert replay.exploration["round"] == 1
     after_cache = await search(manager, limit_per_platform=2, continue_from=replay.job_id)
     assert [r.content_id for r in after_cache.results] == ["3", "4"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("platform", ["xhs", "douyin", "bilibili", "zhihu"])
+@pytest.mark.parametrize("replace", [False, True])
+async def test_buffered_batch_needs_no_worker(manager, monkeypatch, platform, replace):
+    calls = []
+    async def worker(job, platform):
+        calls.append(platform)
+        job.add_result(platform, result(platform, "1"))
+        job.apply_metrics(platform, {"pagination": PageState(page=2, pending=[
+            result(platform, i) for i in ["1", "2", "2", "3", "4"]
+        ]).model_dump()})
+        job.set_platform_status(platform, "succeeded")
+    monkeypatch.setattr(manager, "_run_worker", worker)
+    first = await search(manager, platforms=[platform], limit_per_platform=1)
+    # No network access is needed to consume already fetched content.
+    monkeypatch.setattr(sjm, "search_login_block", lambda p: "offline")
+    second = await search(manager, platforms=[platform], limit_per_platform=2,
+                          continue_from=first.job_id, replace_platforms=replace)
+    assert calls == [platform]
+    assert [r.content_id for r in second.results] == ["2", "3"]
+    assert second.platforms[platform].timings.page_requests == 0
+    assert second.platforms[platform].timings.spawn_ms is None
+    assert manager._active_job.page_states[platform].page == 2
+    assert [r.content_id for r in manager._active_job.page_states[platform].pending] == ["4"]
+
+
+@pytest.mark.asyncio
+async def test_exhausted_tail_returns_short_batch_without_worker(manager, monkeypatch):
+    calls = install_worker(manager, monkeypatch)
+    first = await search(manager, limit_per_platform=1)
+    manager._active_job.exploration.states["xhs"] = PageState(
+        page=2, exhausted=True, pending=[result("xhs", "tail")])
+    second = await search(manager, limit_per_platform=20, continue_from=first.job_id)
+    assert len(calls) == 1
+    assert [r.content_id for r in second.results] == ["tail"]
+    assert not second.exploration["platforms"]["xhs"]["has_more"]
+
+
+@pytest.mark.asyncio
+async def test_insufficient_tail_still_fetches_and_preserves_cursor(manager, monkeypatch):
+    calls = install_worker(manager, monkeypatch)
+    first = await search(manager, limit_per_platform=1)
+    manager._active_job.exploration.states["xhs"] = PageState(
+        page=2, pending=[result("xhs", "tail"), result("xhs", "tail")])
+    await search(manager, limit_per_platform=2, continue_from=first.job_id)
+    assert len(calls) == 2
+    assert calls[-1].pagination["page"] == 2
+    assert len(calls[-1].pagination["pending"]) == 2
 
 
 @pytest.mark.asyncio

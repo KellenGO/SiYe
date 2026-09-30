@@ -23,6 +23,7 @@
 # @Desc    : bilibili request client
 import asyncio
 import json
+import time
 from typing import Any, Dict, Optional, Tuple, Union
 from urllib.parse import urlencode
 
@@ -98,6 +99,8 @@ class BilibiliClient(ReusableHttpClientMixin, AbstractApiClient):
         self.headers = headers
         self.reuse_http_client = reuse_http_client
         self._init_http_client_state()
+        self._search_wbi_keys: Optional[Tuple[str, str]] = None
+        self._search_wbi_keys_at = 0.0
         self._host = "https://api.bilibili.com"
         self.cookie_urls = ["https://www.bilibili.com"]
         self.playwright_page = playwright_page
@@ -164,7 +167,12 @@ class BilibiliClient(ReusableHttpClientMixin, AbstractApiClient):
         Get the latest img_key and sub_key
         :return:
         """
-        # Round 16 fast path：page=None 时跳过 localStorage，直接走 HTTP
+        from aggregate_search.pagination import current_pagination
+        aggregate_search = current_pagination.get() is not None
+        if (aggregate_search and self._search_wbi_keys is not None
+                and time.monotonic() - self._search_wbi_keys_at < 60):
+            return self._search_wbi_keys
+        # page=None 时跳过 localStorage，直接走 HTTP
         # /x/web-interface/nav（与浏览器路径的 HTTP fallback 同一实现）。
         if self.playwright_page is not None:
             try:
@@ -187,6 +195,9 @@ class BilibiliClient(ReusableHttpClientMixin, AbstractApiClient):
         sub_url: str = resp['wbi_img']['sub_url']
         img_key = img_url.rsplit('/', 1)[1].split('.')[0]
         sub_key = sub_url.rsplit('/', 1)[1].split('.')[0]
+        if aggregate_search and img_key and sub_key:
+            self._search_wbi_keys = (img_key, sub_key)
+            self._search_wbi_keys_at = time.monotonic()
         return img_key, sub_key
 
     async def get(self, uri: str, params=None, enable_params_sign: bool = True) -> Dict:

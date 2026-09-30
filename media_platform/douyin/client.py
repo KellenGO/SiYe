@@ -197,6 +197,7 @@ class DouYinClient(ReusableHttpClientMixin, AbstractApiClient):
         sort_type: SearchSortType = SearchSortType.GENERAL,
         publish_time: PublishTimeType = PublishTimeType.UNLIMITED,
         search_id: str = "",
+        count: int = 15,
     ):
         """
         DouYin Web Search API
@@ -217,7 +218,7 @@ class DouYinClient(ReusableHttpClientMixin, AbstractApiClient):
             'is_filter_search': '0',
             'from_group_id': '7378810571505847586',
             'offset': offset,
-            'count': '15',
+            'count': str(min(max(count, 1), 20)),
             'need_filter_settings': '1',
             'list_type': 'multi',
             'search_id': search_id,

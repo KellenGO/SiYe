@@ -32,6 +32,7 @@ class PaginationRun:
         self.fetching = False
         self.started_at = time.perf_counter()
         self.first_api_ms = None
+        self.next_request_at = 0.0
 
     def report(self):
         metrics = {"pagination": self.state.model_dump(), "page_requests": self.requests,
@@ -64,7 +65,11 @@ class PaginationRun:
         self.drain()
         while self.emitted < self.limit and not self.state.exhausted and self.requests < self.MAX_REQUESTS:
             if self.requests:
-                await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
+                # Browser fallback/setup already counts toward the quiet
+                # interval after a failed request; do not wait twice.
+                delay = self.next_request_at - time.perf_counter()
+                if delay > 0:
+                    await asyncio.sleep(delay)
             self.requests += 1
             self.report()  # Failed attempts also count against this action's budget.
             self.fetching = True
@@ -72,6 +77,7 @@ class PaginationRun:
                 data = await self.fetch(client)
             finally:
                 self.fetching = False
+                self.next_request_at = time.perf_counter() + config.CRAWLER_MAX_SLEEP_SEC
             if self.first_api_ms is None:
                 self.first_api_ms = int((time.perf_counter() - self.started_at) * 1000)
             items, exhausted, next_offset, search_id = self.unpack(data)
@@ -99,7 +105,8 @@ class PaginationRun:
         if self.platform == "douyin":
             from media_platform.douyin.field import PublishTimeType
             return await client.search_info_by_keyword(keyword=self.keyword, offset=self.state.offset,
-                publish_time=PublishTimeType(0), search_id=self.state.search_id)
+                publish_time=PublishTimeType(0), search_id=self.state.search_id,
+                count=min(20, self.limit - self.emitted))
         return await client.get("/api/v4/search_v3", {"gk_version": "gz-gaokao", "t": "general",
             "q": self.keyword, "correction": 1, "offset": self.state.offset, "limit": 20,
             "filter_fields": "", "lc_idx": 0, "show_all_topics": 0, "search_source": "Filter"})

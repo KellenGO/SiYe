@@ -77,6 +77,12 @@ def _snapshot_has_dc0(snapshot: Optional[Dict[str, str]]) -> bool:
 
 WORKER_TIMEOUT_SECONDS = 90
 
+# Browser fallback may recover a session after app startup. Keep it only in
+# this worker's memory; account operations stop the worker before changing
+# profiles, and idle/request limits bound its lifetime. Never emit cookies.
+_search_session_snapshots: Dict[str, Dict[str, str]] = {}
+_search_session_inputs: Dict[str, Optional[Dict[str, str]]] = {}
+
 _ADAPTERS = {
     "xhs": XhsAdapter(),
     "douyin": DouyinAdapter(),
@@ -255,11 +261,15 @@ async def _run_standard_search(
             emit_metrics(job_id, platform, {f"{phase}_ms": elapsed_ms})
 
         async def run_fast_provider() -> int:
-            await _run_fast_standard_search(
-                job_id, platform, core_platform, keyword, limit,
-                handle_results, session_snapshot or {}, _phase_metric,
-                fast_crawler_holder,
-            )
+            try:
+                await _run_fast_standard_search(
+                    job_id, platform, core_platform, keyword, limit,
+                    handle_results, session_snapshot or {}, _phase_metric,
+                    fast_crawler_holder,
+                )
+            except BaseException:
+                _search_session_snapshots.pop(platform, None)
+                raise
             return pagination.emitted if pagination else total_emitted
 
         async def cleanup_fast_provider() -> None:
@@ -285,7 +295,13 @@ async def _run_standard_search(
             await asyncio.wait_for(crawler.start(), timeout=WORKER_TIMEOUT_SECONDS)
             anonymous_public_search_holder[0] = bool(
                 getattr(crawler, "anonymous_public_search", False))
-            return pagination.emitted if pagination else total_emitted
+            count = pagination.emitted if pagination else total_emitted
+            client_attr = {"xhs": "xhs_client", "bili": "bili_client"}.get(core_platform, "")
+            cookies = getattr(getattr(crawler, client_attr, None), "cookie_dict", None)
+            if (count and cookies
+                    and (core_platform == "bili" or core_platform == "xhs" and cookies.get("a1"))):
+                _search_session_snapshots[platform] = dict(cookies)
+            return count
 
         async def cleanup_browser_provider() -> None:
             crawler = browser_crawler_holder[0]
@@ -633,6 +649,9 @@ async def _run_zhihu_search(
         if pagination is not None:
             try:
                 return await pagination.run(fp_client)
+            except BaseException:
+                _search_session_snapshots.pop(platform, None)
+                raise
             finally:
                 await fp_client.aclose()
         search_res = await fp_client.get("/api/v4/search_v3", {
@@ -729,7 +748,10 @@ async def _run_zhihu_search(
                 pagination = current_pagination.get()
                 if pagination is not None:
                     try:
-                        return await pagination.run(zhihu_client)
+                        count = await pagination.run(zhihu_client)
+                        if count and _snapshot_has_dc0(cookie_dict):
+                            _search_session_snapshots[platform] = dict(cookie_dict)
+                        return count
                     finally:
                         await zhihu_client.aclose()
                 page_size = min(limit + 5, 20)
@@ -755,6 +777,8 @@ async def _run_zhihu_search(
                 emit_metrics(job_id, platform, {
                     "search_api_ms": int((time.perf_counter() - _zh_phase) * 1000)})
                 _zh_emit(search_res)
+                if total_emitted and _snapshot_has_dc0(cookie_dict):
+                    _search_session_snapshots[platform] = dict(cookie_dict)
                 return total_emitted
             finally:
                 try:
@@ -1089,6 +1113,14 @@ async def _dispatch_worker(
     if mode != "search":
         emit_error(job_id, platform, "failed", f"Unknown mode: {mode}")
         return
+
+    if fast_path:
+        # A browser can refresh an older API snapshot. Reuse that refreshed
+        # copy until the caller supplies a different account/session input.
+        if session_snapshot != _search_session_inputs.get(platform):
+            _search_session_snapshots.pop(platform, None)
+            _search_session_inputs[platform] = dict(session_snapshot) if session_snapshot else None
+        session_snapshot = _search_session_snapshots.get(platform) or session_snapshot
 
     if platform == "zhihu":
         await _run_zhihu_search(

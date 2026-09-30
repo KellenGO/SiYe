@@ -46,7 +46,7 @@ from .worker_process import (
     spawn_worker,
     terminate_worker,
 )
-from aggregate_search.pagination import PageState
+from aggregate_search.pagination import PageState, PaginationRun
 
 WORKER_TIMEOUT_SECONDS = 100
 GRACE_PERIOD_SECONDS = 5.0
@@ -497,6 +497,21 @@ class SearchJobManager:
                     job.page_checkpoints.add(platform)
                 return
         info = job.platforms_state[platform]
+        # A previous page can already contain this entire batch. Replay it
+        # locally before opening a worker/browser or checking network access.
+        state = job.page_states[platform]
+        available = {r.content_id for r in state.pending} - set(job.prior_ids[platform])
+        if (job.continuation and state.pending
+                and job.account_generations[platform] == job.exploration.generations[platform]
+                and (len(available) >= limit or state.exhausted)):
+            replay = PaginationRun(
+                platform, job.keyword, limit, state, job.prior_ids[platform],
+                lambda data: job.add_result(platform, UnifiedSearchResult(**data)),
+                lambda metrics: job.apply_metrics(platform, metrics),
+            )
+            replay.drain()
+            job.set_platform_status(platform, "succeeded" if replay.emitted else "empty")
+            return
         # 登录预检（毫秒级、不启浏览器）：确定搜不了就直接回报 login_required，
         # 不再 spawn worker。否则浏览器路径要先启动浏览器 + 导航十几秒，才在
         # pong() 处失败 —— 这段时间对用户完全是浪费。

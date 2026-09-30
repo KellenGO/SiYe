@@ -50,6 +50,7 @@ profile 目录：`browser_data/{xhs,dy,bili,zhihu}_user_data_dir`。
   小红书 `web_session` ≈ 332 天；实际使用会不断刷新，通常更久。
 - worker 里 **CDP 模式被显式关掉**（`ENABLE_CDP_MODE=False`、`CDP_CONNECT_EXISTING=False`），
   所以「连到已打开的浏览器」这条路当前是关的（`tools/cdp_browser.py` 有实现可参考）。
+- 小红书、B站、知乎搜索成功的浏览器会话可在当前常驻 worker 内存中复用。账号操作仍先停止对应 worker，调用方传入不同会话也会清除副本；不通过结果协议回传 Cookie、不新增凭据落盘。搜索成功只沿用已有使用证据规则，不冒充账号验证；详见搜索体验 wiki。
 - 换账号不会隔离：应用自己的 profile 是「一个平台一个目录」，同一台机器换账号会覆盖同一份 profile。
 
 ## 账号页：主结论「可用 / 不可用」与盲区（2026-09-18）

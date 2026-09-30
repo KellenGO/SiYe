@@ -20,8 +20,18 @@
 | 页面与卡片 | `webui/src/components/search/{SearchPage,SearchBar,ResultTabs,ResultCard,ResultTools,SearchPopover,PlatformStatus}.tsx` |
 | 结果缓存（90s，按平台+关键词+数量+账号代数） | `api/services/result_cache.py` |
 | 平台级冷却 | `api/services/search_metrics.py` 的 `PlatformCooldowns` |
+| 分页间隔、每页数量与剩余内容 | `aggregate_search/pagination.py` 的 `PaginationRun`、`api/services/search_job_manager.py` 的 `_run_platform` |
+| 浏览器成功后复用搜索会话 | `aggregate_search/worker.py` 的 `_dispatch_worker`、`_run_standard_search`、`_run_zhihu_search` |
+| 搜索进度刷新频率 | `webui/src/lib/searchPolling.ts` 的 `searchPollInterval` |
 
 ## 关键决定
+
+- **优先减少重复工作来提速**：小红书、B站、知乎的浏览器路径成功返回内容后，会话只留在当前常驻 worker 内存，后续关键词优先复用。调用方会话变化时丢弃旧副本；快速请求异常时清除副本并遵守原有回退规则，风控和已经输出部分结果仍不整轮重跑。账号操作会停止对应 worker，进程回收也会清除副本；不持久化新凭据文件、不常驻浏览器。取舍见 `docs/decisions/2026-09-30-搜索减少重复启动与等待.md`。
+- **翻页仍保留原有最小间隔**：从上次请求结束计时，浏览器回退准备和结果处理已经花掉的时间计入间隔，避免准备完再完整等待一次。请求次数上限、风控冷却不变。
+- **抖音按剩余目标请求，每页最多 20 条**：默认搜索 20 条时尝试一页拿齐；平台少返回、混入非内容项或去重后不足时继续分页，不把请求数量当作实际数量。平台是否采纳此数量需真实账号观察。
+- **换批和单平台重搜可直接消费已取回的页尾**：同一账号代数下，剩余内容足够或已到末页时在后端本地去重回放，不启动 worker；不够时继续原有取页路径。不会重复上批内容，也不会用旧账号余量。
+- B站聚合搜索在同一个 API client 中短暂复用已取得的 HTTP 签名参数（最长 60 秒），避免每页重复查询；其他操作保留原有行为。
+- 搜索与取消收尾期间前端每 250 毫秒查询**本机后端**；搜索完成后，详情补全仍为 800 毫秒，全部完成则停止。任务创建后仍立即发起第一次查询，缓存命中的结果不用等一个轮询间隔。这只缩短结果展示等待，不增加社交平台搜索请求。
 
 - **双视图共用视觉语言**：列表保持详细阅读、网格保持封面浏览。两者沿用同一字体与颜色，封面圆角一致；列表以正文摘要区的常见高度为基准，确定封面高度，统一按 16:9 裁剪铺满，可用空间不足时等比缩小；网格统一为 16:9 并裁剪铺满；列表以紧凑缩略图复用缺图占位、知乎主题卡与小红书地址回退。类型与可靠视频时长放封面，列表多项指标放正文，网格只显示主要指标；两者统一 k / M / B 与近似值 ≈，悬停和无障碍名称提供完整数值及播放／阅读含义。平台品牌圆点与名称一致，聚合内容均标明平台版本数，不累加各来源数据。
 - 列表的平台身份独立显示，摘要、作者和时间仍可阅读，长内容可行内展开；操作在右侧竖排，按钮与图标放大便于辨认和点击；窄屏封面放在正文上方，按钮仍留在右侧。两种视图的操作尺寸、焦点及批量选中轮廓一致，收藏与稍后再看仍独立。切回列表恢复已展开条目，新任务或页面范围变化时清理展开状态；切换不主动滚动或搬移焦点，页面变短时允许浏览器自然限制滚动位置。
@@ -130,6 +140,7 @@
 
 ## 已知坑 / 边界
 
+- 首次启动、worker 回收后仍有启动成本；平台网络、风控和实际返回的有效条数决定最终耗时。离线回归可验证少开浏览器、少发请求和不重复等待，不能据此承诺所有关键词固定几秒完成。B站即使复用了成功会话，平台仍可能要求浏览器路径。
 - **结果序号（`.result-number`）搜索页与收藏页共用同一套**：品牌色数字 + 上方 14×2px 短横线
   （`::before`），窄屏统一 `display: none`。样式写在 `.result-number` 本身，
   收藏页不再单独覆盖 —— 两边只差在收藏页多一条组间距和底色。（2026-09-21）
@@ -174,5 +185,8 @@ node run-compiled-tests.mjs
 `metricOrder.test.ts`、`searchDedupContract.test.ts`、`searchCooldown.test.ts`；
 后端缓存与冷却：`tests/test_result_cache.py`、`tests/test_expiring_local_cache.py`、
 `tests/test_search_statistics.py`。
+
+提速回归：`tests/test_search_speed.py`、`tests/test_search_exploration.py`、
+`tests/test_search_worker_supervisor.py`、`webui/tests/searchPolling.test.ts`。
 
 构建前端后运行 `scripts/result_library_smoke.py --screenshots`，用临时 SQLite 与模拟搜索响应检查分来源收藏、详情展开、筛选、导出、复制及备注持久化。`scripts/getting_started_smoke.py` 另会检查推荐词和历史记录只填词、保留当前平台，以及教程的平台勾选说明。脚本都走模拟接口，不会访问真实平台。

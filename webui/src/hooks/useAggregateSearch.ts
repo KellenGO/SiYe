@@ -8,6 +8,7 @@ import type {
 } from "@/types/search";
 import { waitForAccountOpsIdle } from "@/lib/accountGate";
 import { isAnyScanLoginActive } from "@/lib/scanLogin";
+import { searchPollInterval } from "@/lib/searchPolling.js";
 
 const API_BASE = "/api/search";
 const STORAGE_KEY = "aggregate_search_job_id";
@@ -161,14 +162,8 @@ export function useAggregateSearch() {
       }
     },
     enabled: !!jobId,
-    refetchInterval: (query) => {
-      const data = query.state.data;
-      if (!data) return 800;
-      const terminal = ["completed", "partial", "failed", "cancelled"];
-      if (terminal.includes(data.overall) && data.completed_at && data.hydration_status !== "running") return false;
-      return 800;
-    },
-    staleTime: 500,
+    refetchInterval: (query) => searchPollInterval(query.state.data),
+    staleTime: 200,
     retry: (count, err) => {
       const status = (err as { response?: { status?: number } })?.response?.status;
       // 404 handled in queryFn (clears only the matching job)
