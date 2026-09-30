@@ -186,6 +186,7 @@ class HealthResponse(BaseModel):
 
 class SearchJobResponse(BaseModel):
     job_id: str
+    revision: int = 0
     overall: OverallStatus
     keyword: str
     created_at: str

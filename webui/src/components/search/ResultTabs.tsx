@@ -98,6 +98,14 @@ export function ResultTabs({
   }, [detailResult, results]);
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [filters, setFilters] = useState<ResultFilters>({ ...DEFAULT_FILTERS });
+  const previousKeyword = useRef(keyword);
+  useEffect(() => {
+    if (viewScope === "search" && previousKeyword.current !== keyword) {
+      setActiveTab("all");
+      setFilters({ ...DEFAULT_FILTERS });
+    }
+    previousKeyword.current = keyword;
+  }, [keyword, viewScope]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   useEffect(() => setExpanded(new Set()), [jobId, viewScope]);

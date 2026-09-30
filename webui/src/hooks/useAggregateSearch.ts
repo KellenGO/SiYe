@@ -8,7 +8,7 @@ import type {
 } from "@/types/search";
 import { waitForAccountOpsIdle } from "@/lib/accountGate";
 import { isAnyScanLoginActive } from "@/lib/scanLogin";
-import { searchPollInterval } from "@/lib/searchPolling.js";
+import { searchPollInterval, searchWaitParams } from "@/lib/searchPolling.js";
 
 const API_BASE = "/api/search";
 const STORAGE_KEY = "aggregate_search_job_id";
@@ -20,11 +20,12 @@ async function createJob(req: SearchJobRequest): Promise<SearchJobResponse> {
 
 async function getJob(
   jobId: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  revision?: number,
 ): Promise<SearchJobResponse> {
   const { data } = await axios.get<SearchJobResponse>(
     `${API_BASE}/jobs/${jobId}`,
-    { signal }
+    { signal, params: searchWaitParams(revision) }
   );
   return data;
 }
@@ -150,7 +151,8 @@ export function useAggregateSearch() {
     queryFn: async ({ queryKey, signal }) => {
       const requestedId = queryKey[1] as string;
       try {
-        return await getJob(requestedId, signal);
+        const previous = queryClient.getQueryData<SearchJobResponse>(queryKey);
+        return await getJob(requestedId, signal, previous?.revision);
       } catch (err) {
         const status = (err as { response?: { status?: number } })?.response?.status;
         // 404 only clears the job that was requested — never a newer one.
@@ -162,7 +164,7 @@ export function useAggregateSearch() {
       }
     },
     enabled: !!jobId,
-    refetchInterval: (query) => searchPollInterval(query.state.data),
+    refetchInterval: (query) => query.state.error ? 800 : searchPollInterval(query.state.data),
     staleTime: 200,
     retry: (count, err) => {
       const status = (err as { response?: { status?: number } })?.response?.status;

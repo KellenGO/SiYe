@@ -16,7 +16,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Dict, Optional
 
-from fastapi import APIRouter, HTTPException, Header, Request
+from fastapi import APIRouter, HTTPException, Header, Request, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -450,8 +450,10 @@ async def get_favorites_job(job_id: str, summary: bool = False):
 
 
 @search_router.get("/jobs/{job_id}", response_model=SearchJobResponse)
-async def get_search_job(job_id: str):
-    resp = await search_job_manager.get_job(job_id)
+async def get_search_job(job_id: str, after_revision: Optional[int] = Query(None, ge=0),
+                         wait_seconds: float = Query(0, ge=0, le=15)):
+    resp = await search_job_manager.get_job(
+        job_id, after_revision=after_revision, wait_seconds=wait_seconds)
     if resp is None:
         raise HTTPException(status_code=404, detail="Job not found.")
     return resp

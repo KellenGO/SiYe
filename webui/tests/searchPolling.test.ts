@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { searchPollInterval } from "../src/lib/searchPolling.js";
+import { searchPollInterval, searchWaitParams } from "../src/lib/searchPolling.js";
 import type { OverallStatus } from "../src/types/search.js";
 
 test("active search and finalization use low latency local polling", () => {
@@ -8,6 +8,17 @@ test("active search and finalization use low latency local polling", () => {
   for (const overall of ["running", "cancelling", "completed"] as OverallStatus[]) {
     assert.equal(searchPollInterval({ overall, completed_at: null }), 250);
   }
+});
+
+test("revision backend immediately renews a held request; terminal stops", () => {
+  assert.deepEqual(searchWaitParams(3), { after_revision: 3, wait_seconds: 15 });
+  for (const revision of [undefined, -1, NaN, 1.5]) {
+    assert.equal(searchWaitParams(revision), undefined);
+  }
+  assert.equal(searchPollInterval({ revision: 0, overall: "running", completed_at: null }), 10);
+  assert.equal(searchPollInterval({ revision: 1, overall: "completed", completed_at: "done",
+    hydration_status: "running" }), 10);
+  assert.equal(searchPollInterval({ revision: 2, overall: "completed", completed_at: "done" }), false);
 });
 
 test("terminal jobs slow down for hydration and stop when finished", () => {

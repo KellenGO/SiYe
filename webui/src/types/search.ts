@@ -105,6 +105,7 @@ export interface PlatformStatusInfo {
 }
 
 export interface SearchJobResponse {
+  revision?: number;
   exploration?: SearchExploration | null;
   job_id: string;
   overall: OverallStatus;

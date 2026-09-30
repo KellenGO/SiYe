@@ -900,7 +900,7 @@ export type ExperienceEvent =
   | { type: "job_recovered"; jobId: string }
   /** 任务终态到达（completed/partial/failed/cancelled）；需与 activeJobId 匹配。 */
   | { type: "job_terminal"; job: SearchJobResponse }
-  /** 任务实时进度（非终态轮询响应）；需与 activeJobId 匹配；仅全量任务使用。 */
+  /** 全量搜索或单平台重搜的实时进度；需与 activeJobId 匹配。 */
   | { type: "job_progress"; job: SearchJobResponse }
   /** 取消请求已发出（Round 13）：不清快照、不提前显示已取消提示。 */
   | { type: "cancel_requested" }
@@ -1058,19 +1058,17 @@ export function applySearchTransition(state: ExperienceState, event: ExperienceE
     }
     case "job_progress": {
       const job = event.job;
-      // 与 job_terminal 相同的身份保护（Phase 2 渐进展示）：
+      // 与 job_terminal 相同的身份保护：
       // 1. POST 未接受（无身份）→ 拒绝任何进度。
       // 2. 无当前任务身份（未恢复/已 reset）→ 拒绝。
       // 3. 进度 job_id 与当前任务不匹配（旧任务迟到）→ 拒绝。
       // 4. 已应用终态的 job_id 不接收进度（终态已提交，轮询迟到响应作废）。
-      // 5. 终态 overall 交给 job_terminal，这里不处理。
+      // 5. 已完成收尾的终态交给 job_terminal；收尾中仍可展示结果。
       if (d.awaitingJobAcceptance) return state;
       if (d.activeJobId === null) return state;
       if (job.job_id !== d.activeJobId) return state;
       if (d.appliedJobIds.has(job.job_id)) return state;
-      if (TERMINAL_OVERALLS.has(job.overall)) return state;
-      // 单平台重试保持"终态后合并"策略：不做渐进替换（Phase 2 语义）。
-      if (d.retryingPlatform) return state;
+      if (TERMINAL_OVERALLS.has(job.overall) && job.completed_at) return state;
       return {
         ...state,
         display: {
@@ -1159,13 +1157,16 @@ export function applySearchTransition(state: ExperienceState, event: ExperienceE
           total_ms: job.total_ms,
         };
         if (FAILURE_STATUSES.has(status)) {
-          // 失败：保留目标平台旧结果与其他平台结果（不调用 merge），
-          // 只更新状态为 failed 并记录安全错误摘要。
+          // 已经展示的新结果不会因后续失败消失；尚无新结果时保留旧结果。
+          const partial = expandGroupedResults(job.results).filter((r) => r.platform === retryTarget);
           return {
             ...state,
             display: {
               ...d,
-              jobResponse: { ...baseResponse, results: prev?.results ?? [] },
+              jobResponse: { ...baseResponse, results: partial.length
+                ? mergeSinglePlatformRetry(prev?.results ?? [], retryTarget, partial,
+                    Object.keys(platformsInfo) as PlatformSlug[])
+                : prev?.results ?? [] },
               liveResponse: null,
               retryErrors: {
                 ...d.retryErrors,
@@ -1186,7 +1187,7 @@ export function applySearchTransition(state: ExperienceState, event: ExperienceE
         const mergedResults = mergeSinglePlatformRetry(
           prev?.results ?? [],
           retryTarget,
-          job.results.filter((r) => r.platform === retryTarget),
+          expandGroupedResults(job.results).filter((r) => r.platform === retryTarget),
           prev ? (Object.keys(prev.platforms) as PlatformSlug[]) : PLATFORM_SLUGS
         );
         return {
@@ -1313,7 +1314,7 @@ export function resolveActiveTab<T extends string>(
   return fallback;
 }
 
-// ── 渐进结果展示（Phase 2 生产 selector，无 React 依赖） ────────────────
+// ── 渐进结果展示（生产 selector，无 React 依赖） ───────────────────────
 
 export interface SearchPresentation {
   /** UI 实际渲染的响应（结果 + 平台状态 + overall）。 */
@@ -1325,11 +1326,12 @@ export interface SearchPresentation {
 }
 
 /**
- * 决定当前展示内容（Phase 2）：
+ * 决定当前展示内容：
  * - 无 live 响应（POST 挂起 / 终态已提交）：返回已提交快照。
  * - 有 live 响应：状态卡片与 overall 始终用 live（当前任务实时状态）；
  *   结果列表在 live 出现首条结果后立即切换为 live 结果，之前保留旧快照
  *   并给出"正在搜索，暂时显示上次结果"提示。
+ * - 单平台重搜只渐进替换目标平台，不改动其他平台的已有内容。
  * - 实时提示在任务终态后自动消失。
  */
 export function selectSearchPresentation(state: ExperienceState): SearchPresentation {
@@ -1338,6 +1340,24 @@ export function selectSearchPresentation(state: ExperienceState): SearchPresenta
   const committed = d.jobResponse;
   if (!live) {
     return { jobResponse: committed, showingStaleSnapshot: false, liveHint: null };
+  }
+
+  if (d.retryingPlatform && committed) {
+    const target = d.retryingPlatform;
+    const fresh = expandGroupedResults(live.results).filter((r) => r.platform === target);
+    return {
+      jobResponse: {
+        ...live,
+        platforms: { ...committed.platforms, ...live.platforms },
+        exploration: live.exploration ?? committed.exploration,
+        results: fresh.length ? mergeSinglePlatformRetry(
+          committed.results, target, fresh,
+          Object.keys({ ...committed.platforms, ...live.platforms }) as PlatformSlug[],
+        ) : committed.results,
+      },
+      showingStaleSnapshot: fresh.length === 0,
+      liveHint: fresh.length ? `已返回 ${fresh.length} 条，仍在搜索` : "正在搜索，暂时显示上次结果",
+    };
   }
 
   const liveCount = live.results.length;

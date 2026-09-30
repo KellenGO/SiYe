@@ -364,12 +364,22 @@ class SearchJobManager:
         await self.supervisor.start()  # 懒启动闲置回收（幂等）
         return job.to_response()
 
-    async def get_job(self, job_id: str) -> Optional[SearchJobResponse]:
-        if self._active_job and self._active_job.job_id == job_id:
-            return self._active_job.to_response()
-        if self._recent_job and self._recent_job.job_id == job_id:
-            return self._recent_job.to_response()
-        return None
+    async def get_job(self, job_id: str, *, after_revision: Optional[int] = None,
+                      wait_seconds: float = 0) -> Optional[SearchJobResponse]:
+        job = next((j for j in (self._active_job, self._recent_job)
+                    if j is not None and j.job_id == job_id), None)
+        if job is None:
+            return None
+        # Capture the event before comparing the revision so no update can
+        # fall between subscribing and checking. Every subscriber is woken.
+        changed = job.changed
+        finished = job.completed_at is not None and job.hydration_status != "running"
+        if after_revision == job.revision and wait_seconds > 0 and not finished:
+            try:
+                await asyncio.wait_for(changed.wait(), timeout=min(wait_seconds, 15))
+            except asyncio.TimeoutError:
+                pass
+        return job.to_response()
 
     async def get_current(self) -> Optional[SearchJobResponse]:
         if self._active_job:
@@ -404,6 +414,7 @@ class SearchJobManager:
             job.hydration_status = "running"
             job.hydration_task = asyncio.create_task(
                 self._run_hydration(job), name=f"hydrate-{job.job_id}")
+        job.notify_changed()
 
     def _cache_job_results(self, job: "_ActiveJob", *, hydration_update: bool = False) -> None:
         if job.continuation:
@@ -466,6 +477,7 @@ class SearchJobManager:
             if metrics_results:
                 await hydrator.close()
             job.hydration_status = "completed"
+            job.notify_changed()
 
     async def _run_platform(self, job: "_ActiveJob", platform: str) -> None:
         """单平台执行：命中内存结果缓存则直接回放（不启动 worker）。
@@ -1027,6 +1039,7 @@ class SearchJobManager:
                 pass
             finally:
                 job.hydration_status = "completed"
+                job.notify_changed()
 
 
 # ── Active Job ──────────────────────────────────────────────────────────
@@ -1091,6 +1104,13 @@ class _ActiveJob:
         self.page_checkpoints = set()
         self.prior_ids = {p: [] for p in platforms}
         self._final_results: Optional[List[UnifiedSearchResult]] = None
+        self.revision = 0
+        self.changed = asyncio.Event()
+
+    def notify_changed(self) -> None:
+        self.revision += 1
+        self.changed.set()
+        self.changed = asyncio.Event()
 
     def _ms_since(self, start_ts: float) -> int:
         return int((time.perf_counter() - start_ts) * 1000)
@@ -1143,6 +1163,7 @@ class _ActiveJob:
         reason = metrics.get("fallback_reason")
         if isinstance(reason, str) and reason:
             info.fallback_reason = reason[:50]
+        self.notify_changed()
 
     def mark_spawn_start(self, platform: str) -> None:
         self._spawn_start[platform] = time.perf_counter()
@@ -1191,6 +1212,7 @@ class _ActiveJob:
             info.result_count = max(info.result_count, result_count)
         if error_summary:
             info.error_summary = error_summary
+        self.notify_changed()
 
     def add_result(self, platform: str, result: UnifiedSearchResult) -> None:
         if result.content_id in self.prior_ids.get(platform, []):
@@ -1207,6 +1229,7 @@ class _ActiveJob:
             info = self.platforms_state.get(platform)
             if info:
                 info.result_count = len(lst)
+            self.notify_changed()
 
     def is_terminal(self) -> bool:
         return self._compute_overall() in (
@@ -1251,10 +1274,13 @@ class _ActiveJob:
                     record_search_outcome(p, info.status, self.timings.get(p))
         self._final_results = interleave_results(
             self.platform_results, platform_order=self.platforms)
+        self.notify_changed()
 
     def response_results(self) -> List[UnifiedSearchResult]:
         if self._final_results is not None:
             return self._final_results
+        if self.replaces_platforms:
+            return interleave_results(self.platform_results, platform_order=self.platforms)
         if self.continuation and self.exploration:
             return self.exploration.preview(self)
         return interleave_results(self.platform_results, platform_order=self.platforms)
@@ -1273,6 +1299,7 @@ class _ActiveJob:
             for source in representative.grouped_sources or []:
                 if source.platform == result.platform and source.content_id == result.content_id:
                     source.snippet = snippet
+        self.notify_changed()
 
     def update_metrics(self, result: UnifiedSearchResult) -> None:
         """Keep platform tabs, grouped cards and previous exploration batches aligned."""
@@ -1290,6 +1317,7 @@ class _ActiveJob:
             for source in representative.grouped_sources or []:
                 if source.platform == result.platform and source.content_id == result.content_id:
                     source.metrics = dict(result.metrics)
+        self.notify_changed()
 
     def _compute_overall(self, statuses: Optional[List[str]] = None) -> str:
         if self._cancelled:
@@ -1346,7 +1374,7 @@ class _ActiveJob:
                 "completed", "partial", "failed", "cancelled"):
             job_total = self._ms_since(self._start_ts)
         return SearchJobResponse(
-            job_id=self.job_id, overall=overall,
+            job_id=self.job_id, revision=self.revision, overall=overall,
             keyword=self.keyword, created_at=self.created_at,
             completed_at=self.completed_at, total_ms=job_total,
             platforms=pdict, results=all_results,

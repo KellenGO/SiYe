@@ -4,7 +4,7 @@
  * selectSearchPresentation），不复制任何生产判断逻辑。
  *
  * 覆盖：旧快照→无新结果、首条结果立即切换、结果逐轮增长、旧 job 迟到、
- * reset 后迟到、retry 不渐进替换、cancel 有/无部分结果、POST 未接受拒绝。
+ * reset 后迟到、retry 渐进替换、cancel 有/无部分结果、POST 未接受拒绝。
  */
 
 import { test } from "node:test";
@@ -204,9 +204,9 @@ test("渐进: reset 后迟到进度被拒绝", () => {
   assert.equal(after.display.activeJobId, null);
 });
 
-// ── 6. retry 不做渐进替换 ───────────────────────────────────────────────
+// ── 6. retry 只渐进替换目标平台 ─────────────────────────────────────────
 
-test("渐进: 单平台重试不进入渐进全量替换", () => {
+test("渐进: 单平台首条立即显示且保留其他平台", () => {
   const committed = makeJob("job-A", "partial", "词", {
     xhs: { status: "failed", count: 0 },
     douyin: { status: "succeeded", count: 1 },
@@ -218,16 +218,31 @@ test("渐进: 单平台重试不进入渐进全量替换", () => {
   state = step(state, { type: "job_terminal", job: committed });
   state = step(state, { type: "retry_start", platform: "xhs" }, { type: "retry_accepted", jobId: "job-R" });
 
-  // 重试任务的实时进度：reducer 忽略（liveResponse 保持 null）
+  // 正式快照保持不动，展示层先合并新条目。
   const after = step(state, {
     type: "job_progress",
     job: makeJob("job-R", "running", "词", STATUS_RUNNING, [makeResult("xhs", "r1")]),
   });
-  assert.equal(after.display.liveResponse, null);
+  assert.equal(after.display.liveResponse?.job_id, "job-R");
+  assert.equal(after.display.jobResponse, committed);
   const p = selectSearchPresentation(after);
-  // 展示仍是已提交快照，未被渐进替换污染
-  assert.deepEqual(p.jobResponse!.results.map((r) => r.content_id), ["d1"]);
-  assert.equal(p.jobResponse!.overall, "partial");
+  assert.deepEqual(p.jobResponse!.results.map((r) => r.content_id), ["r1", "d1"]);
+  assert.equal(p.jobResponse!.overall, "running");
+  const failed = step(after, { type: "job_terminal", job: makeJob(
+    "job-R", "failed", "词", { ...STATUS_RUNNING, xhs: { status: "failed", count: 1 } },
+    [makeResult("xhs", "r1")],
+  ) });
+  assert.deepEqual(failed.display.jobResponse!.results.map((r) => r.content_id), ["r1", "d1"]);
+});
+
+test("渐进: 平台已经终态但清理未完时仍显示首条", () => {
+  const state = startFull(initState(), "词", "job-A");
+  const after = step(state, { type: "job_progress", job: makeJob(
+    "job-A", "completed", "词", STATUS_RUNNING, [makeResult("xhs", "first")],
+    { completed_at: null },
+  ) });
+  assert.equal(selectSearchPresentation(after).jobResponse!.results[0].content_id, "first");
+  assert.equal(after.display.appliedJobIds.size, 0);
 });
 
 // ── 7/8. 取消语义 ───────────────────────────────────────────────────────
