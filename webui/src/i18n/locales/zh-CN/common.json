@@ -40,6 +40,7 @@
     "addVersions": "全部加入空间",
     "added": "已加入",
     "removeMaterial": "移出空间",
+    "removeVersions": "全部移出空间",
     "loading": "正在加载…",
     "loadFailed": "空间暂时无法加载",
     "retry": "重试",

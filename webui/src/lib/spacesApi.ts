@@ -39,7 +39,7 @@ export async function activateSpace(id: number | null): Promise<void> { await ax
 export async function archiveSpace(id: number, archived: boolean): Promise<SpaceDetail> { return (await axios.put(`${BASE}/${id}/archive`, { archived })).data; }
 export async function deleteSpace(id: number): Promise<void> { await axios.delete(`${BASE}/${id}`); }
 export async function addSpaceItems(id: number, result: UnifiedSearchResult): Promise<{ added: number }> { return (await axios.post(`${BASE}/${id}/items`, { results: spaceSources(result) })).data; }
-export async function removeSpaceItem(id: number, result: UnifiedSearchResult): Promise<void> { await axios.delete(`${BASE}/${id}/items`, { data: { keys: [{ platform: result.platform, content_id: result.content_id }] } }); }
+export async function removeSpaceItem(id: number, result: UnifiedSearchResult): Promise<void> { await axios.delete(`${BASE}/${id}/items`, { data: { keys: spaceSources(result).map((source) => ({ platform: source.platform, content_id: source.content_id })) } }); }
 export async function saveSpaceNote(id: number, document: NoteDocument, revision: number): Promise<{ note_revision: number }> {
   return (await axios.put(`${BASE}/${id}/note`, { document, format_version: 1, revision })).data;
 }

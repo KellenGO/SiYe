@@ -43,6 +43,8 @@ def main():
     group = {**sources[0], "grouped_sources": [sources[0], sources[3]]}
     job = {"job_id": "spaces-smoke", "overall": "completed", "keyword": "苏州攻略", "created_at": now, "completed_at": now, "hydration_status": "completed", "results": [group, sources[1], sources[2]], "platforms": {platform: {"status": "succeeded", "result_count": 1, "error_summary": None} for platform in platforms}}
     fail_notes = False
+    fail_items = False
+    item_deletes = []
     errors = []
     (ROOT / "build").mkdir(exist_ok=True)
     try:
@@ -62,6 +64,11 @@ def main():
                 if not request.url.startswith(origin + "/"):
                     route.abort()
                 elif path.startswith(("/api/spaces", "/api/library")):
+                    if path.endswith("/items") and request.method == "DELETE":
+                        item_deletes.append(json.loads(request.post_data))
+                        if fail_items:
+                            route.fulfill(status=503, json={"detail": "测试移出失败，请重试"})
+                            return
                     if fail_notes and path.endswith("/note"):
                         route.fulfill(status=503, json={"detail": "测试保存失败，草稿已保留"})
                         return
@@ -137,9 +144,68 @@ def main():
             page.get_by_role("button", name="全部加入空间：苏州攻略0", exact=True).click()
             page.get_by_role("button", name="加入空间：苏州攻略1", exact=True).click()
             page.get_by_role("button", name="加入空间：苏州攻略2", exact=True).click()
-            expect(page.get_by_role("button", name="已加入：苏州攻略2", exact=True)).to_be_disabled()
+            single_remove = page.get_by_role("button", name="移出空间：苏州攻略2", exact=True)
+            expect(single_remove).to_be_enabled()
+            expect(single_remove).to_have_attribute("aria-pressed", "true")
+            expect(single_remove).to_have_text("")
+            assert single_remove.locator("svg").count() == 1
             assert store.get_space(1)["item_count"] == 4
             assert library.stats()["total"] == 0
+            # Clicking an added grouped card removes every displayed source in one request.
+            grouped_remove = page.get_by_role("button", name="全部移出空间：苏州攻略0", exact=True)
+            expect(grouped_remove).to_have_attribute("aria-pressed", "true")
+            expect(grouped_remove).to_have_text("")
+            grouped_remove.evaluate("el => { el.click(); el.click(); }")
+            grouped_add = page.get_by_role("button", name="全部加入空间：苏州攻略0", exact=True)
+            expect(grouped_add).to_be_enabled()
+            expect(grouped_add).to_have_attribute("aria-pressed", "false")
+            assert store.get_space(1)["item_count"] == 2
+            assert len(item_deletes) == 1
+            assert {key["platform"] for key in item_deletes[0]["keys"]} == {"xhs", "zhihu"}
+            grouped_add.click()
+            expect(grouped_remove).to_be_enabled()
+            assert store.get_space(1)["item_count"] == 4
+
+            # A failed removal stays selected and can retry; list view uses the same toggle.
+            fail_items = True
+            single_remove.click()
+            expect(page.get_by_text("测试移出失败，请重试", exact=True)).to_be_visible()
+            expect(single_remove).to_be_enabled()
+            expect(single_remove).to_have_attribute("aria-pressed", "true")
+            assert store.get_space(1)["item_count"] == 4
+            fail_items = False
+            single_remove.click()
+            single_add = page.get_by_role("button", name="加入空间：苏州攻略2", exact=True)
+            expect(single_add).to_be_enabled()
+            assert store.get_space(1)["item_count"] == 3
+            page.get_by_role("button", name="列表", exact=True).click()
+            expect(single_add).to_have_text("")
+            single_add.click()
+            expect(single_remove).to_be_enabled()
+            single_remove.click()
+            expect(single_add).to_be_enabled()
+            single_add.click()
+            expect(single_remove).to_be_enabled()
+            assert store.get_space(1)["item_count"] == 4
+            page.get_by_role("button", name="网格", exact=True).click()
+
+            # A source-level toggle removes only that source; the grouped button fills the gap.
+            page.get_by_role("button", name="查看内容信息：苏州攻略0", exact=True).click()
+            source_drawer = page.get_by_role("dialog", name="内容信息", exact=True)
+            source_remove = source_drawer.get_by_role("button", name="移出空间：苏州攻略3", exact=True)
+            expect(source_remove).to_have_text("")
+            source_remove.click()
+            expect(source_drawer.get_by_role("button", name="加入空间：苏州攻略3", exact=True)).to_be_enabled()
+            assert store.get_space(1)["item_count"] == 3
+            assert {item["result"]["platform"] for item in store.get_space(1)["items"]} == {"xhs", "douyin", "bilibili"}
+            source_drawer.get_by_role("button", name="关闭内容详情", exact=True).click()
+            expect(grouped_add).to_be_enabled()
+            expect(grouped_add).to_have_attribute("aria-pressed", "false")
+            grouped_add.click()
+            expect(grouped_remove).to_be_enabled()
+            assert store.get_space(1)["item_count"] == 4
+            assert library.stats()["total"] == 0
+
             right.get_by_role("button", name="打开笔记", exact=True).hover()
             expect(right.locator(".space-edge-surface")).to_be_visible()
             page.mouse.move(720, 90)
@@ -253,6 +319,7 @@ def main():
             page.get_by_role("link", name="查看资料", exact=True).click()
             expect(page.get_by_role("heading", name="苏州旅游攻略", exact=True).first).to_be_visible()
             expect(page.locator(".local-content-card")).to_have_count(4)
+            assert page.locator(".content-card-actions button[aria-label^=\"移出空间：\"]").all_text_contents() == ["", "", "", ""]
             assert page.get_by_role("button", name="导出 / 复制", exact=True).count() == 0
             expect(page.get_by_role("textbox", name="空间笔记编辑器", exact=True)).to_contain_text("失败保留测试")
             page.screenshot(path=str(ROOT / "build/spaces-desktop.png"), full_page=True)
@@ -341,7 +408,7 @@ def main():
             assert store.get_space(1)["item_count"] == 3
             assert not errors, errors
             browser.close()
-            print("PASS: spaces UI lifecycle, grouped sources, rich note persistence, retry, detail editor, mobile and independent drafts")
+            print("PASS: spaces UI lifecycle, icon-only add/remove toggles, grouped and individual sources, failure retry, rich note persistence, retry, detail editor, mobile and independent drafts")
     finally:
         server.shutdown()
 

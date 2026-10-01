@@ -40,6 +40,7 @@
     "addVersions": "Add all versions",
     "added": "Added",
     "removeMaterial": "Remove from space",
+    "removeVersions": "Remove all versions from space",
     "loading": "Loading…",
     "loadFailed": "Unable to load space",
     "retry": "Retry",

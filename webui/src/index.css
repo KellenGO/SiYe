@@ -563,10 +563,8 @@ body {
 .space-note-error { padding: 10px 16px; max-height: 220px; overflow: auto; font-size: 12px; color: var(--siye-red); }
 .space-note-conflict pre { white-space: pre-wrap; color: var(--siye-ink); }
 .space-add.is-added { color: var(--siye-green); }
-.content-card-actions .space-add, .row-actions > .space-add { width: auto; padding: 5px 7px; gap: 4px; }
-.space-add span { font-size: 11px; }
 .space-detail-actions { display: flex; flex-wrap: wrap; margin: 14px 0; gap: 10px; }
-.space-detail-actions button { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border: 1px solid var(--siye-line); border-radius: 8px; font-size: 12px; }
+.space-detail-actions button { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 1px solid var(--siye-line); border-radius: 6px; }
 .space-detail-actions svg { width: 17px; height: 17px; }
 .space-info-card label { display: grid; gap: 8px; margin: 18px 0; font-size: 13px; }
 .space-info-card textarea { width: 100%; resize: vertical; }
@@ -619,6 +617,7 @@ body {
   .spaces-page .page-heading { flex-direction: column; gap: 16px; }
   .space-note-toolbar button { width: 36px; height: 40px; }
   .space-note-toolbar select { height: 40px; }
+  .space-detail-actions button { width: 44px; height: 44px; }
 }
 
 .app-page-enter { animation: app-page-enter .18s ease-out backwards; }

@@ -51,7 +51,7 @@ export function SpacesPage({ spaceId }: { spaceId: number | null }) {
             try { await removeSpaceItem(space.id, result); await spaces.refresh(); }
             catch (error) { toast.error(spaceError(error)); }
             finally { setRemoving(false); }
-          }}><Trash2 aria-hidden="true" /><span>{t("spaces.removeMaterial")}</span></button> : undefined} />
+          }}><Trash2 aria-hidden="true" /></button> : undefined} />
         </SpaceWorkspace>
       </>}
     </>}
