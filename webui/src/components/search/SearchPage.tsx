@@ -275,7 +275,8 @@ export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateA
       {/* 带着结果回到首页时的回程入口：结果没有被清掉，点这里回去。 */}
       {isHome && displayJobResponse && (
         <div className="home-back-row">
-          <button type="button" className="btn ghost small" onClick={showLastResults}>
+          <button type="button" className="home-last-search" onClick={showLastResults}>
+            <Clock3 aria-hidden="true" />
             {t("search.viewLastSearch", { count: displayJobResponse.results.length })}
           </button>
         </div>
