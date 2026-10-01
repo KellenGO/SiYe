@@ -928,11 +928,10 @@ html.dark .search-submit { color: #101525; }
 .remote-folder-meta .pd { width: 6px; height: 6px; }
 .remote-all-section { margin-top: 38px; padding-top: 22px; border-top: 1px solid var(--siye-line); }
 .remote-folder-detail { margin-top: 26px; }
-.remote-folder-back { display: inline-flex; align-items: center; justify-content: center; gap: 8px; flex: none; min-height: 44px; padding: 10px 16px; border: 1px solid color-mix(in srgb, var(--siye-brand) 35%, var(--siye-line)); border-radius: 10px; background: var(--siye-brand-soft); color: var(--siye-brand-ink); font-size: 14px; font-weight: 600; white-space: nowrap; }
-.remote-folder-back { margin-bottom: 18px; }
-.remote-folder-back svg { width: 18px; height: 18px; flex: none; }
-.remote-folder-back:hover { border-color: var(--siye-brand); background: color-mix(in srgb, var(--siye-brand) 12%, var(--siye-brand-soft)); }
-.remote-folder-back:focus-visible { outline: 2px solid var(--siye-brand); outline-offset: 3px; }
+.remote-folder-back { display: inline-flex; align-items: center; gap: 6px; flex: none; min-height: 40px; margin-bottom: 18px; padding: 6px 0; border: 0; background: none; color: var(--siye-brand-ink); font-size: 13px; font-weight: 600; white-space: nowrap; }
+.remote-folder-back svg { width: 16px; height: 16px; flex: none; }
+.remote-folder-back:hover { text-decoration: underline; text-underline-offset: 4px; }
+.remote-folder-back:focus-visible { outline: 2px solid var(--siye-brand); outline-offset: 3px; border-radius: 3px; }
 @media (max-width: 620px) { .remote-folder-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 30px 12px; } .remote-folder-intro, .remote-folder-title { align-items: flex-start; flex-direction: column; gap: 8px; } }
 .remote-heading { align-items: center; margin-bottom: 0 !important; }
 .remote-heading h2 { margin: 0; color: var(--siye-ink); font-size: 18px; font-weight: 600; }
