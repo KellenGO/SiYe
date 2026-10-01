@@ -594,9 +594,17 @@ body {
 .space-empty > svg { width: 40px; height: 40px; margin: 0 auto 20px; color: var(--siye-brand); stroke-width: 1.3; }
 .space-empty h2 { font-size: 20px; color: var(--siye-ink); margin-bottom: 10px; }
 .space-empty p { font-size: 13px; }
-.spaces-page:has(.has-note) { width: min(1480px, calc(100% - 64px)); }
-.spaces-page .space-workspace.has-note { width: 100%; padding: 0; }
-.spaces-page .space-note-toggle { width: 100%; }
+.spaces-page.is-detail { width: min(1280px, calc(100% - 64px)); }
+.spaces-page .page-heading > div:first-child { min-width: 0; }
+.spaces-page .page-heading h1 { overflow-wrap: anywhere; }
+.spaces-page .space-page-actions { flex-shrink: 0; max-width: 50%; }
+.spaces-page .space-page-actions .space-note-toggle { width: auto; margin: 0; }
+.spaces-page .space-workspace.has-note { width: 100%; padding: 0; grid-template-columns: minmax(0, 1fr) clamp(304px, 28vw, 360px); gap: 28px; }
+.spaces-page .space-workspace-main > .results-block { margin-top: 0; }
+@media (min-width: 1001px) {
+  .spaces-page .space-workspace > .space-note-slot { top: 24px; }
+  .spaces-page .space-workspace > .space-note-slot .space-note-panel { height: clamp(360px, calc(100dvh - 336px), 640px); }
+}
 .local-content-drawer.with-research-note { width: min(1040px, 100%); display: flex; flex-direction: column; overflow: hidden; }
 .local-content-research-layout { display: grid; grid-template-columns: minmax(0, 1fr) 380px; flex: 1; min-height: 0; }
 .local-content-research-layout > .local-content-drawer-body { overflow: auto; }
@@ -612,12 +620,14 @@ body {
   .local-content-research-layout { display: block; overflow: auto; }
   .local-content-research-layout > .space-note-slot { height: 550px; border-top: 1px solid var(--siye-line); }
   .space-page-actions { justify-content: flex-start; }
+  .spaces-page .page-heading { flex-direction: column; gap: 16px; }
+  .spaces-page .space-page-actions { max-width: 100%; }
 }
 @media (max-width: 600px) {
   .space-search-bar, .space-note-toggle { width: calc(100% - 32px); }
   .space-search-bar select { max-width: 190px; }
   .space-search-hint { display: none; }
-  .spaces-page:has(.has-note) { width: calc(100% - 40px); }
+  .spaces-page.is-detail { width: calc(100% - 40px); }
   .spaces-page .page-heading { flex-direction: column; gap: 16px; }
   .space-note-toolbar button { width: 36px; height: 40px; }
   .space-note-toolbar select { height: 40px; }

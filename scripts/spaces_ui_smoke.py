@@ -350,6 +350,31 @@ def main():
             assert "空间内部补充" in json.dumps(store.get_space(1)["note_document"], ensure_ascii=False)
             page.get_by_role("link", name="查看资料", exact=True).click()
             expect(page.locator(".spaces-page")).to_be_visible()
+            space_page = page.locator(".spaces-page")
+            heading = space_page.locator(".page-heading")
+            note = page.get_by_role("textbox", name="空间笔记编辑器", exact=True)
+            note.evaluate("el => { window.spaceDetailEditor = el; }")
+            for width, height in ((1440, 1000), (1280, 800), (1024, 768)):
+                page.set_viewport_size({"width": width, "height": height})
+                page.evaluate("window.scrollTo(0, 0)")
+                page.wait_for_timeout(250)
+                before = heading.bounding_box()
+                note_bounds = page.locator(".space-note-panel").bounding_box()
+                material_bounds = space_page.locator(".results-block").bounding_box()
+                assert abs(note_bounds["y"] - material_bounds["y"]) < 1
+                assert 304 <= note_bounds["width"] <= 360
+                assert note_bounds["x"] >= material_bounds["x"] + material_bounds["width"] + 27
+                assert note_bounds["y"] + note_bounds["height"] <= height - 16, (width, height, before, note_bounds)
+                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+                heading.get_by_role("button", name="收起笔记", exact=True).click()
+                expect(note).to_have_count(0)
+                assert heading.bounding_box() == before
+                heading.get_by_role("button", name="打开笔记", exact=True).click()
+                expect(note).to_contain_text("空间内部补充")
+                assert heading.bounding_box() == before
+                assert note.evaluate("el => el === window.spaceDetailEditor")
+                page.screenshot(path=str(ROOT / f"build/spaces-layout-{width}.png"), full_page=True)
+            page.set_viewport_size({"width": 1440, "height": 1000})
             page.screenshot(path=str(ROOT / "build/spaces-desktop.png"), full_page=True)
             note = page.get_by_role("textbox", name="空间笔记编辑器", exact=True)
             note.press("Control+End")

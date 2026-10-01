@@ -7,7 +7,7 @@ import { SpaceInfoDialog } from "./SpaceInfoDialog";
 import { WorkspaceContext } from "./WorkspaceContext";
 const SpaceNoteController = lazy(() => import("./SpaceNoteController"));
 
-export function SpaceWorkspace({ spaceId, selector = false, active = true, children }: { spaceId: number | null; selector?: boolean; active?: boolean; children: ReactNode }) {
+export function SpaceWorkspace({ spaceId, selector = false, active = true, renderHeading, children }: { spaceId: number | null; selector?: boolean; active?: boolean; renderHeading?: (noteToggle: ReactNode) => ReactNode; children: ReactNode }) {
   const { t } = useTranslation();
   const spaces = useSpaces();
   const detail = useSpaceDetail(spaceId);
@@ -24,6 +24,7 @@ export function SpaceWorkspace({ spaceId, selector = false, active = true, child
   const closeNotes = useCallback(() => changeNotes(false), [changeNotes]);
   const hasNote = Boolean(active && spaceId && detail.data && open);
   const noteSlot = hasNote ? <div className="space-note-slot" ref={setDrawerHost} /> : null;
+  const noteToggle = !selector && spaceId ? <div className="space-note-toggle"><button type="button" className="btn small" aria-expanded={open} disabled={!detail.data} onClick={() => { setNotesVisited(true); setOpen(!open); }}><NotebookPen aria-hidden="true" />{t(open ? "spaces.hideNote" : "spaces.openNote")}</button>{detail.isError && <span role="alert">{t("spaces.loadFailed")}<button type="button" className="text-link" onClick={() => void detail.refetch()}>{t("spaces.retry")}</button></span>}</div> : null;
   return <WorkspaceContext.Provider value={{ setDetailOpen, hasNote, noteSlot }}>
     {active && spaceId && (open || notesVisited) && <Suspense fallback={null}><SpaceNoteController spaceId={spaceId} open={open} onClose={closeNotes} target={detailOpen ? drawerHost : inlineHost} /></Suspense>}
     {selector && <>
@@ -42,7 +43,7 @@ export function SpaceWorkspace({ spaceId, selector = false, active = true, child
       </SpaceEdgePanel>}
       {detail.isError && <p className="space-note-toggle" role="alert">{t("spaces.loadFailed")}<button type="button" className="text-link" onClick={() => void detail.refetch()}>{t("spaces.retry")}</button></p>}
     </>}
-    {!selector && spaceId && <div className="space-note-toggle"><button type="button" className="btn small" aria-expanded={open} disabled={!detail.data} onClick={() => { setNotesVisited(true); setOpen(!open); }}><NotebookPen aria-hidden="true" />{t(open ? "spaces.hideNote" : "spaces.openNote")}</button>{detail.isError && <span role="alert">{t("spaces.loadFailed")}<button type="button" className="text-link" onClick={() => void detail.refetch()}>{t("spaces.retry")}</button></span>}</div>}
+    {renderHeading ? renderHeading(noteToggle) : noteToggle}
     <div className={`space-workspace ${hasNote && !selector ? "has-note" : ""}`}><div className="space-workspace-main">{children}</div>{!selector && !detailOpen && hasNote && <div className="space-note-slot" ref={setInlineHost} />}</div>
     {active && creating && <SpaceInfoDialog onClose={() => setCreating(false)} />}
   </WorkspaceContext.Provider>;
