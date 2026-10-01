@@ -1285,8 +1285,8 @@ class _ActiveJob:
             return self.exploration.preview(self)
         return interleave_results(self.platform_results, platform_order=self.platforms)
 
-    def update_snippet(self, result: UnifiedSearchResult, snippet: str) -> None:
-        """Update text in place without rebuilding/deduplicating the order."""
+    def update_snippet(self, result: UnifiedSearchResult, snippet: Optional[str]) -> None:
+        """Update detail fields in place without rebuilding/deduplicating the order."""
         result.snippet = snippet
         copies = list(self._final_results or []) + self.platform_results.get(result.platform, [])
         if self.exploration:
@@ -1296,9 +1296,11 @@ class _ActiveJob:
         for representative in copies:
             if representative.platform == result.platform and representative.content_id == result.content_id:
                 representative.snippet = snippet
+                representative.duration_seconds = result.duration_seconds
             for source in representative.grouped_sources or []:
                 if source.platform == result.platform and source.content_id == result.content_id:
                     source.snippet = snippet
+                    source.duration_seconds = result.duration_seconds
         self.notify_changed()
 
     def update_metrics(self, result: UnifiedSearchResult) -> None:

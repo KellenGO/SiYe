@@ -8,7 +8,6 @@
 
 | 任务 ID | 负责人 / 会话 | worktree / 分支 / 起始 HEAD | 修改范围 | 状态 / 下一步 |
 |---|---|---|---|---|
-| XHS-VIDEO-DURATION-FOLLOWUP-20261001 | Codex / 当前会话 | 主工作区 / master / 5c2aca2 | `aggregate_search/adapters/xhs.py`、`tests/test_content_duration.py`；后续按证据更新功能 wiki 与 `CHANGELOG.md` | 阻塞：2026-10-01 源码 worker 诊断返回 `login_required`，未取得搜索响应或脱敏结构；现有时长 / 小红书轻量搜索 / 请求契约 85 项通过。需在源码运行的账号页重新登录，再以 `SIYE_XHS_DURATION_DIAG=1` 重搜后读取 `build/xhs-duration-shape-*.jsonl`。本次仅更新此登记，无未提交代码；不得凭视频类型猜时长或增加详情请求 |
 
 ## 待接手事项
 

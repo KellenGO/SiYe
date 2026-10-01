@@ -16,6 +16,7 @@ from typing import Dict, Optional
 from urllib.parse import parse_qs, urlsplit
 
 from aggregate_search.hydration import hydrate_results, metric_candidates
+from aggregate_search.adapters.xhs import XhsAdapter
 from aggregate_search.models import UnifiedSearchResult, clean_snippet
 from .accounts import ensure_session_snapshot, get_session_snapshot
 
@@ -347,6 +348,21 @@ class ResultHydrator:
         else:
             response_keys = [f"<payload:{type(detail).__name__}>"]
         snippet = extract_xhs_snippet(detail)
+        if result.content_type == "video" and result.duration_seconds is None and isinstance(detail, dict):
+            candidates = [detail, detail.get("note_card"), detail.get("note")]
+            data = detail.get("data")
+            if isinstance(data, dict):
+                candidates.append(data)
+                items = data.get("items")
+                if isinstance(items, list) and items and isinstance(items[0], dict):
+                    candidates.append(items[0].get("note_card"))
+            adapter = XhsAdapter()
+            for candidate in candidates:
+                if isinstance(candidate, dict):
+                    duration = adapter._extract_duration(candidate)
+                    if duration is not None:
+                        result.duration_seconds = duration
+                        break
         logger.debug(
             diagnostic_prefix + " client_created=true request_started=true "
             "request_status=success http_status=%s business_code=%s "

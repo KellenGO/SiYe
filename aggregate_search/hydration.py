@@ -62,7 +62,7 @@ def hydration_candidates(
 @dataclass(frozen=True)
 class HydrationUpdate:
     result: UnifiedSearchResult
-    snippet: str
+    snippet: Optional[str]
 
 
 async def hydrate_results(
@@ -87,6 +87,7 @@ async def hydrate_results(
             if cancel_event is not None and cancel_event.is_set():
                 return None
             try:
+                previous_duration = result.duration_seconds
                 value = await asyncio.wait_for(fetch_snippet(result), timeout=timeout)
             except asyncio.CancelledError:
                 raise
@@ -96,6 +97,8 @@ async def hydrate_results(
                 return None
             snippet = clean_snippet(value)
             if not snippet:
+                if result.duration_seconds != previous_duration:
+                    return HydrationUpdate(result=result, snippet=result.snippet)
                 return None
             result.snippet = snippet
             return HydrationUpdate(result=result, snippet=snippet)

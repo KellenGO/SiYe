@@ -63,6 +63,64 @@ class _TestXhsHydrator(ResultHydrator):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("shape", ["direct", "card", "nested"])
+@pytest.mark.parametrize("description", [None, "Detailed video description"])
+async def test_xhs_reuses_description_request_for_duration(monkeypatch, shape, description):
+    detail = {"video": {"capa": {"duration": 146}}, "desc": description}
+    if shape == "card":
+        detail = {"note_card": detail}
+    elif shape == "nested":
+        detail = {"data": {"items": [{"note_card": detail}]}}
+    client = _FakeXhsDetailClient(detail)
+    monkeypatch.setattr("api.services.result_hydration.get_session_snapshot", lambda _: {})
+    video = UnifiedSearchResult(
+        platform="xhs", content_id="n1", content_type="video", title="Video",
+        url="https://www.xiaohongshu.com/explore/n1?xsec_token=tok",
+    )
+    updates = await hydrate_results([video], _TestXhsHydrator(client).fetch_snippet)
+    assert video.duration_seconds == 146
+    assert video.snippet == description
+    assert len(updates) == 1
+    assert client.calls == [("n1", "pc_search", "tok")]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind, existing", [("note", None), ("video", 94)])
+async def test_xhs_detail_duration_preserves_content_type_and_existing_value(monkeypatch, kind, existing):
+    client = _FakeXhsDetailClient({"video": {"capa": {"duration": 146}}})
+    monkeypatch.setattr("api.services.result_hydration.get_session_snapshot", lambda _: {})
+    item = UnifiedSearchResult(
+        platform="xhs", content_id="n1", content_type=kind, title="Content",
+        duration_seconds=existing,
+        url="https://www.xiaohongshu.com/explore/n1?xsec_token=tok",
+    )
+    assert await hydrate_results([item], _TestXhsHydrator(client).fetch_snippet) == []
+    assert item.duration_seconds == existing
+
+
+def test_hydrated_duration_reaches_grouped_sources_and_platform_results():
+    from api.services.search_job_manager import _ActiveJob
+    from aggregate_search.models import GroupedSource
+
+    video = UnifiedSearchResult(
+        platform="xhs", content_id="n1", content_type="video", title="Video",
+        url="https://example.test/video",
+    )
+    job = _ActiveJob("duration-job", "test", ["xhs"], 20)
+    job.add_result("xhs", video.model_copy(deep=True))
+    grouped = video.model_copy(deep=True)
+    grouped.grouped_sources = [GroupedSource.from_result(video)]
+    job._final_results = [grouped]
+    revision = job.revision
+    video.duration_seconds = 146
+    job.update_snippet(video, None)
+    assert job.platform_results["xhs"][0].duration_seconds == 146
+    assert grouped.duration_seconds == 146
+    assert grouped.grouped_sources[0].duration_seconds == 146
+    assert job.revision > revision
+
+
+@pytest.mark.asyncio
 async def test_xhs_hydration_passes_existing_token_and_updates_snippet(monkeypatch):
     client = _FakeXhsDetailClient({"note_card": {"desc": "详情正文简介"}})
     monkeypatch.setattr(
