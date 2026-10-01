@@ -1,0 +1,47 @@
+# 研究空间
+
+## 一句话
+
+围绕一个研究主题，一键收集四个平台的搜索资料，并在旁边写备忘录式总笔记；研究结束后可以归档保留或主动丢弃。
+
+## 代码入口
+
+| 职责 | 位置 |
+|---|---|
+| 独立本地存储与公开资料快照 | `api/services/spaces_store.py`（`SpacesStore`、`public_snapshot`） |
+| 富文本文档校验 | `api/services/space_notes.py`（`validate_note`） |
+| 请求模型与路由 | `api/schemas/spaces.py`、`api/routers/spaces.py`（`spaces_router`） |
+| 页面导航与入口 | `webui/src/App.tsx`（`routeFromHash`）、`webui/src/components/layout/Header.tsx` |
+| API 与共享空间状态 | `webui/src/lib/spacesApi.ts`、`webui/src/hooks/useSpaces.tsx`（`SpacesProvider`） |
+| 笔记保存队列 | `webui/src/lib/spaceNotes.ts`（`NoteSession`） |
+| 空间列表、资料与信息编辑 | `webui/src/components/spaces/SpacesPage.tsx`、`webui/src/components/spaces/SpaceInfoDialog.tsx` |
+| 搜索一键加入与笔记布局 | `webui/src/components/spaces/SpaceAddButton.tsx`、`webui/src/components/spaces/SpaceWorkspace.tsx` |
+| 富文本笔记与详情共用编辑器 | `webui/src/components/spaces/SpaceNoteController.tsx`、`webui/src/components/spaces/WorkspaceContext.tsx`、`webui/src/components/favorites/LocalContentDrawer.tsx` |
+
+## 关键决定
+
+- 用户可以保存多个空间，一次启用一个；新建立即启用，搜索页可切换或停止收集。当前目标跟随本机数据库跨刷新和重启恢复，浏览其他空间不会自动启用它。搜索关键词与空间名不绑定，同一个研究可以多次换关键词。
+- 空间资料与收藏分别保存快照。加入空间不自动收藏；取消收藏不影响研究资料；丢弃空间不影响收藏或其他空间。取舍见[空间与收藏独立、笔记使用结构化文档](../decisions/2026-10-01-研究空间与富文本笔记.md)。
+- 合并搜索卡片一键加入当前显示的全部平台版本，切到单个平台或详情中的某一来源只加入对应版本。每个空间按平台与内容 ID 去重；重复加入不刷新资料、不改变首次加入时间。空间中各来源独立显示，以便比较。
+- 进行中空间允许改名、改简介、移出资料与记笔记；默认按加入时间倒序。平台和关键词筛选、列表／网格、每批 100 条的显示更多复用现有内容体验。空间的浏览方式偏好独立于搜索和收藏。
+- 归档停止收集，资料与笔记变为只读；继续研究恢复并启用。丢弃需要二次确认，并明确删除该空间的资料与笔记；默认焦点在取消，已保存收藏保持原状。没有到期自动删除。
+- 每个空间只有一份总笔记。支持加粗、斜体、下划线、七档字号、三级标题、项目与编号列表、勾选清单、撤销和重做；本地保存字体格式及勾选状态。没有附件、表格或云端服务。文本复制粘贴保留受支持格式，未支持字号会去掉样式保留文字。
+- 搜索页笔记默认收起，空间详情默认展开。编辑器按需加载；同一个编辑器 DOM 在页面与详情面板之间移动，保留正文、光标和撤销历史。窄屏改成遮罩编辑面板，支持焦点循环、Escape 与外部点击关闭。
+- 停止输入约 600 毫秒后自动保存，保存状态以服务端成功响应为准。中文输入法组词期间暂不安排新的定时保存，组词结束再保存。切换空间、归档和导航离开前提交最新草稿；失败时保留本会话草稿并提示重试，关闭窗口前有未保存内容则提醒。
+- 每个空间的保存请求串行执行；输入过程中返回的旧响应不替换当前正文。保存版本冲突不静默覆盖，可查看服务端最新文本，明确确认后再用本地草稿替换；不会自动合并格式或内容。
+
+## 已知坑 / 边界
+
+- 仅搜索结果及其详情提供加入入口。没有逐条资料备注、已看完状态、批量整理、离线下载、AI 总结或独立笔记窗口；查看全文和视频仍需打开原平台。
+- 名称最多 60 字、简介 200 字，每空间最多 500 条资料；总笔记正文最多 50000 字，格式数据最多 2 MB。超限整次拒绝并明确提示，不静默截断或滚动淘汰。资料批次中有非法内容时整批拒绝，不留部分成功的半成品。
+- Markdown／PDF 导出、空间备份导入尚未提供；现有收藏备份只包含收藏，不包含空间。备份整个本机数据库时空间跟随保留。
+- 未保存草稿只在当前应用会话保留，进程被强制终止或浏览器崩溃前尚未落库的输入不能保证恢复。跨页面的冲突比对以文字显示，不提供完整格式差异。
+- 搜索快照不会追加平台请求。封面和原文链接仍受源站有效性影响，保存空间并不等于下载或缓存源站内容。
+- 现有收藏、历史的删除规则保持原样；空间独立表没有参加旧收藏导入、导出或历史清理。
+
+## 测试怎么跑
+
+- 后端：`tests/test_spaces.py`；收藏独立性回归同时运行 `tests/test_library_store.py`、`tests/test_library_api.py` 和 `tests/test_watch_history_store.py`。使用每次新建的项目内 `--basetemp` 子目录，先创建父目录。
+- 前端：在 `webui` 运行 `npm run test:search`（包含 `webui/tests/spaceNotes.test.ts`、内容浏览偏好测试）和 `npm run build`。
+- 界面：构建后运行 `.venv/Scripts/python.exe scripts/spaces_ui_smoke.py`。模拟搜索和临时 SQLite，不访问真实平台；覆盖四平台加入、格式重启恢复、勾选清单、失败重试、详情旁笔记、窄屏与键盘、归档／恢复、独立空间与丢弃。截图输出到忽略的 `build/`。
+- 文档与翻译：`tests/test_docs_wiki.py`、`tests/test_webui_ui_contract.py`。

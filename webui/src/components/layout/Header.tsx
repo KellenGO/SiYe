@@ -24,7 +24,7 @@ import { useSlidingIndicator } from '@/hooks/useSlidingIndicator'
 
 const PLATFORM_ORDER = PLATFORM_SLUGS
 
-export type ViewMode = 'search' | 'favorites' | 'history' | 'accounts' | 'help'
+export type ViewMode = 'search' | 'favorites' | 'history' | 'accounts' | 'help' | 'spaces'
 export type SettingsSection = 'search' | 'accounts' | 'appearance'
 
 interface HeaderProps {
@@ -210,6 +210,7 @@ export function Header({ viewMode, settingsSection, onNavigate }: HeaderProps) {
   const navItems: { key: ViewMode; label: string; section?: SettingsSection }[] = [
     { key: 'search', label: '首页' },
     { key: 'favorites', label: '收藏' },
+    { key: 'spaces', label: t('spaces.title') },
     { key: 'history', label: '历史' },
     { key: 'accounts', label: '设置', section: 'search' },
   ]

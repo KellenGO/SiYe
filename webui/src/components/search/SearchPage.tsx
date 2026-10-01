@@ -4,6 +4,9 @@ import { AlertTriangle, ArrowLeft, Clock3, RotateCcw, Loader2, UserCog, RefreshC
 import { SearchBar } from "./SearchBar";
 import { PlatformStatus } from "./PlatformStatus";
 import { ResultTabs } from "./ResultTabs";
+import { useSpaces } from "@/hooks/useSpaces";
+import { SpaceWorkspace } from "@/components/spaces/SpaceWorkspace";
+import { SpaceAddButton } from "@/components/spaces/SpaceAddButton";
 import { TrendingBoard } from "@/components/trending/TrendingBoard";
 import { useSearchExperience } from "@/hooks/useSearchExperience";
 import { usePlatformLimits } from "@/hooks/usePlatformLimits";
@@ -46,6 +49,7 @@ const FAILURE_REASON_KEYS: Record<string, string> = {
 export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateAccounts }: SearchPageProps) {
   const { t } = useTranslation();
   const library = useBookmarks();
+  const spaces = useSpaces();
   const homePreferences = useHomePreferencesStore();
   // 每个平台独立搜索数量（展示用；搜索请求由 useSearchExperience 读取）。
   const { limits } = usePlatformLimits();
@@ -231,6 +235,7 @@ export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateA
   const showLastResults = useCallback(() => setView("results"), []);
 
   return (
+    <SpaceWorkspace spaceId={spaces.activeId} selector>
     <div className={isHome ? `home ${homePreferences.mode === "min" ? "minimal" : ""}` : "preview-container search-shell"}>
       {isHome && <div className="hero"><div className="wordmark" aria-label="四野"><b>四野</b><svg className="swoosh" viewBox="0 0 120 12" aria-hidden="true"><defs><linearGradient id="wordmark-gradient"><stop stopColor="#6677fb"/><stop offset="1" stopColor="#29ddcc"/></linearGradient></defs><path d="M3 9Q60 0 117 9" stroke="url(#wordmark-gradient)" strokeWidth="3.5" fill="none" strokeLinecap="round"/></svg></div></div>}
       {/* 搜索区：结果页在搜索框**左侧**放一个主题色圆角「返回首页」按钮；首页只有搜索框。 */}
@@ -485,10 +490,12 @@ export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateA
             library={library}
             fetchedAt={fetchedAt}
             pageSize={100}
+            renderExtraActions={(result) => <SpaceAddButton result={result} />}
           />
         </div>
       )}
       </div>}
     </div>
+    </SpaceWorkspace>
   );
 }

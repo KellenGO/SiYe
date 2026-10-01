@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type RefObject, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ArrowUpRight, Trash2, X } from "lucide-react";
 import type { PlatformSlug, UnifiedSearchResult } from "@/types/search";
@@ -8,17 +8,22 @@ import { BookmarkControl, BookmarkNote, MembershipEditor, WatchLaterControl } fr
 import { orderedMetrics, resultKey, resultSources, safeContentUrl } from "@/lib/resultTools";
 import { recordView } from "@/lib/historyApi";
 import { LocalContentCover, localContentType } from "./LocalContentCard";
+import { useResearchWorkspace } from "@/components/spaces/WorkspaceContext";
 
-export function LocalContentDrawer({ result, library, onClose, fallbackFocus, savedView = false, fetchedAt = {}, onDelete }: {
+export function LocalContentDrawer({ result, library, onClose, fallbackFocus, savedView = false, fetchedAt = {}, onDelete, renderExtraActions }: {
   result: UnifiedSearchResult;
   library?: BookmarkLibrary;
   savedView?: boolean;
   fetchedAt?: Partial<Record<PlatformSlug, string | null>>;
   onDelete?: () => void;
   onClose: () => void;
+  renderExtraActions?: (result: UnifiedSearchResult) => ReactNode;
   fallbackFocus: RefObject<HTMLDivElement>;
 }) {
   const id = useId();
+  const workspace = useResearchWorkspace();
+  const setDetailOpen = workspace?.setDetailOpen;
+  useEffect(() => { setDetailOpen?.(true); return () => setDetailOpen?.(false); }, [setDetailOpen]);
   const panel = useRef<HTMLDivElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const dirtyNotes = useRef(new Map<string, boolean>());
@@ -36,6 +41,26 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
     onClose();
   };
   closeRequest.current = requestClose;
+
+  // 笔记通过独立 portal 保留编辑器；键盘事件需按真实 DOM 归属处理。
+  useEffect(() => {
+    const noteKeys = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement;
+      if (event.defaultPrevented || !panel.current?.contains(target) || !target.closest(".space-note-slot")) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeRequest.current();
+      }
+      if (event.key === "Tab") {
+        const controls = [...panel.current.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [contenteditable="true"]')].filter((element) => element.tabIndex >= 0 && element.getClientRects().length > 0);
+        const first = controls[0], last = controls[controls.length - 1];
+        if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      }
+    };
+    document.addEventListener("keydown", noteKeys);
+    return () => document.removeEventListener("keydown", noteKeys);
+  }, []);
 
   useEffect(() => {
     const trigger = document.activeElement as HTMLElement | null;
@@ -73,7 +98,7 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
       if (event.target === event.currentTarget && pointerStartedOutside.current) requestClose();
       pointerStartedOutside.current = false;
     }}>
-    <div className="local-content-drawer" ref={panel} role="dialog" aria-modal="true" aria-labelledby={id}
+    <div className={`local-content-drawer ${workspace?.hasNote ? "with-research-note" : ""}`} ref={panel} role="dialog" aria-modal="true" aria-labelledby={id}
       onKeyDown={(event) => {
         const confirmation = panel.current?.querySelector<HTMLElement>('.confirm-card, .membership-card[role="dialog"]');
         if (event.key === "Escape") {
@@ -85,7 +110,7 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
         }
         if (event.key !== "Tab") return;
         const scope = confirmation ?? panel.current;
-        const controls = [...(scope?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), textarea:not(:disabled), select:not(:disabled)') ?? [])]
+        const controls = [...(scope?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [contenteditable="true"]') ?? [])]
           .filter((element) => element.tabIndex >= 0 && element.getClientRects().length > 0);
         const first = controls[0];
         const last = controls[controls.length - 1];
@@ -94,7 +119,7 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
         else if (!event.shiftKey && (document.activeElement === last || !scope?.contains(document.activeElement))) { event.preventDefault(); first.focus(); }
       }}>
       <div className="local-content-drawer-head"><h2 id={id}>内容信息</h2><button ref={closeButton} type="button" className="btn small" aria-label="关闭内容详情" disabled={saving} onClick={requestClose}><X aria-hidden="true" />关闭</button></div>
-      <div className="local-content-drawer-body">
+      <div className={workspace?.hasNote ? "local-content-research-layout" : undefined}><div className="local-content-drawer-body">
         {resultSources(result).map((snapshot) => {
           const item = items.find((item) => item.key === resultKey(snapshot));
           const source = savedView && item ? item.result : snapshot;
@@ -112,6 +137,7 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
               : <p className="local-content-detail-meta">暂无互动数据</p>}
             {library && <div className="local-content-actions"><span><BookmarkControl result={source} library={library} fetchedAt={fetchedAt}
               onToggled={(added, savedKeys) => setMembershipKeys(added ? savedKeys : null)} />{item?.saved ? "已收藏" : "收藏"}</span><span><WatchLaterControl result={source} library={library} fetchedAt={fetchedAt} />{item?.watchLater ? "已加入稍后再看" : "稍后再看"}</span></div>}
+            {renderExtraActions && <div className="space-detail-actions">{renderExtraActions(source)}</div>}
             {item && library && <>
             <div className="local-content-folders">
               <h4>所在收藏夹</h4>
@@ -138,7 +164,7 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
         {onDelete && <button type="button" className="btn danger" onClick={onDelete}><Trash2 aria-hidden="true" />从历史中移除</button>}
         {library?.error && <p className="local-content-error" role="alert">{library.error}</p>}
         {noteError && <p className="local-content-error" role="alert">{noteError}</p>}
-      </div>
+      </div>{workspace?.noteSlot}</div>
     </div>
   </div>, document.body);
 }

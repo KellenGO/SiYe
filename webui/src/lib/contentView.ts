@@ -1,6 +1,6 @@
 /** 内容呈现偏好与文件夹导航偏好分开，按页面分别保存。 */
 export type ContentView = "list" | "grid";
-export type ContentViewScope = "search" | "history" | "local" | "remote-all" | "remote-folder";
+export type ContentViewScope = "search" | "history" | "local" | "remote-all" | "remote-folder" | "spaces";
 
 function storageKey(scope: ContentViewScope): string {
   return `siye.content-view.${scope}.v1`;

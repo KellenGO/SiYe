@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback, type ReactNode } from "react";
 import type { PlatformSlug, UnifiedSearchResult } from "@/types/search";
 import { PLATFORM_COLORS, PLATFORM_LABELS } from "@/types/search";
 import type { SearchSortMode } from "@/lib/searchExperience";
@@ -42,6 +42,8 @@ interface ResultTabsProps {
   selectionToolLabel?: string;
   selectionResetKey?: number;
   emptyMessage?: string;
+  showExportTools?: boolean;
+  renderExtraActions?: (result: UnifiedSearchResult) => ReactNode;
 }
 
 type TabKey = "all" | PlatformSlug;
@@ -80,6 +82,8 @@ export function ResultTabs({
   pageSize,
   onDeleteItem,
   emptyMessage,
+  showExportTools = true,
+  renderExtraActions,
 }: ResultTabsProps) {
   const [views, setViews] = useState<Partial<Record<ContentViewScope, ContentView>>>(() => ({ [viewScope]: readContentView(viewScope) }));
   const contentView = views[viewScope] ?? readContentView(viewScope);
@@ -236,7 +240,7 @@ export function ResultTabs({
             <button type="button" aria-pressed={!gridView} onClick={() => setContentView("list")}><List aria-hidden="true" />列表</button>
             <button type="button" aria-pressed={gridView} onClick={() => setContentView("grid")}><Grid2X2 aria-hidden="true" />网格</button>
           </div>
-          <button type="button" className="text-link" aria-expanded={exportOpen} onClick={() => { setExportOpen(!exportOpen); setSelected(new Set()); }}>{exportOpen ? (selectionToolLabel ? "收起" : "收起导出") : (selectionToolLabel ?? "导出 / 复制")}</button>
+          {showExportTools && <button type="button" className="text-link" aria-expanded={exportOpen} onClick={() => { setExportOpen(!exportOpen); setSelected(new Set()); }}>{exportOpen ? (selectionToolLabel ? "收起" : "收起导出") : (selectionToolLabel ?? "导出 / 复制")}</button>}
         </div>
       </div>
 
@@ -280,6 +284,7 @@ export function ResultTabs({
                     <WatchLaterControl result={result} library={library} fetchedAt={fetchedAt} />
                   </>}
                   {onDeleteItem && <button type="button" aria-label="从历史中移除" title="从历史中移除" onClick={() => onDeleteItem(result)}><Trash2 aria-hidden="true" /></button>}
+                  {renderExtraActions?.(result)}
                 </div>
               </> : <ResultCard result={result} index={index} highlightQuery={filters.query || keyword}
                 detailsExpanded={expanded.has(key)}
@@ -287,10 +292,11 @@ export function ResultTabs({
                   const next = new Set(previous); if (open) next.add(key); else next.delete(key); return next;
                 })}
                 onOpenDetails={() => setDetailResult(result)}
-                renderBookmark={library ? (source) => <>
-                  <BookmarkControl result={source} library={library} fetchedAt={fetchedAt}
+                renderBookmark={library || renderExtraActions ? (source) => <>
+                  {library && <><BookmarkControl result={source} library={library} fetchedAt={fetchedAt}
                     onToggled={(added, keys) => setMembershipPrompt(added ? { group: key, keys } : null)} />
-                  <WatchLaterControl result={source} library={library} fetchedAt={fetchedAt} />
+                  <WatchLaterControl result={source} library={library} fetchedAt={fetchedAt} /></>}
+                  {renderExtraActions?.(source)}
                 </> : undefined}
                 onDelete={onDeleteItem ? () => onDeleteItem(result) : undefined} />}
               {promptItem && library && membershipPrompt && <MembershipEditor
@@ -304,6 +310,7 @@ export function ResultTabs({
       {currentDetail && <LocalContentDrawer
         result={currentDetail}
         library={library} savedView={savedView} fetchedAt={fetchedAt}
+        renderExtraActions={renderExtraActions}
         onDelete={onDeleteItem ? () => { onDeleteItem(currentDetail); setDetailResult(null); } : undefined}
         fallbackFocus={resultBlock} onClose={() => setDetailResult(null)} />}
 

@@ -9,6 +9,7 @@ import { AccountAutoSync } from '@/components/accounts/AccountAutoSync'
 import { GettingStarted } from '@/components/help/GettingStarted'
 import { useOnboarding } from '@/hooks/useOnboarding'
 import { useTranslation } from 'react-i18next'
+import { SpacesProvider, useSpaces } from '@/hooks/useSpaces'
 
 // 非搜索页按需加载，搜索主页面保持同步加载。
 const AccountsPage = lazy(() =>
@@ -20,6 +21,7 @@ const FavoritesPage = lazy(() =>
 const HistoryPage = lazy(() =>
   import('@/components/history/HistoryPage').then((m) => ({ default: m.HistoryPage }))
 )
+const SpacesPage = lazy(() => import('@/components/spaces/SpacesPage').then((m) => ({ default: m.SpacesPage })))
 const HelpPage = lazy(() =>
   import('@/components/help/HelpPage').then((m) => ({ default: m.HelpPage }))
 )
@@ -37,6 +39,7 @@ type FavoritesSection = 'local' | 'remote'
 
 function routeFromHash(): { view: ViewMode; settings: SettingsSection; favorites: FavoritesSection; home: boolean } {
   const path = window.location.hash.replace(/^#/, '') || '/'
+  if (path === '/spaces' || /^\/spaces\/\d+$/.test(path)) return { view: 'spaces', settings: 'search', favorites: 'local', home: false }
   if (path.startsWith('/favorites/remote')) return { view: 'favorites', settings: 'search', favorites: 'remote', home: false }
   if (path.startsWith('/favorites')) return { view: 'favorites', settings: 'search', favorites: 'local', home: false }
   if (path.startsWith('/settings/accounts')) return { view: 'accounts', settings: 'accounts', favorites: 'local', home: false }
@@ -48,8 +51,13 @@ function routeFromHash(): { view: ViewMode; settings: SettingsSection; favorites
   return { view: 'search', settings: 'search', favorites: 'local', home: true }
 }
 
-function App() {
+function AppContent() {
   const { t } = useTranslation()
+  const spaces = useSpaces()
+  const flushSpaces = useRef(spaces.flushAll)
+  flushSpaces.current = spaces.flushAll
+  const routeHash = useRef(window.location.hash)
+  const routeGeneration = useRef(0)
   const onboarding = useOnboarding()
   const initialRoute = routeFromHash()
   // Initialize by checking localStorage if license has been accepted
@@ -76,10 +84,20 @@ function App() {
   }, [viewMode])
   const [favoritesSection, setFavoritesSection] = useState<FavoritesSection>(initialRoute.favorites)
   const [homeRoute, setHomeRoute] = useState(initialRoute.home)
+  const [spaceId, setSpaceId] = useState<number | null>(() => /^#\/spaces\/(\d+)$/.test(window.location.hash) ? Number(window.location.hash.split('/')[2]) : null)
 
   useEffect(() => {
-    const syncRoute = () => {
+    const syncRoute = async () => {
+      const generation = ++routeGeneration.current
+      const nextHash = window.location.hash
+      if (!await flushSpaces.current()) {
+        if (generation === routeGeneration.current) window.location.hash = routeHash.current
+        return
+      }
+      if (generation !== routeGeneration.current) return
+      routeHash.current = nextHash
       const route = routeFromHash()
+      setSpaceId(/^#\/spaces\/(\d+)$/.test(nextHash) ? Number(nextHash.split('/')[2]) : null)
       if (route.view !== previousView.current) {
         setAnimatedView(route.view)
         previousView.current = route.view
@@ -98,6 +116,8 @@ function App() {
       ? `/settings/${section || settingsSection}`
       : mode === 'favorites'
         ? '/favorites/local'
+        : mode === 'spaces'
+          ? '/spaces'
         : mode === 'history'
           ? '/history'
           : mode === 'help'
@@ -164,6 +184,8 @@ function App() {
                   <HelpPage onShowDisclaimer={handleShowDisclaimer} onStartGuide={() => onboarding.goTo(0)} />
                 ) : viewMode === 'history' ? (
                   <HistoryPage />
+                ) : viewMode === 'spaces' ? (
+                  <SpacesPage spaceId={spaceId} />
                 ) : null}
               </div>}
             </Suspense>
@@ -203,4 +225,6 @@ function App() {
   )
 }
 
-export default App
+export default function App() {
+  return <SpacesProvider><AppContent /></SpacesProvider>
+}
