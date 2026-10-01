@@ -29,6 +29,7 @@
     "discardTitle": "确认丢弃这个空间？",
     "discardDescription": "「{{name}}」里的全部资料和笔记将被删除，无法恢复。已有收藏不受影响。",
     "back": "返回空间",
+    "returnSearch": "返回搜索",
     "noDescription": "还没有简介",
     "materialCount": "{{count}} 条资料",
     "noArchived": "还没有归档的空间",

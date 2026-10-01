@@ -29,6 +29,7 @@
     "discardTitle": "Discard this space?",
     "discardDescription": "All material and notes in “{{name}}” will be permanently deleted. Existing favorites will remain.",
     "back": "Back to spaces",
+    "returnSearch": "Back to search",
     "noDescription": "No description yet",
     "materialCount": "{{count}} items",
     "noArchived": "No archived spaces yet",

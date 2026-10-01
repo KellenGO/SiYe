@@ -492,7 +492,8 @@ body {
 /* Search tools float in the side gutters without resizing the search content. */
 .space-edge { --space-edge-width: clamp(224px, calc((100vw - 960px) / 2 - 56px), 272px); position: fixed; top: 112px; z-index: 35; width: 36px; height: 148px; max-width: calc(100vw - 16px); max-height: calc(100dvh - 136px); transform: translateY(112px); overflow: hidden; border: 1px solid var(--siye-line-strong); border-radius: 12px; background: var(--siye-bg); box-shadow: 0 4px 16px #172b3d0a; transition: width .24s cubic-bezier(.22, 1, .36, 1), height .24s cubic-bezier(.22, 1, .36, 1), transform .24s cubic-bezier(.22, 1, .36, 1), border-radius .24s, box-shadow .24s; }
 .space-edge[hidden] { display: none; }
-.space-edge-left { left: 8px; }
+.space-edge-left { left: 8px; top: 224px; transform: none; max-height: calc(100dvh - 248px); }
+.space-edge-left .space-edge-surface { max-height: calc(100dvh - 250px); }
 .space-edge-right { right: 8px; --space-edge-width: clamp(220px, calc((100vw - 960px) / 2 - 56px), 360px); }
 .space-edge.is-open { width: var(--space-edge-width); height: var(--space-edge-height); transform: none; border-radius: 16px; box-shadow: 0 12px 36px #172b3d18; }
 .space-edge-trigger { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; width: 100%; height: 100%; color: var(--siye-secondary); font-size: 12px; opacity: 1; visibility: visible; transition: opacity .12s .1s, visibility 0s; }
@@ -509,7 +510,7 @@ body {
 .space-edge-head > div { display: flex; gap: 4px; }
 .space-edge-head svg { width: 16px; height: 16px; }
 .space-edge-head button[aria-pressed="true"] { color: var(--siye-brand-ink); background: var(--siye-brand-soft); }
-.space-edge :is(button, select):focus-visible { outline: 2px solid var(--siye-brand); outline-offset: -2px; }
+.space-edge :is(button, a, select):focus-visible { outline: 2px solid var(--siye-brand); outline-offset: -2px; }
 .space-edge .space-search-bar { width: 100%; margin: 0; padding: 18px; border: 0; border-radius: 0; background: transparent; flex-direction: column; align-items: stretch; gap: 14px; }
 .space-edge .space-search-bar label { flex-direction: column; align-items: stretch; gap: 8px; }
 .space-edge .space-search-bar label > span { font-size: 11px; color: var(--siye-muted); }
@@ -525,9 +526,11 @@ body {
   .space-edge { top: 96px; z-index: 40; width: 32px; transform: translateY(72px); max-height: calc(100dvh - 112px); }
   .space-edge.is-open { width: var(--space-edge-width); transform: none; }
   .space-edge-surface { max-height: calc(100dvh - 114px); }
+  .space-edge-left { top: 168px; transform: none; max-height: calc(100dvh - 192px); }
+  .space-edge-left .space-edge-surface { max-height: calc(100dvh - 194px); }
 }
 .space-note-toggle { width: min(1080px, calc(100% - 64px)); margin: 12px auto; display: flex; justify-content: flex-end; gap: 10px; }
-.space-note-toggle svg, .space-page-actions svg, .space-back svg, .space-library-actions svg { width: 16px; height: 16px; }
+.space-note-toggle svg, .space-page-actions svg, .space-library-actions svg { width: 16px; height: 16px; }
 .space-workspace-main { min-width: 0; }
 .space-note-slot { min-width: 0; position: sticky; top: 88px; }
 .space-note-slot > div { height: 100%; }
@@ -570,7 +573,8 @@ body {
 .space-info-card textarea { width: 100%; resize: vertical; }
 .space-info-card .field { min-height: 42px; }
 .space-page-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
-.space-back { margin-bottom: 22px; }
+.space-return-actions { display: flex; align-items: center; gap: 18px; margin-bottom: 22px; }
+.space-return-actions svg { width: 16px; height: 16px; }
 .space-list-tabs { display: flex; gap: 24px; border-bottom: 1px solid var(--siye-line); margin-bottom: 24px; }
 .space-list-tabs button { padding: 10px 0 14px; border-bottom: 2px solid transparent; font-size: 14px; color: var(--siye-muted); }
 .space-list-tabs button[aria-selected="true"] { color: var(--siye-brand-ink); border-bottom-color: var(--siye-brand); }

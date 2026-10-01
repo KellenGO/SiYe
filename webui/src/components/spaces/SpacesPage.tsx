@@ -12,7 +12,7 @@ import { PLATFORM_SLUGS } from "@/lib/platformMeta";
 import { SpaceWorkspace } from "./SpaceWorkspace";
 import { SpaceInfoDialog } from "./SpaceInfoDialog";
 
-export function SpacesPage({ spaceId }: { spaceId: number | null }) {
+export function SpacesPage({ spaceId, onReturnSearch }: { spaceId: number | null; onReturnSearch: () => void }) {
   const { t } = useTranslation();
   const spaces = useSpaces();
   const detail = useSpaceDetail(spaceId);
@@ -34,7 +34,7 @@ export function SpacesPage({ spaceId }: { spaceId: number | null }) {
       </article>)}</div>
       {!spaces.loading && !spaces.error && !spaces.spaces.some((item) => item.archived === tab) && <div className="space-empty"><Layers aria-hidden="true" /><h2>{t(tab ? "spaces.noArchived" : "spaces.noSpaces")}</h2><p>{t(tab ? "spaces.archiveHint" : "spaces.emptyHint")}</p></div>}
     </> : <>
-      <a href="#/spaces" className="text-link space-back"><ArrowLeft aria-hidden="true" />{t("spaces.back")}</a>
+      <div className="space-return-actions"><button type="button" className="btn primary small" onClick={onReturnSearch}><ArrowLeft aria-hidden="true" />{t("spaces.returnSearch")}</button><a href="#/spaces" className="text-link"><Layers aria-hidden="true" />{t("spaces.back")}</a></div>
       {detail.isPending && <p role="status">{t("spaces.loading")}</p>}
       {detail.isError && <p role="alert">{spaceError(detail.error)}<button type="button" className="text-link" onClick={() => void detail.refetch()}>{t("spaces.retry")}</button></p>}
       {space && <>

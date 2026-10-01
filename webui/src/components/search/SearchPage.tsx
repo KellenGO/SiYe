@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AlertTriangle, ArrowLeft, Clock3, RotateCcw, Loader2, UserCog, RefreshCw } from "lucide-react";
 import { SearchBar } from "./SearchBar";
@@ -18,7 +18,9 @@ import { useHomePreferencesStore } from "@/store/homePreferencesStore";
 import { useTranslation } from "react-i18next";
 
 interface SearchPageProps {
+  active?: boolean;
   homeRequested?: boolean;
+  onViewChange?: (home: boolean) => void;
   onSearchStarted?: () => void;
   onNavigateAccounts?: () => void;
 }
@@ -28,8 +30,7 @@ interface SearchPageProps {
 const FAILED_PLATFORM_STATUSES = ["failed", "login_required", "timed_out", "rate_limited", "empty"] as const;
 
 /** 已提醒过的 "job:平台" 组合。
- *  必须是模块级而不是组件内 ref：切到别的页面再切回来时 SearchPage 会重新挂载，
- *  任务响应会被重新恢复 —— ref 挡不住重复弹窗，模块级集合挡得住（SPA 生命周期内有效）。 */
+ *  模块级集合覆盖组件重新挂载与任务恢复，避免同一失败重复弹窗（SPA 生命周期内有效）。 */
 const handledFailureKeys = new Set<string>();
 
 /** 弹窗里陈述的原因（不吓人、不复述 error_summary 原文）—— 平台自带安全原因时优先用它的。 */
@@ -46,11 +47,19 @@ const FAILURE_REASON_KEYS: Record<string, string> = {
  * 业务状态逻辑原样保留：快照 / 单平台重试合并 / 取消 /
  * 历史 / 任务恢复 —— 本组件只改布局与视觉。
  */
-export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateAccounts }: SearchPageProps) {
+export function SearchPage({ active = true, homeRequested = false, onViewChange, onSearchStarted, onNavigateAccounts }: SearchPageProps) {
   const { t } = useTranslation();
   const library = useBookmarks();
   const spaces = useSpaces();
   const homePreferences = useHomePreferencesStore();
+  const scrollPosition = useRef(0);
+  useLayoutEffect(() => {
+    if (!active) return;
+    window.scrollTo({ top: scrollPosition.current, behavior: "instant" });
+    const rememberScroll = () => { scrollPosition.current = window.scrollY; };
+    window.addEventListener("scroll", rememberScroll, { passive: true });
+    return () => window.removeEventListener("scroll", rememberScroll);
+  }, [active]);
   // 每个平台独立搜索数量（展示用；搜索请求由 useSearchExperience 读取）。
   const { limits } = usePlatformLimits();
   const {
@@ -222,8 +231,7 @@ export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateA
   );
   const prevHomeRequested = useRef(homeRequested);
   useEffect(() => {
-    // 只在"首页被新点了一次"（false → true）时切过去；挂载时不抢，
-    // 这样带结果恢复页面仍然停在结果页。
+    // 显式进入首页路由时切视图；挂载时保留原有的任务恢复行为。
     if (homeRequested && !prevHomeRequested.current) setView("home");
     prevHomeRequested.current = homeRequested;
   }, [homeRequested]);
@@ -231,11 +239,12 @@ export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateA
     if (busy) setView("results");
   }, [busy]);
   const isHome = view === "home";
+  useEffect(() => { onViewChange?.(isHome); }, [isHome, onViewChange]);
   const goHome = useCallback(() => setView("home"), []);
   const showLastResults = useCallback(() => setView("results"), []);
 
   return (
-    <SpaceWorkspace spaceId={spaces.activeId} selector>
+    <SpaceWorkspace spaceId={spaces.activeId} selector active={active}>
     <div className={isHome ? `home ${homePreferences.mode === "min" ? "minimal" : ""}` : "preview-container search-shell"}>
       {isHome && <div className="hero"><div className="wordmark" aria-label="四野"><b>四野</b><svg className="swoosh" viewBox="0 0 120 12" aria-hidden="true"><defs><linearGradient id="wordmark-gradient"><stop stopColor="#6677fb"/><stop offset="1" stopColor="#29ddcc"/></linearGradient></defs><path d="M3 9Q60 0 117 9" stroke="url(#wordmark-gradient)" strokeWidth="3.5" fill="none" strokeLinecap="round"/></svg></div></div>}
       {/* 搜索区：结果页在搜索框**左侧**放一个主题色圆角「返回首页」按钮；首页只有搜索框。 */}
@@ -479,6 +488,7 @@ export function SearchPage({ homeRequested = false, onSearchStarted, onNavigateA
             <p role="status" className="mt-3 text-xs text-cyber-text-muted">正在补充指标和简介，已有结果可以先查看。</p>
           )}
           <ResultTabs
+            active={active}
             viewScope="search"
             results={displayJobResponse.results}
             keyword={displayJobResponse.keyword}

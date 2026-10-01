@@ -115,10 +115,12 @@ def main():
             expect(left_surface).not_to_be_visible()
             results_bounds = page.locator(".preview-container.search-shell").bounding_box()
             assert left.bounding_box()["width"] == 36
+            collapsed_top = left.bounding_box()["y"]
             left.get_by_role("button", name="当前空间", exact=True).hover()
             samples = left.evaluate("""async el => { const widths = []; for (let i = 0; i < 8; i++) { await new Promise(requestAnimationFrame); widths.push(el.getBoundingClientRect().width); } return widths; }""")
             assert any(36 < value < 220 for value in samples), samples
             expect(left_surface).to_be_visible()
+            assert left.bounding_box()["y"] == collapsed_top
             page.mouse.move(720, 90)
             page.wait_for_function("el => !el.classList.contains('is-open')", arg=left.element_handle())
             # Re-enter while the frame is shrinking; it reverses smoothly and still closes.
@@ -141,6 +143,11 @@ def main():
             info.get_by_role("button", name="创建并启用", exact=True).click()
             expect(info).to_have_count(0)
             expect(page.get_by_role("combobox", name="当前空间", exact=True)).to_have_value("1")
+            create_bounds = left.get_by_role("button", name="新建空间", exact=True).bounding_box()
+            view_materials = left.get_by_role("link", name="查看资料", exact=True)
+            assert view_materials.bounding_box()["width"] == create_bounds["width"]
+            assert view_materials.bounding_box()["height"] == create_bounds["height"]
+            expect(view_materials).to_have_class("btn primary small")
             page.get_by_role("button", name="全部加入空间：苏州攻略0", exact=True).click()
             page.get_by_role("button", name="加入空间：苏州攻略1", exact=True).click()
             page.get_by_role("button", name="加入空间：苏州攻略2", exact=True).click()
@@ -318,10 +325,31 @@ def main():
 
             page.get_by_role("link", name="查看资料", exact=True).click()
             expect(page.get_by_role("heading", name="苏州旅游攻略", exact=True).first).to_be_visible()
-            expect(page.locator(".local-content-card")).to_have_count(4)
-            assert page.locator(".content-card-actions button[aria-label^=\"移出空间：\"]").all_text_contents() == ["", "", "", ""]
-            assert page.get_by_role("button", name="导出 / 复制", exact=True).count() == 0
+            expect(left).not_to_be_visible()
+            expect(right).not_to_be_visible()
+            expect(page.locator(".local-content-card:visible")).to_have_count(4)
+            assert page.locator(".spaces-page .content-card-actions button[aria-label^=\"移出空间：\"]").all_text_contents() == ["", "", "", ""]
+            expect(page.get_by_role("button", name="导出 / 复制", exact=True)).not_to_be_visible()
             expect(page.get_by_role("textbox", name="空间笔记编辑器", exact=True)).to_contain_text("失败保留测试")
+            space_note = page.get_by_role("textbox", name="空间笔记编辑器", exact=True)
+            space_note.press("Control+End")
+            space_note.press("Enter")
+            space_note.press_sequentially("空间内部补充")
+            expect(page.get_by_text("已保存到本机", exact=True)).to_be_visible()
+            page.get_by_role("button", name="返回搜索", exact=True).click()
+            expect(page.locator(".search-shell")).to_be_visible()
+            expect(left.get_by_role("button", name="取消固定当前空间", exact=True)).to_be_visible()
+            expect(right.get_by_role("button", name="取消固定研究笔记", exact=True)).to_be_visible()
+            expect(page.get_by_role("textbox", name="空间笔记编辑器", exact=True)).to_contain_text("失败保留测试")
+            returned_note = page.get_by_role("textbox", name="空间笔记编辑器", exact=True)
+            expect(returned_note).to_contain_text("空间内部补充")
+            returned_note.press("Control+End")
+            returned_note.press("Enter")
+            returned_note.press_sequentially("返回搜索继续记录")
+            expect(page.get_by_text("已保存到本机", exact=True)).to_be_visible()
+            assert "空间内部补充" in json.dumps(store.get_space(1)["note_document"], ensure_ascii=False)
+            page.get_by_role("link", name="查看资料", exact=True).click()
+            expect(page.locator(".spaces-page")).to_be_visible()
             page.screenshot(path=str(ROOT / "build/spaces-desktop.png"), full_page=True)
             note = page.get_by_role("textbox", name="空间笔记编辑器", exact=True)
             note.press("Control+End")

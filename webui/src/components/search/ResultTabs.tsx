@@ -18,6 +18,7 @@ import { LocalContentDrawer } from "@/components/favorites/LocalContentDrawer";
 import { useSlidingIndicator } from "@/hooks/useSlidingIndicator";
 
 interface ResultTabsProps {
+  active?: boolean;
   viewScope: ContentViewScope;
   results: UnifiedSearchResult[];
   keyword?: string;
@@ -64,6 +65,7 @@ const SORT_MODES: { key: SearchSortMode; label: string }[] = [
 ];
 
 export function ResultTabs({
+  active = true,
   viewScope,
   results,
   keyword = "",
@@ -117,6 +119,9 @@ export function ResultTabs({
   // 收藏成功后的一次性提示：让用户当场改归属，不用跑到收藏页去找。
   const [membershipPrompt, setMembershipPrompt] = useState<{ group: string; keys: string[] } | null>(null);
   const closeMembershipPrompt = useCallback(() => setMembershipPrompt(null), []);
+  useEffect(() => {
+    if (!active) { setDetailResult(null); setMembershipPrompt(null); }
+  }, [active]);
   const nowMs = useMemo(() => Date.now(), [results, filters]);
 
   // 把勾选结果同步给外部（收藏夹页据此做批量加入 / 移出）
@@ -299,7 +304,7 @@ export function ResultTabs({
                   {renderExtraActions?.(source)}
                 </> : undefined}
                 onDelete={onDeleteItem ? () => onDeleteItem(result) : undefined} />}
-              {promptItem && library && membershipPrompt && <MembershipEditor
+              {active && promptItem && library && membershipPrompt && <MembershipEditor
                 keys={membershipPrompt.keys} library={library} subject={result.title}
                 modal defaultOpen onClose={closeMembershipPrompt} />}
             </div>
@@ -307,7 +312,7 @@ export function ResultTabs({
         })}
       </div>
 
-      {currentDetail && <LocalContentDrawer
+      {active && currentDetail && <LocalContentDrawer
         result={currentDetail}
         library={library} savedView={savedView} fetchedAt={fetchedAt}
         renderExtraActions={renderExtraActions}

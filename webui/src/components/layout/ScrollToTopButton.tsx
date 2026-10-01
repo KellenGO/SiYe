@@ -17,7 +17,7 @@ export function ScrollToTopButton() {
 
   useEffect(() => {
     const onScroll = () => {
-      const inResultsOrHistory = document.querySelector('.search-shell, .history-page') !== null
+      const inResultsOrHistory = [...document.querySelectorAll<HTMLElement>('.search-shell, .history-page')].some((element) => element.offsetHeight > 0)
       setVisible(window.scrollY > (inResultsOrHistory ? LONG_LIST_REVEAL_AFTER : REVEAL_AFTER))
     }
     onScroll()

@@ -84,9 +84,9 @@ def main():
             for route in ("search", "history"):
                 page.goto(f"{origin}/#/{route}")
                 page.evaluate("() => document.fonts.ready")
-                expect(page.locator(".local-content-card")).to_have_count(60)
+                expect(page.locator(".local-content-card:visible")).to_have_count(60)
                 page.get_by_role("button", name="列表", exact=True).press("Enter")
-                expect(page.locator(".result-row")).to_have_count(60)
+                expect(page.locator(".result-row:visible")).to_have_count(60)
                 for view, selector in (("网格", ".local-content-card"), ("列表", ".result-row")):
                     switch = page.get_by_role("button", name=view, exact=True)
                     switch.focus()
@@ -95,12 +95,12 @@ def main():
                     before_scroll = page.evaluate("window.scrollY")
                     # DOM activation isolates layout changes from the browser scrolling a focused control into view.
                     switch.evaluate("el => el.click()")
-                    expect(page.locator(selector)).to_have_count(60)
+                    expect(page.locator(selector + ":visible")).to_have_count(60)
                     page.evaluate("() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))")
                     after_scroll = page.evaluate("window.scrollY")
                     assert abs(after_scroll - before_scroll) <= 2, (route, view, before_scroll, after_scroll)
                     expect(switch).to_be_focused()
-                expect(page.locator(".result-title").first).to_have_text("测试结果 0")
+                expect(page.locator(".result-title:visible").first).to_have_text("测试结果 0")
                 page.get_by_role("button", name="查看内容信息：测试结果 0", exact=True).press("Enter")
                 list_drawer = page.get_by_role("dialog", name="内容信息", exact=True)
                 expect(list_drawer).to_contain_text("模拟列表内容")
@@ -112,10 +112,45 @@ def main():
                 page.screenshot(path=str(ROOT / f"build/content-list-{route}-mobile.png"))
                 page.reload()
                 expect(page.get_by_role("button", name="列表", exact=True)).to_have_attribute("aria-pressed", "true")
-                expect(page.locator(".result-row")).to_have_count(60)
+                expect(page.locator(".result-row:visible")).to_have_count(60)
                 page.get_by_role("button", name="网格", exact=True).click()
                 page.set_viewport_size({"width": 1280, "height": 900})
-                trigger = page.locator(".local-content-open").first
+
+                if route == "search":
+                    # Header navigation keeps the same search view, controls and scroll position.
+                    search_input = page.locator(".search-zone input").first
+                    search_input.fill("保留输入")
+                    page.get_by_role("textbox", name="结果内关键词", exact=True).fill("测试结果")
+                    page.get_by_role("combobox", name="排序方式", exact=True).select_option("latest")
+                    xhs_tab = page.get_by_role("tab").filter(has_text="小红书")
+                    xhs_tab.click()
+                    search_input.evaluate("el => { window.savedSearchInput = el; }")
+                    page.evaluate("window.scrollTo(0, 234)")
+                    page.wait_for_function("window.scrollY === 234")
+                    page.get_by_role("button", name="历史", exact=True).evaluate("el => el.click()")
+                    expect(page.locator(".history-page")).to_be_visible()
+                    expect(page.locator(".space-edge-left")).not_to_be_visible()
+                    page.get_by_role("button", name="首页", exact=True).evaluate("el => el.click()")
+                    expect(page.locator(".search-shell")).to_be_visible()
+                    page.wait_for_function("window.scrollY === 234")
+                    expect(search_input).to_have_value("保留输入")
+                    assert search_input.evaluate("el => el === window.savedSearchInput")
+                    expect(page.get_by_role("textbox", name="结果内关键词", exact=True)).to_have_value("测试结果")
+                    expect(page.get_by_role("combobox", name="排序方式", exact=True)).to_have_value("latest")
+                    expect(xhs_tab).to_have_attribute("aria-selected", "true")
+                    page.get_by_role("button", name="首页", exact=True).evaluate("el => el.click()")
+                    expect(page.locator(".search-shell")).to_be_visible()
+                    assert page.evaluate("window.scrollY") == 234
+                    page.get_by_role("button", name="返回首页", exact=True).click()
+                    expect(page.locator(".home")).to_be_visible()
+                    page.get_by_role("button", name="历史", exact=True).click()
+                    expect(page.locator(".history-page")).to_be_visible()
+                    page.get_by_role("button", name="首页", exact=True).click()
+                    expect(page.locator(".home")).to_be_visible()
+                    expect(search_input).to_have_value("保留输入")
+                    page.get_by_role("button", name="查看上次搜索（60 条）", exact=True).click()
+                    expect(page.locator(".search-shell")).to_be_visible()
+                trigger = page.locator(".local-content-open:visible").first
                 trigger.press("Enter")
                 drawer = page.get_by_role("dialog", name="内容信息", exact=True)
                 expect(drawer).to_contain_text("模拟列表内容")
@@ -150,10 +185,10 @@ def main():
                 page.set_viewport_size({"width": 1280, "height": 900})
 
             page.get_by_role("button", name="列表", exact=True).click()
-            page.locator(".result-row").first.get_by_role("button", name="从历史中移除").click()
-            expect(page.locator(".result-row")).to_have_count(59)
+            page.locator(".result-row:visible").first.get_by_role("button", name="从历史中移除").click()
+            expect(page.locator(".result-row:visible")).to_have_count(59)
             page.get_by_role("button", name="网格", exact=True).click()
-            trigger = page.locator(".local-content-open").first
+            trigger = page.locator(".local-content-open:visible").first
             trigger.click()
             drawer = page.get_by_role("dialog", name="内容信息", exact=True)
             with page.expect_popup() as opened:
@@ -162,7 +197,7 @@ def main():
             assert history_writes[-1] == ("POST", "/api/history/views")
             drawer.get_by_role("button", name="从历史中移除").click()
             expect(drawer).to_have_count(0)
-            expect(page.locator(".local-content-card")).to_have_count(58)
+            expect(page.locator(".local-content-card:visible")).to_have_count(58)
             page.once("dialog", lambda dialog: dialog.accept())
             page.get_by_role("button", name="清空历史").click()
             expect(page.get_by_role("heading", name="还没有观看历史")).to_be_visible()

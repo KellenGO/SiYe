@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react'
 import { Toaster } from 'sonner'
 import { Header, type SettingsSection, type ViewMode } from '@/components/layout/Header'
 import { AuthorFooter } from '@/components/layout/AuthorFooter'
@@ -70,6 +70,7 @@ function AppContent() {
   const [animatedView, setAnimatedView] = useState<ViewMode | null>(null)
   const [settingsSection, setSettingsSection] = useState<SettingsSection>(initialRoute.settings)
   const [accountsVisited, setAccountsVisited] = useState(initialRoute.view === 'accounts')
+  const [searchVisited, setSearchVisited] = useState(initialRoute.view === 'search')
   const [compactNotifications, setCompactNotifications] = useState(
     () => window.matchMedia('(max-width: 700px)').matches,
   )
@@ -81,9 +82,16 @@ function AppContent() {
   }, [])
   useEffect(() => {
     if (viewMode === 'accounts') setAccountsVisited(true)
+    if (viewMode === 'search') setSearchVisited(true)
   }, [viewMode])
   const [favoritesSection, setFavoritesSection] = useState<FavoritesSection>(initialRoute.favorites)
   const [homeRoute, setHomeRoute] = useState(initialRoute.home)
+  const [searchHome, setSearchHome] = useState(initialRoute.home)
+  const lastSearchHome = useRef(initialRoute.home)
+  const rememberSearchView = useCallback((home: boolean) => {
+    lastSearchHome.current = home
+    setSearchHome(home)
+  }, [])
   const [spaceId, setSpaceId] = useState<number | null>(() => /^#\/spaces\/(\d+)$/.test(window.location.hash) ? Number(window.location.hash.split('/')[2]) : null)
 
   useEffect(() => {
@@ -122,7 +130,7 @@ function AppContent() {
           ? '/history'
           : mode === 'help'
             ? '/help'
-            : '/'
+            : lastSearchHome.current ? '/' : '/search'
     if (window.location.hash === `#${nextHash}`) {
       const route = routeFromHash()
       setViewMode(route.view)
@@ -154,7 +162,7 @@ function AppContent() {
   }
 
   return (
-    <div className={`min-h-screen flex flex-col relative ${viewMode === 'search' && homeRoute ? 'home-route' : ''} ${onboarding.step !== null ? 'has-onboarding' : ''}`}>
+    <div className={`min-h-screen flex flex-col relative ${viewMode === 'search' && searchHome ? 'home-route' : ''} ${onboarding.step !== null ? 'has-onboarding' : ''}`}>
       {/* License Disclaimer Modal - Shows first or when triggered */}
       {(!licenseAccepted || showDisclaimer) && (
         <LicenseDisclaimer onAccept={handleLicenseAccept} />
@@ -174,18 +182,20 @@ function AppContent() {
           <div className="app-main-inner">
             <GettingStarted step={onboarding.step} onGoTo={onboarding.goTo} onDismiss={onboarding.dismiss} />
             {!onboarding.preferenceSaved && <p role="status" className="guide-storage-warning">{t("onboarding.storageUnavailable")}</p>}
+            {/* 引导高亮按实际坐标定位，期间不对搜索容器做位移。 */}
+            {(searchVisited || viewMode === 'search') && <div hidden={viewMode !== 'search'} className={onboarding.step === null && animatedView === 'search' && viewMode === 'search' ? 'app-page-enter' : undefined}>
+              <SearchPage active={viewMode === 'search'} homeRequested={homeRoute} onViewChange={rememberSearchView} onSearchStarted={showSearchResultsRoute} onNavigateAccounts={() => navigate('accounts', 'accounts')} />
+            </div>}
             <Suspense fallback={<PageLoading />}>
-              {viewMode !== 'accounts' && <div key={viewMode} className={animatedView === viewMode ? 'app-page-enter' : undefined}>
-                {viewMode === 'search' ? (
-                  <SearchPage homeRequested={homeRoute} onSearchStarted={showSearchResultsRoute} onNavigateAccounts={() => navigate('accounts', 'accounts')} />
-                ) : viewMode === 'favorites' ? (
+              {viewMode !== 'accounts' && viewMode !== 'search' && <div key={viewMode} className={animatedView === viewMode ? 'app-page-enter' : undefined}>
+                {viewMode === 'favorites' ? (
                   <FavoritesPage activeTab={favoritesSection} onTabChange={changeFavoritesSection} onNavigateAccounts={() => navigate('accounts', 'accounts')} />
                 ) : viewMode === 'help' ? (
                   <HelpPage onShowDisclaimer={handleShowDisclaimer} onStartGuide={() => onboarding.goTo(0)} />
                 ) : viewMode === 'history' ? (
                   <HistoryPage />
                 ) : viewMode === 'spaces' ? (
-                  <SpacesPage spaceId={spaceId} />
+                  <SpacesPage spaceId={spaceId} onReturnSearch={() => navigate('search')} />
                 ) : null}
               </div>}
             </Suspense>

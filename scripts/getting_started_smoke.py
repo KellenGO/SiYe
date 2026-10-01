@@ -318,9 +318,13 @@ def main():
 
                 page.get_by_role("button", name="收藏 剪辑入门 PRIVATE_RESULT", exact=True).click()
                 expect(page.get_by_role("button", name="取消收藏 剪辑入门 PRIVATE_RESULT", exact=True)).to_be_visible()
+                expect(page.locator(".membership-overlay")).to_be_visible()
+                page.keyboard.press("Escape")
+                expect(page.locator(".membership-overlay")).to_have_count(0)
                 guide.get_by_role("button", name="下一步", exact=True).click()
                 expect(page).to_have_url(origin + "/#/favorites/local")
                 expect(guide.get_by_role("heading", name="收藏与整理", exact=True)).to_be_visible()
+                page.get_by_role("button", name=re.compile("全部收藏")).click()
                 expect(page.get_by_role("button", name="取消收藏 剪辑入门 PRIVATE_RESULT", exact=True)).to_be_visible()
                 # 「回搜索结果」把教程一并带回搜索那一步，不只是改地址。
                 guide.get_by_role("button", name="回搜索结果", exact=True).click()
