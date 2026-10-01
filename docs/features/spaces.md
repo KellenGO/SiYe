@@ -15,7 +15,7 @@
 | API 与共享空间状态 | `webui/src/lib/spacesApi.ts`、`webui/src/hooks/useSpaces.tsx`（`SpacesProvider`） |
 | 笔记保存队列 | `webui/src/lib/spaceNotes.ts`（`NoteSession`） |
 | 空间列表、资料与信息编辑 | `webui/src/components/spaces/SpacesPage.tsx`、`webui/src/components/spaces/SpaceInfoDialog.tsx` |
-| 搜索一键加入与笔记布局 | `webui/src/components/spaces/SpaceAddButton.tsx`、`webui/src/components/spaces/SpaceWorkspace.tsx` |
+| 搜索一键加入与笔记布局 | `webui/src/components/spaces/SpaceAddButton.tsx`、`webui/src/components/spaces/SpaceWorkspace.tsx`、`webui/src/components/spaces/SpaceEdgePanel.tsx` |
 | 富文本笔记与详情共用编辑器 | `webui/src/components/spaces/SpaceNoteController.tsx`、`webui/src/components/spaces/WorkspaceContext.tsx`、`webui/src/components/favorites/LocalContentDrawer.tsx` |
 
 ## 关键决定
@@ -26,12 +26,14 @@
 - 进行中空间允许改名、改简介、移出资料与记笔记；默认按加入时间倒序。平台和关键词筛选、列表／网格、每批 100 条的显示更多复用现有内容体验。空间的浏览方式偏好独立于搜索和收藏。
 - 归档停止收集，资料与笔记变为只读；继续研究恢复并启用。丢弃需要二次确认，并明确删除该空间的资料与笔记；默认焦点在取消，已保存收藏保持原状。没有到期自动删除。
 - 每个空间只有一份总笔记。支持加粗、斜体、下划线、七档字号、三级标题、项目与编号列表、勾选清单、撤销和重做；本地保存字体格式及勾选状态。没有附件、表格或云端服务。文本复制粘贴保留受支持格式，未支持字号会去掉样式保留文字。
+- 首页与搜索结果页的当前空间放在窗口左侧、笔记入口放在右侧；默认收起，桌面鼠标移入展开，移出后短暂延迟收起。两侧可以分别固定，关闭取消固定；焦点仍在面板内（包括正在编辑笔记）时保持展开，Escape 可收起。固定只保留到离开搜索页，触屏和键盘可点击入口打开。展开面板贴近窗口边缘，以悬浮方式显示，搜索框与结果内容的位置、宽度保持不变。
 - 搜索页笔记默认收起，空间详情默认展开。编辑器按需加载；同一个编辑器 DOM 在页面与详情面板之间移动，保留正文、光标和撤销历史。窄屏改成遮罩编辑面板，支持焦点循环、Escape 与外部点击关闭。
 - 停止输入约 600 毫秒后自动保存，保存状态以服务端成功响应为准。中文输入法组词期间暂不安排新的定时保存，组词结束再保存。切换空间、归档和导航离开前提交最新草稿；失败时保留本会话草稿并提示重试，关闭窗口前有未保存内容则提醒。
 - 每个空间的保存请求串行执行；输入过程中返回的旧响应不替换当前正文。保存版本冲突不静默覆盖，可查看服务端最新文本，明确确认后再用本地草稿替换；不会自动合并格式或内容。
 
 ## 已知坑 / 边界
 
+- 搜索页在宽窗口中利用两边空白；窗口放不下两侧面板时会覆盖一部分内容边缘，可以收起后查看，中央内容不会为面板缩窄或移动。窄屏笔记仍用独立遮罩编辑面板；空间详情页的资料与笔记并排布局保持原样。
 - 仅搜索结果及其详情提供加入入口。没有逐条资料备注、已看完状态、批量整理、离线下载、AI 总结或独立笔记窗口；查看全文和视频仍需打开原平台。
 - 名称最多 60 字、简介 200 字，每空间最多 500 条资料；总笔记正文最多 50000 字，格式数据最多 2 MB。超限整次拒绝并明确提示，不静默截断或滚动淘汰。资料批次中有非法内容时整批拒绝，不留部分成功的半成品。
 - Markdown／PDF 导出、空间备份导入尚未提供；现有收藏备份只包含收藏，不包含空间。备份整个本机数据库时空间跟随保留。
@@ -43,5 +45,5 @@
 
 - 后端：`tests/test_spaces.py`；收藏独立性回归同时运行 `tests/test_library_store.py`、`tests/test_library_api.py` 和 `tests/test_watch_history_store.py`。使用每次新建的项目内 `--basetemp` 子目录，先创建父目录。
 - 前端：在 `webui` 运行 `npm run test:search`（包含 `webui/tests/spaceNotes.test.ts`、内容浏览偏好测试）和 `npm run build`。
-- 界面：构建后运行 `.venv/Scripts/python.exe scripts/spaces_ui_smoke.py`。模拟搜索和临时 SQLite，不访问真实平台；覆盖四平台加入、格式重启恢复、勾选清单、失败重试、详情旁笔记、窄屏与键盘、归档／恢复、独立空间与丢弃。截图输出到忽略的 `build/`。
+- 界面：构建后运行 `.venv/Scripts/python.exe scripts/spaces_ui_smoke.py`。模拟搜索和临时 SQLite，不访问真实平台；覆盖左右悬浮与固定、1920／1440／390px 搜索框坐标和内容宽度不变、四平台加入、格式重启恢复、勾选清单、失败重试、详情旁笔记、窄屏与键盘、归档／恢复、独立空间与丢弃。截图输出到忽略的 `build/`。
 - 文档与翻译：`tests/test_docs_wiki.py`、`tests/test_webui_ui_contract.py`。

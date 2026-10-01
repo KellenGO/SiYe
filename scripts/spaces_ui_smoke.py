@@ -90,6 +90,19 @@ def main():
             page.on("pageerror", lambda error: errors.append(str(error)))
             page.goto(origin + "/#/search")
             expect(page.locator(".local-content-card")).to_have_count(3)
+            left = page.locator(".space-edge-left")
+            right = page.locator(".space-edge-right")
+            left_surface = left.locator(".space-edge-surface")
+            expect(left_surface).not_to_be_visible()
+            results_bounds = page.locator(".preview-container.search-shell").bounding_box()
+            left.get_by_role("button", name="当前空间", exact=True).hover()
+            expect(left_surface).to_be_visible()
+            page.mouse.move(720, 90)
+            expect(left_surface).not_to_be_visible()
+            left.get_by_role("button", name="当前空间", exact=True).click()
+            left.get_by_role("button", name="固定当前空间", exact=True).click()
+            page.mouse.move(720, 90)
+            expect(left_surface).to_be_visible()
             page.get_by_role("button", name="新建空间", exact=True).click()
             info = page.get_by_role("dialog", name="新建空间", exact=True)
             info.get_by_label("名称", exact=True).fill("苏州旅游攻略")
@@ -103,7 +116,56 @@ def main():
             expect(page.get_by_role("button", name="已加入：苏州攻略2", exact=True)).to_be_disabled()
             assert store.get_space(1)["item_count"] == 4
             assert library.stats()["total"] == 0
-            page.get_by_role("button", name="打开笔记", exact=True).click()
+            right.get_by_role("button", name="打开笔记", exact=True).hover()
+            expect(right.locator(".space-edge-surface")).to_be_visible()
+            page.mouse.move(720, 90)
+            expect(right.locator(".space-edge-surface")).not_to_be_visible()
+            right.get_by_role("button", name="打开笔记", exact=True).click()
+            right.get_by_role("button", name="固定研究笔记", exact=True).click()
+            page.mouse.move(720, 90)
+            expect(right.locator(".space-edge-surface")).to_be_visible()
+            after = page.locator(".preview-container.search-shell").bounding_box()
+            assert results_bounds and after
+            assert all(abs(after[key] - results_bounds[key]) < 1 for key in ("x", "y", "width")), (results_bounds, after)
+            # Both side tools leave the home search box in its original position.
+            left.get_by_role("button", name="关闭当前空间面板", exact=True).click()
+            page.get_by_role("button", name="返回首页", exact=True).click()
+            home = page.locator(".home .search-zone")
+            expect(home).to_be_visible()
+            page.wait_for_timeout(250)
+            home_bounds = home.bounding_box()
+            right.get_by_role("button", name="关闭笔记面板", exact=True).click()
+            assert home.bounding_box() == home_bounds
+            for width in (1920, 1440, 390):
+                page.set_viewport_size({"width": width, "height": 1000})
+                page.wait_for_timeout(250)
+                before = home.bounding_box()
+                left.get_by_role("button", name="当前空间", exact=True).click()
+                left.get_by_role("button", name="固定当前空间", exact=True).click()
+                right.get_by_role("button", name="打开笔记", exact=True).click()
+                note_modal = page.locator(".space-note-panel")
+                expect(note_modal).to_be_visible()
+                assert home.bounding_box() == before
+                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+                if width > 1000:
+                    right.get_by_role("button", name="固定研究笔记", exact=True).click()
+                    page.screenshot(path=str(ROOT / f"build/spaces-search-edge-{width}.png"))
+                    right.get_by_role("button", name="取消固定研究笔记", exact=True).click()
+                    home.locator("input").first.click()
+                    page.mouse.move(width / 2, 90)
+                    expect(right.locator(".space-edge-surface")).not_to_be_visible()
+                else:
+                    note_modal.get_by_role("button", name="关闭笔记面板", exact=True).click()
+                left.get_by_role("button", name="关闭当前空间面板", exact=True).click()
+            page.set_viewport_size({"width": 1440, "height": 1000})
+            left.get_by_role("button", name="当前空间", exact=True).click()
+            left.get_by_role("button", name="固定当前空间", exact=True).click()
+            right.get_by_role("button", name="打开笔记", exact=True).click()
+            right.get_by_role("button", name="固定研究笔记", exact=True).click()
+            left.get_by_role("button", name="关闭当前空间面板", exact=True).click()
+            page.get_by_role("button", name="查看上次搜索（3 条）", exact=True).click()
+            left.get_by_role("button", name="当前空间", exact=True).click()
+            left.get_by_role("button", name="固定当前空间", exact=True).click()
             note = page.get_by_role("textbox", name="空间笔记编辑器", exact=True)
             expect(note).to_be_visible()
             note.fill("苏州行程研究")
@@ -118,6 +180,20 @@ def main():
             marks = saved["content"][0]["content"][0]["marks"]
             assert {mark["type"] for mark in marks} == {"bold", "italic", "underline", "textStyle"}
             assert next(mark["attrs"]["fontSize"] for mark in marks if mark["type"] == "textStyle") == "24px"
+
+            # Editing focus keeps an unpinned panel open; Escape keeps the same DOM/editor.
+            note.evaluate("el => { window.spaceNoteElement = el; }")
+            right.get_by_role("button", name="取消固定研究笔记", exact=True).click()
+            note.focus()
+            page.mouse.move(720, 90)
+            page.wait_for_timeout(300)
+            expect(note).to_be_visible()
+            note.press("Escape")
+            expect(right.locator(".space-edge-surface")).not_to_be_visible()
+            right.get_by_role("button", name="打开笔记", exact=True).click()
+            right.get_by_role("button", name="固定研究笔记", exact=True).click()
+            expect(note).to_contain_text("苏州行程研究")
+            assert note.evaluate("el => el === window.spaceNoteElement")
 
             # Detail shares the same editor; closing it preserves note text and history.
             page.locator(".local-content-open").first.click()
