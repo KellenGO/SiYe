@@ -92,15 +92,39 @@ def main():
             expect(page.locator(".local-content-card")).to_have_count(3)
             left = page.locator(".space-edge-left")
             right = page.locator(".space-edge-right")
+            def open_edge(edge, name, keyboard=False):
+                if "is-open" not in edge.get_attribute("class"):
+                    trigger = edge.get_by_role("button", name=name, exact=True)
+                    expect(trigger).to_be_visible()
+                    if keyboard or page.viewport_size["width"] <= 1000:
+                        trigger.focus()
+                        trigger.press("Enter")
+                    else:
+                        trigger.hover()
+                expect(edge.locator(".space-edge-surface")).to_be_visible()
+                expect(edge.locator(".space-edge-trigger")).not_to_be_visible()
+
             left_surface = left.locator(".space-edge-surface")
             expect(left_surface).not_to_be_visible()
             results_bounds = page.locator(".preview-container.search-shell").bounding_box()
+            assert left.bounding_box()["width"] == 36
             left.get_by_role("button", name="当前空间", exact=True).hover()
+            samples = left.evaluate("""async el => { const widths = []; for (let i = 0; i < 8; i++) { await new Promise(requestAnimationFrame); widths.push(el.getBoundingClientRect().width); } return widths; }""")
+            assert any(36 < value < 220 for value in samples), samples
+            expect(left_surface).to_be_visible()
+            page.mouse.move(720, 90)
+            page.wait_for_function("el => !el.classList.contains('is-open')", arg=left.element_handle())
+            # Re-enter while the frame is shrinking; it reverses smoothly and still closes.
+            page.mouse.move(12, 260)
             expect(left_surface).to_be_visible()
             page.mouse.move(720, 90)
             expect(left_surface).not_to_be_visible()
-            left.get_by_role("button", name="当前空间", exact=True).click()
+            page.emulate_media(reduced_motion="reduce")
+            assert left.evaluate("el => getComputedStyle(el).transitionDuration") == "0s"
+            open_edge(left, "当前空间", keyboard=True)
+            expect(left.get_by_role("button", name="固定当前空间", exact=True)).to_be_focused()
             left.get_by_role("button", name="固定当前空间", exact=True).click()
+            page.emulate_media(reduced_motion="no-preference")
             page.mouse.move(720, 90)
             expect(left_surface).to_be_visible()
             page.get_by_role("button", name="新建空间", exact=True).click()
@@ -120,7 +144,7 @@ def main():
             expect(right.locator(".space-edge-surface")).to_be_visible()
             page.mouse.move(720, 90)
             expect(right.locator(".space-edge-surface")).not_to_be_visible()
-            right.get_by_role("button", name="打开笔记", exact=True).click()
+            open_edge(right, "打开笔记")
             right.get_by_role("button", name="固定研究笔记", exact=True).click()
             page.mouse.move(720, 90)
             expect(right.locator(".space-edge-surface")).to_be_visible()
@@ -140,15 +164,23 @@ def main():
                 page.set_viewport_size({"width": width, "height": 1000})
                 page.wait_for_timeout(250)
                 before = home.bounding_box()
-                left.get_by_role("button", name="当前空间", exact=True).click()
+                open_edge(left, "当前空间")
                 left.get_by_role("button", name="固定当前空间", exact=True).click()
-                right.get_by_role("button", name="打开笔记", exact=True).click()
+                open_edge(right, "打开笔记")
                 note_modal = page.locator(".space-note-panel")
                 expect(note_modal).to_be_visible()
                 assert home.bounding_box() == before
                 assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
                 if width > 1000:
                     right.get_by_role("button", name="固定研究笔记", exact=True).click()
+                    for edge, side in ((left, "left"), (right, "right")):
+                        # One border/frame replaces the small trigger, anchored at the window edge.
+                        expect(edge.locator(".space-edge-trigger")).not_to_be_visible()
+                        frame = edge.bounding_box()
+                        surface = edge.locator(".space-edge-surface").bounding_box()
+                        assert frame and surface
+                        assert abs(frame["width"] - surface["width"] - 2) < 1
+                        assert abs(frame["x"] - 8 if side == "left" else frame["x"] + frame["width"] - width + 8) < 1
                     page.screenshot(path=str(ROOT / f"build/spaces-search-edge-{width}.png"))
                     right.get_by_role("button", name="取消固定研究笔记", exact=True).click()
                     home.locator("input").first.click()
@@ -158,13 +190,13 @@ def main():
                     note_modal.get_by_role("button", name="关闭笔记面板", exact=True).click()
                 left.get_by_role("button", name="关闭当前空间面板", exact=True).click()
             page.set_viewport_size({"width": 1440, "height": 1000})
-            left.get_by_role("button", name="当前空间", exact=True).click()
+            open_edge(left, "当前空间")
             left.get_by_role("button", name="固定当前空间", exact=True).click()
-            right.get_by_role("button", name="打开笔记", exact=True).click()
+            open_edge(right, "打开笔记")
             right.get_by_role("button", name="固定研究笔记", exact=True).click()
             left.get_by_role("button", name="关闭当前空间面板", exact=True).click()
             page.get_by_role("button", name="查看上次搜索（3 条）", exact=True).click()
-            left.get_by_role("button", name="当前空间", exact=True).click()
+            open_edge(left, "当前空间")
             left.get_by_role("button", name="固定当前空间", exact=True).click()
             note = page.get_by_role("textbox", name="空间笔记编辑器", exact=True)
             expect(note).to_be_visible()
@@ -190,7 +222,7 @@ def main():
             expect(note).to_be_visible()
             note.press("Escape")
             expect(right.locator(".space-edge-surface")).not_to_be_visible()
-            right.get_by_role("button", name="打开笔记", exact=True).click()
+            open_edge(right, "打开笔记")
             right.get_by_role("button", name="固定研究笔记", exact=True).click()
             expect(note).to_contain_text("苏州行程研究")
             assert note.evaluate("el => el === window.spaceNoteElement")

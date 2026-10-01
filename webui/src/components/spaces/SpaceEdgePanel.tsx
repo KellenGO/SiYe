@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Pin, PinOff, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -10,7 +10,31 @@ export function SpaceEdgePanel({ side, label, triggerLabel, icon, open, pinned, 
   const { t } = useTranslation();
   const root = useRef<HTMLElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const surface = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState(0);
   const id = `space-edge-${side}`;
+  const close = useCallback(() => {
+    onPinChange(false);
+    onOpenChange(false);
+    requestAnimationFrame(() => trigger.current?.focus());
+  }, [onOpenChange, onPinChange]);
+  useLayoutEffect(() => {
+    const element = surface.current;
+    if (!element) return;
+    const measure = () => {
+      const next = Math.ceil(element.getBoundingClientRect().height) + 2;
+      if (next > 2) setHeight(next);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [hidden]);
+  useLayoutEffect(() => {
+    if (!surface.current) return;
+    surface.current.inert = !open;
+    if (open && document.activeElement === trigger.current) surface.current.querySelector<HTMLElement>("button:not(:disabled), select:not(:disabled)")?.focus();
+  }, [open]);
   useEffect(() => {
     const element = root.current;
     if (!element || hidden || disabled) return;
@@ -26,7 +50,7 @@ export function SpaceEdgePanel({ side, label, triggerLabel, icon, open, pinned, 
       }, 220);
     };
     const keyboard = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && open) { event.preventDefault(); event.stopPropagation(); onPinChange(false); onOpenChange(false); trigger.current?.focus(); }
+      if (event.key === "Escape" && open) { event.preventDefault(); event.stopPropagation(); close(); }
     };
     element.addEventListener("keydown", keyboard);
     element.addEventListener("pointerenter", enter);
@@ -39,11 +63,10 @@ export function SpaceEdgePanel({ side, label, triggerLabel, icon, open, pinned, 
       element.removeEventListener("pointerleave", leave);
       element.removeEventListener("focusout", leave);
     };
-  }, [disabled, hidden, open, pinned, onOpenChange, onPinChange]);
-  const close = () => { onPinChange(false); onOpenChange(false); trigger.current?.focus(); };
-  return createPortal(<section ref={root} hidden={hidden} className={`space-edge space-edge-${side} ${open ? "is-open" : ""}`}>
-    <button ref={trigger} type="button" className="space-edge-trigger" aria-label={triggerLabel ?? label} aria-controls={id} aria-expanded={open} disabled={disabled} onClick={() => onOpenChange(true)}>{icon}<span>{label}</span>{pinned && <Pin className="space-edge-pin-indicator" aria-hidden="true" />}</button>
-    <div id={id} className="space-edge-surface" hidden={!open}>
+  }, [disabled, hidden, open, pinned, onOpenChange, close]);
+  return createPortal(<section ref={root} hidden={hidden} className={`space-edge space-edge-${side} ${open ? "is-open" : ""}`} style={{ "--space-edge-height": `${height}px` } as CSSProperties}>
+    <button ref={trigger} type="button" className="space-edge-trigger" aria-label={triggerLabel ?? label} aria-controls={id} aria-expanded={open} aria-hidden={open} tabIndex={open ? -1 : 0} disabled={disabled} onClick={() => onOpenChange(true)}>{icon}<span>{label}</span></button>
+    <div ref={surface} id={id} className="space-edge-surface" aria-hidden={!open}>
       <div className="space-edge-head"><h2>{label}</h2><div>
         <button type="button" className="btn small" aria-label={t(pinned ? "spaces.unpinPanel" : "spaces.pinPanel", { panel: label })} aria-pressed={pinned} title={t(pinned ? "spaces.unpinPanel" : "spaces.pinPanel", { panel: label })} onClick={() => onPinChange(!pinned)}>{pinned ? <PinOff aria-hidden="true" /> : <Pin aria-hidden="true" />}</button>
         <button type="button" className="btn small" aria-label={closeLabel} onClick={close}><X aria-hidden="true" /></button>
