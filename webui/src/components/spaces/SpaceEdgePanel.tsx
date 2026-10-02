@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Pin, PinOff, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -12,7 +12,7 @@ export function SpaceEdgePanel({ side, label, triggerLabel, icon, open, pinned, 
   const trigger = useRef<HTMLButtonElement>(null);
   const surface = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState(0);
-  const id = `space-edge-${side}`;
+  const id = useId();
   const close = useCallback(() => {
     onPinChange(false);
     onOpenChange(false);

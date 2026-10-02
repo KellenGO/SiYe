@@ -22,7 +22,7 @@ export function SpacesPage({ spaceId, onReturnSearch }: { spaceId: number | null
   const [deleting, setDeleting] = useState<ResearchSpace | null>(null);
   const [removing, setRemoving] = useState(false);
   const space = detail.data;
-  return <div className={`preview-container spaces-page${spaceId !== null ? " is-detail" : ""}`}>
+  return <div className="preview-container spaces-page">
     {spaceId === null ? <>
       <div className="page-heading"><div><p className="eyebrow">{t("spaces.eyebrow")}</p><h1>{t("spaces.title")}</h1><p className="description">{t("spaces.intro")}</p></div><button type="button" className="btn primary" disabled={spaces.busy || spaces.loading || !!spaces.error} onClick={() => setEditing("new")}>{t("spaces.create")}</button></div>
       <div className="space-list-tabs" role="tablist" aria-label={t("spaces.title")}><button type="button" role="tab" aria-selected={!tab} onClick={() => setTab(false)}>{t("spaces.ongoing")} <span>{spaces.spaces.filter((item) => !item.archived).length}</span></button><button type="button" role="tab" aria-selected={tab} onClick={() => setTab(true)}>{t("spaces.archived")} <span>{spaces.spaces.filter((item) => item.archived).length}</span></button></div>
@@ -38,13 +38,13 @@ export function SpacesPage({ spaceId, onReturnSearch }: { spaceId: number | null
       {detail.isPending && <p role="status">{t("spaces.loading")}</p>}
       {detail.isError && <p role="alert">{spaceError(detail.error)}<button type="button" className="text-link" onClick={() => void detail.refetch()}>{t("spaces.retry")}</button></p>}
       {space && <>
-        <SpaceWorkspace spaceId={space.id} renderHeading={(noteToggle) => <div className="page-heading"><div><p className="eyebrow">{t(space.archived ? "spaces.archived" : spaces.activeId === space.id ? "spaces.collecting" : "spaces.ongoing")}</p><h1>{space.name}</h1>{space.description && <p className="description">{space.description}</p>}</div><div className="space-page-actions">
-          {noteToggle}
+        <div className="page-heading"><div><p className="eyebrow">{t(space.archived ? "spaces.archived" : spaces.activeId === space.id ? "spaces.collecting" : "spaces.ongoing")}</p><h1>{space.name}</h1>{space.description && <p className="description">{space.description}</p>}</div><div className="space-page-actions">
           {!space.archived && <button type="button" className="btn small" disabled={spaces.busy} onClick={() => setEditing(space)}><Pencil aria-hidden="true" />{t("spaces.edit")}</button>}
           {(space.archived || spaces.activeId !== space.id) && <button type="button" className="btn primary small" disabled={spaces.busy} onClick={() => void (space.archived ? spaces.archive(space.id, false) : spaces.activate(space.id))}><Play aria-hidden="true" />{t(space.archived ? "spaces.resume" : "spaces.activate")}</button>}
           {!space.archived && <button type="button" className="btn small" disabled={spaces.busy} onClick={() => void spaces.archive(space.id, true)}><Archive aria-hidden="true" />{t("spaces.archive")}</button>}
           <button type="button" className="btn danger small" disabled={spaces.busy} onClick={() => setDeleting(space)}><Trash2 aria-hidden="true" />{t("spaces.discard")}</button>
-        </div></div>}><ResultTabs viewScope="spaces" results={space.items.map((item) => item.result)} overall="completed" platforms={[...PLATFORM_SLUGS]} library={library} disableSort pageSize={100} showExportTools={false} emptyMessage={t("spaces.noMaterials")}
+        </div></div>
+        <SpaceWorkspace spaceId={space.id} panelsHidden={!!editing || !!deleting}><ResultTabs viewScope="spaces" results={space.items.map((item) => item.result)} overall="completed" platforms={[...PLATFORM_SLUGS]} library={library} disableSort pageSize={100} showExportTools={false} emptyMessage={t("spaces.noMaterials")}
           renderExtraActions={!space.archived ? (result) => <button type="button" aria-label={`${t("spaces.removeMaterial")}：${result.title}`} title={t("spaces.removeMaterial")} disabled={removing} onClick={async () => {
             if (removing) return;
             setRemoving(true);

@@ -529,13 +529,10 @@ body {
   .space-edge-left { top: 168px; transform: none; max-height: calc(100dvh - 192px); }
   .space-edge-left .space-edge-surface { max-height: calc(100dvh - 194px); }
 }
-.space-note-toggle { width: min(1080px, calc(100% - 64px)); margin: 12px auto; display: flex; justify-content: flex-end; gap: 10px; }
-.space-note-toggle svg, .space-page-actions svg, .space-library-actions svg { width: 16px; height: 16px; }
+.space-page-actions svg, .space-library-actions svg { width: 16px; height: 16px; }
 .space-workspace-main { min-width: 0; }
 .space-note-slot { min-width: 0; position: sticky; top: 88px; }
 .space-note-slot > div { height: 100%; }
-.space-workspace.has-note { width: min(1480px, 100%); margin: 0 auto; padding: 0 32px; display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 24px; align-items: start; }
-.space-workspace.has-note .preview-container { width: 100%; }
 .space-note-panel { position: sticky; top: 88px; display: flex; flex-direction: column; min-width: 0; height: min(720px, calc(100vh - 112px)); min-height: 330px; border: 1px solid var(--siye-line-strong); border-radius: 16px; overflow: hidden; background: var(--siye-bg); box-shadow: 0 8px 28px #172b3d0a; }
 .space-note-head { padding: 18px 18px 12px; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .space-note-head h2 { margin: 4px 0 0; font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
@@ -595,17 +592,10 @@ body {
 .space-empty > svg { width: 40px; height: 40px; margin: 0 auto 20px; color: var(--siye-brand); stroke-width: 1.3; }
 .space-empty h2 { font-size: 20px; color: var(--siye-ink); margin-bottom: 10px; }
 .space-empty p { font-size: 13px; }
-.spaces-page.is-detail { width: min(1280px, calc(100% - 64px)); }
 .spaces-page .page-heading > div:first-child { min-width: 0; }
 .spaces-page .page-heading h1 { overflow-wrap: anywhere; }
 .spaces-page .space-page-actions { flex-shrink: 0; max-width: 50%; }
-.spaces-page .space-page-actions .space-note-toggle { width: auto; margin: 0; }
-.spaces-page .space-workspace.has-note { width: 100%; padding: 0; grid-template-columns: minmax(0, 1fr) clamp(304px, 28vw, 360px); gap: 28px; }
 .spaces-page .space-workspace-main > .results-block { margin-top: 0; }
-@media (min-width: 1001px) {
-  .spaces-page .space-workspace > .space-note-slot { top: 24px; }
-  .spaces-page .space-workspace > .space-note-slot .space-note-panel { height: clamp(360px, calc(100dvh - 336px), 640px); }
-}
 .local-content-drawer.with-research-note { width: min(1040px, 100%); display: flex; flex-direction: column; overflow: hidden; }
 .local-content-research-layout { display: grid; grid-template-columns: minmax(0, 1fr) 380px; flex: 1; min-height: 0; }
 .local-content-research-layout > .local-content-drawer-body { overflow: auto; }
@@ -615,9 +605,6 @@ body {
 @media (max-width: 1000px) {
   .space-note-floating { position: fixed; z-index: 45; inset: 0; display: flex; padding: 90px 16px 16px; background: var(--siye-scrim); }
   .space-note-floating > .space-note-panel { position: static; width: 100%; height: 100%; min-height: 0; }
-  .space-workspace.has-note { display: block; padding: 0; }
-  .space-workspace.has-note > .space-note-slot { position: fixed; z-index: 45; inset: 90px 16px 16px; height: auto; min-height: 0; }
-  .space-workspace.has-note .preview-container { width: calc(100% - 40px); }
   .local-content-research-layout { display: block; overflow: auto; }
   .local-content-research-layout > .space-note-slot { height: 550px; border-top: 1px solid var(--siye-line); }
   .space-page-actions { justify-content: flex-start; }
@@ -625,10 +612,9 @@ body {
   .spaces-page .space-page-actions { max-width: 100%; }
 }
 @media (max-width: 600px) {
-  .space-search-bar, .space-note-toggle { width: calc(100% - 32px); }
+  .space-search-bar { width: calc(100% - 32px); }
   .space-search-bar select { max-width: 190px; }
   .space-search-hint { display: none; }
-  .spaces-page.is-detail { width: calc(100% - 40px); }
   .spaces-page .page-heading { flex-direction: column; gap: 16px; }
   .space-note-toolbar button { width: 36px; height: 40px; }
   .space-note-toolbar select { height: 40px; }

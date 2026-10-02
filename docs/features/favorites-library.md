@@ -22,10 +22,13 @@
 | 一批条目的归属勾选三态（聚合卡片用） | `webui/src/lib/libraryApi.ts`（`collectionMembership`） |
 | 备份导出 / 导入 | `webui/src/components/search/BookmarkBackup.tsx` |
 | 屏幕正中的确认框（删除等破坏性操作） | `webui/src/components/ui/confirm-dialog.tsx` |
+| 当前研究空间、笔记侧栏与一键收集 | `webui/src/components/spaces/SpaceWorkspace.tsx`、`webui/src/components/spaces/SpaceAddButton.tsx` |
 
 数据文件：Windows 默认为 `%LOCALAPPDATA%\SiYe\data\library.db`。测试和开发工具可用 `SIYE_DATA_DIR` 显式隔离；程序所在目录、源码目录或解压目录不再决定收藏库位置。
 
 ## 关键决定
+
+- 收藏页与搜索页共用左侧「当前空间」和右侧「研究笔记」悬浮栏，支持悬停展开、固定与收起，展开不改变收藏区位置。开启空间后，夹内网格、列表及详情可直接加入／移出空间；收集与收藏各自独立，原收藏备注不复制到空间。左侧研究空间入口不替代收藏夹的图标导航。完整交互见[研究空间](spaces.md)。
 
 - 内容列表与网格沿用[搜索体验的共同视觉约定](search-experience.md)：紧凑封面也保留占位与地址回退，平台身份、指标单位和操作样式一致。切换回列表保留展开状态；收藏时间、归属编辑与备注统一通过详情查看。
 

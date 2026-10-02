@@ -42,6 +42,9 @@ def main():
     sources = [{"platform": platform, "content_id": f"suzhou-{index}", "title": f"苏州攻略{index}", "content_type": "video" if index in (1, 2) else "note", "url": f"https://{domain}/explore/{index}", "author": "测试作者", "snippet": "苏州园林、街巷和美食的研究资料", "cover_url": None, "published_at": now, "metrics": {"like_count": 12}, "rank": 1, "duration_seconds": 120} for index, (platform, domain) in enumerate(zip(platforms, domains))]
     group = {**sources[0], "grouped_sources": [sources[0], sources[3]]}
     job = {"job_id": "spaces-smoke", "overall": "completed", "keyword": "苏州攻略", "created_at": now, "completed_at": now, "hydration_status": "completed", "results": [group, sources[1], sources[2]], "platforms": {platform: {"status": "succeeded", "result_count": 1, "error_summary": None} for platform in platforms}}
+    favorite_only = {**sources[0], "content_id": "favorite-only", "title": "收藏独有攻略"}
+    remote_only = {**sources[2], "content_id": "remote-only", "title": "平台收藏攻略"}
+    remote_job = {**job, "job_id": "remote-spaces-smoke", "results": [group, remote_only]}
     fail_notes = False
     fail_items = False
     item_deletes = []
@@ -81,8 +84,12 @@ def main():
                         data = job
                     elif path == "/api/health":
                         data = {"status": "ok", "environment_status": "ok"}
+                    elif path == "/api/search/favorites/folders":
+                        data = [{"account": "test", "folder": "guide", "platform": "bilibili", "name": "平台攻略收藏夹", "item_count": 1, "observed_state": "present"}]
+                    elif path == "/api/search/favorites/folders/test/guide":
+                        data = {"items": [remote_only], "total": 1, "offset": 0, "limit": 50}
                     elif path.endswith("/latest"):
-                        data = None
+                        data = remote_job
                     else:
                         data = {}
                     route.fulfill(json=data)
@@ -97,8 +104,8 @@ def main():
             page.on("pageerror", lambda error: errors.append(str(error)))
             page.goto(origin + "/#/search")
             expect(page.locator(".local-content-card")).to_have_count(3)
-            left = page.locator(".space-edge-left")
-            right = page.locator(".space-edge-right")
+            left = page.locator(".space-edge-left:visible")
+            right = page.locator(".space-edge-right:visible")
             def open_edge(edge, name, keyboard=False):
                 if "is-open" not in edge.get_attribute("class"):
                     trigger = edge.get_by_role("button", name=name, exact=True)
@@ -323,10 +330,108 @@ def main():
             panel.get_by_role("button", name="重试", exact=True).click()
             expect(panel.get_by_text("已保存到本机", exact=True)).to_be_visible()
 
+            # Favorites uses the same workspace and stores independent public snapshots.
+            library.add_item(sources[1], note="收藏备注保留")
+            library.add_item(favorite_only, note="收藏独有备注")
+            page.get_by_role("button", name="收藏", exact=True).click()
+            favorites = page.locator(".favorites-page")
+            expect(favorites.locator(".local-folder-browser")).to_be_visible()
+            page.wait_for_timeout(250)
+            favorites_bounds = favorites.bounding_box()
+            open_edge(left, "当前空间")
+            left.get_by_role("button", name="固定当前空间", exact=True).click()
+            expect(left.get_by_role("combobox", name="当前空间", exact=True)).to_have_value("1")
+            open_edge(right, "打开笔记")
+            right.get_by_role("button", name="固定研究笔记", exact=True).click()
+            expect(page.get_by_role("textbox", name="空间笔记编辑器", exact=True)).to_contain_text("失败保留测试")
+            assert favorites.bounding_box() == favorites_bounds, (favorites_bounds, favorites.bounding_box())
+            page.screenshot(path=str(ROOT / "build/spaces-favorites-sidebars.png"), full_page=True)
+            assert page.evaluate("new Set([...document.querySelectorAll('[id]')].map(el => el.id)).size === document.querySelectorAll('[id]').length")
+            favorite_note = page.get_by_role("textbox", name="空间笔记编辑器", exact=True)
+            favorite_note.press("Control+End")
+            favorite_note.press("Enter")
+            favorite_note.press_sequentially("收藏页补充")
+            expect(page.get_by_text("已保存到本机", exact=True)).to_be_visible()
+            favorites.locator('[data-local-folder="all"]').click()
+            expect(favorites.locator(".local-content-card")).to_have_count(2)
+            favorites.get_by_role("button", name="查看内容信息：收藏独有攻略", exact=True).click()
+            favorite_drawer = page.get_by_role("dialog", name="内容信息", exact=True)
+            expect(favorite_drawer.get_by_role("textbox", name="空间笔记编辑器", exact=True)).to_contain_text("收藏页补充")
+            expect(favorite_drawer.get_by_text("收藏独有备注", exact=True)).to_be_visible()
+            favorite_drawer.get_by_role("button", name="加入空间：收藏独有攻略", exact=True).click()
+            expect(favorite_drawer.get_by_role("button", name="移出空间：收藏独有攻略", exact=True)).to_be_enabled()
+            assert store.get_space(1)["item_count"] == 5
+            assert "收藏独有备注" not in json.dumps(store.get_space(1), ensure_ascii=False)
+            favorite_drawer.get_by_role("button", name="关闭内容详情", exact=True).click()
+            favorite_remove = favorites.get_by_role("button", name="移出空间：收藏独有攻略", exact=True)
+            expect(favorite_remove).to_have_text("")
+            fail_items = True
+            favorite_remove.click()
+            expect(page.get_by_text("测试移出失败，请重试", exact=True)).to_be_visible()
+            expect(favorite_remove).to_have_attribute("aria-pressed", "true")
+            fail_items = False
+            favorite_remove.click()
+            expect(favorites.get_by_role("button", name="加入空间：收藏独有攻略", exact=True)).to_be_enabled()
+            right.get_by_role("button", name="关闭笔记面板", exact=True).click()
+            favorites.get_by_role("button", name="列表", exact=True).click()
+            favorites.get_by_role("button", name="移出空间：苏州攻略1", exact=True).click()
+            expect(favorites.get_by_role("button", name="加入空间：苏州攻略1", exact=True)).to_be_enabled()
+            favorites.get_by_role("button", name="加入空间：苏州攻略1", exact=True).click()
+            expect(favorites.get_by_role("button", name="移出空间：苏州攻略1", exact=True)).to_be_enabled()
+            assert store.get_space(1)["item_count"] == 4
+            assert library.stats()["total"] == 2
+            assert library.get_item("douyin", sources[1]["content_id"])["note"] == "收藏备注保留"
+            left.get_by_role("combobox", name="当前空间", exact=True).select_option("")
+            expect(favorites.locator(".space-add")).to_have_count(0)
+            expect(right).not_to_be_visible()
+            left.get_by_role("combobox", name="当前空间", exact=True).select_option("1")
+            expect(favorites.locator(".space-add")).to_have_count(2)
+            # Both synced content and platform-folder content support space actions.
+            favorites.get_by_role("button", name="跨平台收藏", exact=True).click()
+            expect(favorites.get_by_role("button", name="加入空间：平台收藏攻略", exact=True)).to_be_visible()
+            favorites.get_by_role("button", name="加入空间：平台收藏攻略", exact=True).click()
+            expect(favorites.get_by_role("button", name="移出空间：平台收藏攻略", exact=True)).to_be_enabled()
+            assert library.get_item("bilibili", "remote-only") is None
+            favorites.get_by_role("button", name="移出空间：平台收藏攻略", exact=True).click()
+            favorites.locator(".remote-folder-card").click()
+            favorites.get_by_role("button", name="加入空间：平台收藏攻略", exact=True).click()
+            expect(favorites.get_by_role("button", name="移出空间：平台收藏攻略", exact=True)).to_be_enabled()
+            favorites.get_by_role("button", name="移出空间：平台收藏攻略", exact=True).click()
+            expect(favorites.get_by_role("button", name="加入空间：平台收藏攻略", exact=True)).to_be_enabled()
+            assert store.get_space(1)["item_count"] == 4
+            assert library.stats()["total"] == 2
+            left.get_by_role("button", name="关闭当前空间面板", exact=True).click()
+            for width in (1920, 390):
+                page.set_viewport_size({"width": width, "height": 1000})
+                page.evaluate("window.scrollTo(0, 0)")
+                page.wait_for_timeout(250)
+                before = favorites.bounding_box()
+                open_edge(left, "当前空间")
+                left.get_by_role("button", name="固定当前空间", exact=True).click()
+                open_edge(right, "打开笔记")
+                if width > 1000:
+                    right.get_by_role("button", name="固定研究笔记", exact=True).click()
+                expect(favorite_note).to_contain_text("收藏页补充")
+                assert favorites.bounding_box() == before
+                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+                page.wait_for_timeout(250)
+                page.screenshot(path=str(ROOT / f"build/spaces-favorites-{width}.png"), full_page=True)
+                if width <= 1000:
+                    page.get_by_role("dialog", name="研究笔记", exact=True).get_by_role("button", name="关闭笔记面板", exact=True).click()
+                else:
+                    right.get_by_role("button", name="关闭笔记面板", exact=True).click()
+                left.get_by_role("button", name="关闭当前空间面板", exact=True).click()
+            page.set_viewport_size({"width": 1440, "height": 1000})
+            page.get_by_role("button", name="首页", exact=True).click()
+            expect(page.locator(".search-shell")).to_be_visible()
+            expect(page.get_by_role("textbox", name="空间笔记编辑器", exact=True)).to_contain_text("收藏页补充")
+
             page.get_by_role("link", name="查看资料", exact=True).click()
             expect(page.get_by_role("heading", name="苏州旅游攻略", exact=True).first).to_be_visible()
             expect(left).not_to_be_visible()
-            expect(right).not_to_be_visible()
+            expect(right.get_by_role("button", name="打开笔记", exact=True)).to_be_visible()
+            open_edge(right, "打开笔记")
+            right.get_by_role("button", name="固定研究笔记", exact=True).click()
             expect(page.locator(".local-content-card:visible")).to_have_count(4)
             assert page.locator(".spaces-page .content-card-actions button[aria-label^=\"移出空间：\"]").all_text_contents() == ["", "", "", ""]
             expect(page.get_by_role("button", name="导出 / 复制", exact=True)).not_to_be_visible()
@@ -350,29 +455,28 @@ def main():
             assert "空间内部补充" in json.dumps(store.get_space(1)["note_document"], ensure_ascii=False)
             page.get_by_role("link", name="查看资料", exact=True).click()
             expect(page.locator(".spaces-page")).to_be_visible()
+            open_edge(right, "打开笔记")
+            right.get_by_role("button", name="固定研究笔记", exact=True).click()
             space_page = page.locator(".spaces-page")
-            heading = space_page.locator(".page-heading")
             note = page.get_by_role("textbox", name="空间笔记编辑器", exact=True)
             note.evaluate("el => { window.spaceDetailEditor = el; }")
             for width, height in ((1440, 1000), (1280, 800), (1024, 768)):
                 page.set_viewport_size({"width": width, "height": height})
                 page.evaluate("window.scrollTo(0, 0)")
                 page.wait_for_timeout(250)
-                before = heading.bounding_box()
-                note_bounds = page.locator(".space-note-panel").bounding_box()
-                material_bounds = space_page.locator(".results-block").bounding_box()
-                assert abs(note_bounds["y"] - material_bounds["y"]) < 1
-                assert 304 <= note_bounds["width"] <= 360
-                assert note_bounds["x"] >= material_bounds["x"] + material_bounds["width"] + 27
-                assert note_bounds["y"] + note_bounds["height"] <= height - 16, (width, height, before, note_bounds)
-                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
-                heading.get_by_role("button", name="收起笔记", exact=True).click()
+                before = space_page.bounding_box()
+                right.get_by_role("button", name="关闭笔记面板", exact=True).click()
                 expect(note).to_have_count(0)
-                assert heading.bounding_box() == before
-                heading.get_by_role("button", name="打开笔记", exact=True).click()
+                assert space_page.bounding_box() == before
+                open_edge(right, "打开笔记")
+                right.get_by_role("button", name="固定研究笔记", exact=True).click()
                 expect(note).to_contain_text("空间内部补充")
-                assert heading.bounding_box() == before
+                assert space_page.bounding_box() == before
                 assert note.evaluate("el => el === window.spaceDetailEditor")
+                note_bounds = right.bounding_box()
+                assert abs(note_bounds["x"] + note_bounds["width"] - width + 8) < 1
+                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+                page.wait_for_timeout(250)
                 page.screenshot(path=str(ROOT / f"build/spaces-layout-{width}.png"), full_page=True)
             page.set_viewport_size({"width": 1440, "height": 1000})
             page.screenshot(path=str(ROOT / "build/spaces-desktop.png"), full_page=True)
@@ -385,6 +489,8 @@ def main():
             note.locator('input[type="checkbox"]').check()
             expect(panel.get_by_text("已保存到本机", exact=True)).to_be_visible()
             page.reload()
+            open_edge(right, "打开笔记")
+            right.get_by_role("button", name="固定研究笔记", exact=True).click()
             note = page.get_by_role("textbox", name="空间笔记编辑器", exact=True)
             expect(note).to_contain_text("预约博物馆")
             expect(note.locator('input[type="checkbox"]')).to_be_checked()
@@ -424,6 +530,8 @@ def main():
             expect(info).to_have_count(0)
             assert store.list_spaces()["active_space_id"] == 2
             page.locator(".space-library-open").filter(has_text="杭州研究").click()
+            open_edge(right, "打开笔记")
+            right.get_by_role("button", name="固定研究笔记", exact=True).click()
             note = page.get_by_role("textbox", name="空间笔记编辑器", exact=True)
             expect(note).to_have_text("")
             # Exercise headings, both list types, undo/redo, and supported paste.
@@ -452,6 +560,7 @@ def main():
             expect(page.get_by_text("已保存到本机", exact=True)).to_be_visible()
             assert "杭州的独立笔记" in json.dumps(store.get_space(2)["note_document"], ensure_ascii=False)
             assert "失败保留测试" in json.dumps(store.get_space(1)["note_document"], ensure_ascii=False)
+            right.get_by_role("button", name="关闭笔记面板", exact=True).click()
             page.get_by_role("button", name="丢弃空间", exact=True).click()
             confirmation = page.get_by_role("dialog", name="确认丢弃这个空间？", exact=True)
             expect(confirmation.get_by_role("button", name="取消", exact=True)).to_be_focused()
@@ -461,7 +570,7 @@ def main():
             assert store.get_space(1)["item_count"] == 3
             assert not errors, errors
             browser.close()
-            print("PASS: spaces UI lifecycle, icon-only add/remove toggles, grouped and individual sources, failure retry, rich note persistence, retry, detail editor, mobile and independent drafts")
+            print("PASS: spaces and favorites sidebars, local/remote favorites add/remove and note isolation, cross-page drafts, stable content layout, icon-only toggles, grouped sources, save retry, rich note persistence, detail editor and mobile")
     finally:
         server.shutdown()
 

@@ -14,6 +14,9 @@ import type { PlatformSlug, UnifiedSearchResult } from "@/types/search";
 import { PLATFORM_COLORS, PLATFORM_LABELS, STATUS_LABELS } from "@/types/search";
 import { PLATFORM_SLUGS } from "@/lib/platformMeta";
 import { moveCollection } from "@/lib/collectionOrder";
+import { useSpaces } from "@/hooks/useSpaces";
+import { SpaceWorkspace } from "@/components/spaces/SpaceWorkspace";
+import { SpaceAddButton } from "@/components/spaces/SpaceAddButton";
 
 const PLATFORMS = PLATFORM_SLUGS;
 const RECOVERY_NOTICE_PREFIX = "siye_library_recovery_notice_";
@@ -47,6 +50,7 @@ interface FavoritesPageProps {
 export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: FavoritesPageProps) {
   const remote = useFavorites();
   const library = useBookmarks();
+  const spaces = useSpaces();
   const [localTab, setLocalTab] = useState<"local" | "remote">("local");
   const tab = activeTab ?? localTab;
   const { containerRef: collectionTabsRef, position: collectionIndicator } = useSlidingIndicator<HTMLElement>(tab);
@@ -349,6 +353,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
   };
 
   return (
+    <SpaceWorkspace spaceId={spaces.activeId} selector panelsHidden={creating || !!editingCollection}>
     <div className="preview-container favorites-page">
       <div className="collection-heading">
         <div className="page-heading">
@@ -542,6 +547,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
                 selectionToolLabel="批量管理"
                 selectionResetKey={selectionResetKey}
                 pageSize={100}
+                renderExtraActions={(result) => <SpaceAddButton result={result} />}
               />
             )}
           </div>
@@ -566,7 +572,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
               <div className="remote-folder-title"><div><span className="remote-readonly">平台只读</span><h2>{remoteFolderView.name}</h2><p>{PLATFORM_LABELS[remoteFolderView.platform]} · 本机已同步 {remoteFolderView.item_count} 条</p></div></div>
               {remoteFolderLoading && !remoteFolderItems ? <div className="empty"><Loader2 className="spinner" /><p>正在读取收藏…</p></div> : remoteFolderItems?.items.length ? <>
                 <p className="collection-count">已显示 {remoteFolderItems.items.length} / {remoteFolderItems.total} 条。加载更多后，可搜索和导出更多内容。</p>
-                <ResultTabs viewScope="remote-folder" key={`${remoteFolderView.account}-${remoteFolderView.folder}-${remoteFolderItems.items.length}`} results={remoteFolderItems.items} overall="completed" jobId="remote-folder" platforms={[remoteFolderView.platform]} library={library} pageSize={remoteFolderItems.items.length} />
+                <ResultTabs viewScope="remote-folder" key={`${remoteFolderView.account}-${remoteFolderView.folder}-${remoteFolderItems.items.length}`} results={remoteFolderItems.items} overall="completed" jobId="remote-folder" platforms={[remoteFolderView.platform]} library={library} pageSize={remoteFolderItems.items.length} renderExtraActions={(result) => <SpaceAddButton result={result} />} />
                 {remoteFolderItems.items.length < remoteFolderItems.total && <div className="library-batch-bar"><span>还有 {remoteFolderItems.total - remoteFolderItems.items.length} 条收藏</span><button type="button" className="btn small" disabled={remoteFolderLoading} onClick={() => void loadRemoteFolder(remoteFolderView, remoteFolderItems.items.length)}>{remoteFolderLoading ? "正在读取" : "显示更多"}</button></div>}
               </> : <div className="empty"><div className="empty-symbol"><FolderHeart /></div><h2>这个平台收藏夹还是空的</h2><p>{remoteFolderView.last_content_complete_at ? "已完成读取，平台当前没有可保存内容。" : "目录已同步，内容仍待下一次手动同步读取。"}</p></div>}
             </section>
@@ -582,7 +588,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
               </div>
             </section>}
             {/* 保留 V0.3 的平台页签和全部内容入口；它不冒充一个真实平台收藏夹。 */}
-            <section className="remote-all-section"><h2>全部内容</h2><p className="collection-count">汇总已同步的跨平台收藏；继续显示更多后，可搜索和导出更多内容。</p><ResultTabs viewScope="remote-all" results={data.results} overall={data.overall} jobId={data.job_id} platforms={Object.keys(data.platforms) as PlatformSlug[]} library={library} fetchedAt={fetchedAt} pageSize={100} /></section>
+            <section className="remote-all-section"><h2>全部内容</h2><p className="collection-count">汇总已同步的跨平台收藏；继续显示更多后，可搜索和导出更多内容。</p><ResultTabs viewScope="remote-all" results={data.results} overall={data.overall} jobId={data.job_id} platforms={Object.keys(data.platforms) as PlatformSlug[]} library={library} fetchedAt={fetchedAt} pageSize={100} renderExtraActions={(result) => <SpaceAddButton result={result} />} /></section>
           </>}
         </>
       ) : (
@@ -590,5 +596,6 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
       )}
       {(editingCollection || creating) && <CollectionInfoDialog key={creating ? "create" : editingCollection?.id} collection={creating ? null : editingCollection} fallbackCover={creating ? null : editingFallbackCover} busy={moving} onSave={saveCollectionInfo} onCreate={createNewCollection} onClose={() => { const id = editingCollectionId; setCreating(false); setEditingCollectionId(null); if (id !== null) folderMenuTriggerRefs.current.get(id)?.focus(); }} />}
     </div>
+    </SpaceWorkspace>
   );
 }
