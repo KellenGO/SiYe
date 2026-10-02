@@ -23,6 +23,9 @@ SYSTEM_PROMPT = """你是四野的研究助手。只按用户的研究问题分�
 
 
 async def run_agent(payload, emit):
+    if payload.get("protocol", "anthropic") == "openai":
+        from .research_openai import run_openai
+        return await run_openai(payload, emit)
     from claude_agent_sdk import (ClaudeAgentOptions, ClaudeSDKClient, HookMatcher, PermissionResultAllow,
                                   PermissionResultDeny, ResultMessage, SystemMessage, create_sdk_mcp_server, tool)
 

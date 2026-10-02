@@ -22,6 +22,8 @@ class Provider(BaseHTTPRequestHandler):
     entered = threading.Event()
     resume = threading.Event()
     exposed = set()
+    native_exposed = set()
+    native_metadata = False
 
     def log_message(self, *args):
         pass
@@ -43,6 +45,28 @@ class Provider(BaseHTTPRequestHandler):
         if self.block:
             self.entered.set()
             self.resume.wait(30)
+        if self.path.endswith("chat/completions"):
+            names = [row["function"]["name"] for row in data["tools"]]
+            self.native_exposed.update(names)
+            previous = [row for row in data["messages"] if row.get("tool_calls")]
+            if previous:
+                assert previous[-1]["reasoning_content"] == "private-provider-reasoning"
+                assert previous[-1]["tool_calls"][0]["extra_content"]["google"]["thought_signature"] == "opaque-signature"
+                type(self).native_metadata = True
+            used = {call["function"]["name"] for row in previous for call in row["tool_calls"]}
+            chosen = next((name for name in ("check_connection", "manifest", "read_material", "submit_result") if name in names and name not in used), None)
+            args = {"key": "xhs|one", "index": 0} if chosen == "read_material" else {}
+            if chosen == "submit_result":
+                args = {"sections": [{"kind": "space", "title": "发现", "paragraphs": [{"text": "OpenAI 兼容研究结果", "sources": ["xhs|one"]}]}]}
+            message = {"role": "assistant", "content": None if chosen else "OK", "reasoning_content": "private-provider-reasoning"}
+            if chosen:
+                message["tool_calls"] = [{"id": f"call_{len(used)}", "type": "function", "function": {"name": chosen, "arguments": json.dumps(args)}, "extra_content": {"google": {"thought_signature": "opaque-signature"}}}]
+            response = {"choices": [{"message": message, "finish_reason": "tool_calls" if chosen else "stop"}], "usage": {"prompt_tokens": 10, "completion_tokens": 10, "total_tokens": 20}}
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps(response).encode())
+            return
         names = [row["name"] for row in data.get("tools", [])]
         self.exposed.update(names)
         used = {row.get("name") for message in data["messages"] for row in message.get("content", [])
@@ -96,7 +120,7 @@ async def smoke(executable=None):
     jobs_module.windows_process_job = capture
     if executable:
         jobs_module.task_command = lambda: [str(Path(executable).resolve()), "--research-worker"]
-    credentials = {"model": "claude-sonnet-4-6", "base_url": f"http://127.0.0.1:{server.server_port}", "api_key": "isolated-test-key"}
+    credentials = {"protocol": "anthropic", "model": "claude-sonnet-4-6", "base_url": f"http://127.0.0.1:{server.server_port}", "api_key": "isolated-test-key"}
     try:
         with TemporaryDirectory(prefix="research-smoke-", dir=ROOT / "build") as directory:
             jobs_module.library_data_root = lambda: Path(directory)
@@ -110,6 +134,14 @@ async def smoke(executable=None):
                 "space_name": "测试空间", "description": ""}, credentials)
             assert result["coverage"][0]["complete"] and result["document"]["content"]
             assert Provider.exposed <= {"mcp__research__manifest", "mcp__research__read_material", "mcp__research__check_connection", "StructuredOutput"}
+            native_credentials = {**credentials, "protocol": "openai", "model": "deepseek-flash", "base_url": credentials["base_url"] + "/v1"}
+            assert (await manager.process({"elapsed": 510}, {"mode": "probe", "web_enabled": False}, native_credentials))["connection_ok"]
+            native_job = {"elapsed": 510}
+            native = await manager.process(native_job, {"mode": "analyze", "web_enabled": False, "materials": [source],
+                "space_name": "测试空间", "description": ""}, native_credentials)
+            assert native["coverage"][0]["complete"] and native_job["activity"]
+            assert Provider.native_exposed <= {"manifest", "read_material", "check_connection", "submit_result"}
+            assert Provider.native_metadata
             Provider.block = True
             pending = asyncio.create_task(manager.process({"elapsed": 510}, {"mode": "probe", "web_enabled": False}, credentials))
             assert await asyncio.to_thread(Provider.entered.wait, 20)
@@ -133,8 +165,13 @@ async def smoke(executable=None):
                         assert win32process.GetExitCodeProcess(handle) != 259, "Cancelled process remains active"
                     finally:
                         handle.Close()
+            Provider.entered.clear()
+            pending = asyncio.create_task(manager.process({"elapsed": 510}, {"mode": "probe", "web_enabled": False}, native_credentials))
+            assert await asyncio.to_thread(Provider.entered.wait, 20)
+            pending.cancel()
+            await asyncio.gather(pending, return_exceptions=True)
             assert not list((Path(directory) / "research-tmp").iterdir()), "Temporary source files remain"
-        print("PASS: real SDK tool loop, structured note, tool restrictions, process-tree cancellation and temporary cleanup")
+        print("PASS: OpenAI and legacy SDK tool loops, provider metadata, structured notes, restricted tools, cancellation and temporary cleanup")
     finally:
         Provider.resume.set()
         server.shutdown()

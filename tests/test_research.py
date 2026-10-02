@@ -353,7 +353,7 @@ def test_matching_untrusted_host_and_origin_cannot_change_credentials(config, ho
             json={"base_url": "https://evil.example", "model": "changed"})
         assert response.status_code == 403
         assert client.post("/api/research/connection-test", json={}).status_code == 403
-    assert config.credentials() == {"base_url": "https://original.example", "model": "original", "api_key": "secret"}
+    assert config.credentials() == {"protocol": "openai", "base_url": "https://original.example", "model": "original", "api_key": "secret"}
 
 
 @pytest.mark.parametrize("url", ["http://localhost:8080", "http://127.0.0.1:8080", "http://[::1]:8080"])
@@ -485,3 +485,30 @@ def test_conversation_routes_isolate_spaces_and_lock_configuration(config, tmp_p
         assert client.delete("/api/research/config").status_code == 409
         manager.active = None
         assert client.put("/api/research/config", json={"base_url": "https://example.com", "model": "m", "api_key": "secret"}).status_code == 200
+
+
+
+def test_new_and_legacy_protocol_configuration(config):
+    assert config.public()["protocol"] == "openai"
+    config.save("https://api.deepseek.com", "deepseek-flash", "secret")
+    assert config.credentials()["protocol"] == "openai"
+    data = json.loads(config.path.read_text(encoding="utf-8"))
+    data.pop("protocol")
+    config.path.write_text(json.dumps(data), encoding="utf-8")
+    assert config.credentials()["protocol"] == "anthropic", "Old credentials must keep their original protocol"
+    config.save("https://generativelanguage.googleapis.com/v1beta/openai", "gemini-3.8-flash", "gemini-key", "openai")
+    assert config.public()["protocol"] == "openai"
+    with pytest.raises(ValueError):
+        config.save("https://api.deepseek.com/chat/completions", "model", "secret")
+    with pytest.raises(ValueError):
+        config.save("https://example.com", "model", "secret", "unsupported")
+
+
+def test_openai_runtime_does_not_require_claude_sdk(config, monkeypatch):
+    from api.services import research_jobs as module
+    config.save("https://api.deepseek.com", "model", "secret")
+    monkeypatch.setattr(module, "runtime_status", lambda: {"sdk_available": False, "cli_available": False})
+    ResearchJobs(config).require_runtime()
+    config.save("https://api.anthropic.com", "model", "secret", "anthropic")
+    with pytest.raises(ValueError, match="运行环境"):
+        ResearchJobs(config).require_runtime()

@@ -27,11 +27,14 @@ def task_command():
 
 
 def task_environment(workdir, credentials=None):
-    env = {key: value for key, value in os.environ.items() if not key.startswith(("ANTHROPIC_", "CLAUDE_")) and key != "CLAUDECODE"}
+    env = {key: value for key, value in os.environ.items() if not key.startswith(("ANTHROPIC_", "CLAUDE_")) and key not in {"CLAUDECODE", "SIYE_RESEARCH_API_KEY"}}
     env.update(PYTHONUTF8="1", PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1", CLAUDE_CONFIG_DIR=str(Path(workdir) / "claude"),
                CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1")
     if credentials:
-        env.update(ANTHROPIC_API_KEY=credentials["api_key"], ANTHROPIC_BASE_URL=credentials["base_url"])
+        if credentials.get("protocol", "anthropic") == "openai":
+            env.update(SIYE_RESEARCH_API_KEY=credentials["api_key"])
+        else:
+            env.update(ANTHROPIC_API_KEY=credentials["api_key"], ANTHROPIC_BASE_URL=credentials["base_url"])
     return env
 
 
@@ -120,10 +123,12 @@ class ResearchJobs:
                 self.active = None
 
     def require_runtime(self):
+        credentials = self.config.credentials()
+        if credentials["protocol"] == "openai":
+            return
         status = runtime_status()
         if not status["sdk_available"] or not status["cli_available"]:
             raise ValueError("AI 运行环境不完整，请使用包含 AI 运行程序的四野安装包")
-        self.config.credentials()
 
     def conversation_jobs(self, space_id, conversation_id):
         matches = [job for job in self.jobs.values() if job.get("conversation_id", job["job_id"]) == conversation_id]
@@ -162,7 +167,7 @@ class ResearchJobs:
             "conversation_id": conversation_id or identity, "history": history,
             "question": question, "web_enabled": web_enabled, "status": "collecting", "phase": "collecting",
             "message": "正在获取空间资料", "materials": [], "elapsed": 0.0, "error": "",
-            "document": None, "coverage": [], "external_sources": [], "web_errors": [], "usage": None, "cost_usd": None}
+            "document": None, "activity": [], "coverage": [], "external_sources": [], "web_errors": [], "usage": None, "cost_usd": None}
         if latest:
             self.jobs[identity].update(materials=copy.deepcopy(latest["materials"]), status="analyzing", phase="analyzing", message="正在继续分析当前会话资料")
         self.tasks[identity] = asyncio.create_task(self.analyze(identity) if latest else self.collect(identity))
@@ -187,7 +192,7 @@ class ResearchJobs:
             workdir = temporary.name
             payload.update(workdir=workdir)
             if credentials:
-                payload.update(model=credentials["model"], base_url=credentials["base_url"])
+                payload.update(model=credentials["model"], base_url=credentials["base_url"], protocol=credentials.get("protocol", "anthropic"))
             proc = await asyncio.create_subprocess_exec(*task_command(), cwd=str(application_root()),
                 env=task_environment(workdir, credentials), stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, limit=16 * 1024 * 1024,
@@ -216,6 +221,9 @@ class ResearchJobs:
                         job["message"] = f"已获取 {len(job['materials'])} / {len(job['snapshot']['items'])} 条资料"
                     elif kind == "progress":
                         job.update(phase=event["phase"], message=event["message"])
+                    elif kind == "activity":
+                        job.setdefault("activity", []).append({"tool": event["tool"], "message": event["message"]})
+                        job["activity"] = job["activity"][-40:]
                     elif kind == "usage":
                         job.update(usage=event.get("usage"), cost_usd=event.get("cost_usd"))
                     elif kind == "done":

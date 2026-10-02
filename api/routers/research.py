@@ -1,5 +1,7 @@
 """Local configuration and explicit research task lifecycle."""
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -34,6 +36,7 @@ research_router.dependencies.append(Depends(local_request))
 
 class ConfigInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    protocol: Literal["openai", "anthropic"] = "openai"
     base_url: str = Field(max_length=500)
     model: str = Field(min_length=1, max_length=200)
     api_key: str | None = Field(default=None, max_length=4096)
@@ -67,7 +70,7 @@ async def config_save(payload: ConfigInput, config=Depends(get_research_config),
     if manager.active:
         raise HTTPException(409, "研究正在运行或等待确认，请先完成或取消后修改 AI 配置")
     try:
-        return config.save(payload.base_url, payload.model, payload.api_key)
+        return config.save(payload.base_url, payload.model, payload.api_key, payload.protocol)
     except ValueError as error:
         translate(error)
 

@@ -12,7 +12,7 @@ from base.runtime_paths import library_data_root, resource_path
 
 SDK_VERSION = "0.2.163"
 CLI_VERSION = "2.1.287"
-DEFAULT_BASE_URL = "https://api.anthropic.com"
+DEFAULT_BASE_URL = "https://api.deepseek.com"
 
 
 def protect_key(value: str, decrypt: bool = False) -> str:
@@ -72,7 +72,7 @@ class ResearchConfig:
 
     def _load(self):
         if not self.path.exists():
-            return {"base_url": DEFAULT_BASE_URL, "model": "", "preferences": {}}
+            return {"protocol": "openai", "base_url": DEFAULT_BASE_URL, "model": "deepseek-flash", "preferences": {}}
         try:
             return json.loads(self.path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -87,16 +87,20 @@ class ResearchConfig:
     def public(self):
         with self.lock:
             data = self._load()
-            return {"base_url": data["base_url"], "model": data["model"],
+            return {"protocol": data.get("protocol", "anthropic"), "base_url": data["base_url"], "model": data["model"],
                     "has_key": bool(data.get("key")), "key_mask": "••••••••" if data.get("key") else "",
                     "runtime": runtime_status()}
 
-    def save(self, base_url, model, api_key=None):
+    def save(self, base_url, model, api_key=None, protocol="openai"):
         base_url, model = base_url.strip().rstrip("/"), model.strip()
+        if protocol not in {"openai", "anthropic"}:
+            raise ValueError("请选择支持的 AI 接口协议")
         url = urlsplit(base_url)
         if (url.scheme not in {"http", "https"} or not url.hostname or url.username or url.password
                 or url.query or url.fragment or len(base_url) > 500):
-            raise ValueError("请输入有效的 Anthropic 兼容服务地址（不是 /v1/messages 接口）")
+            raise ValueError("请输入有效的服务基础地址，例如 https://api.deepseek.com（不要填写完整请求接口）")
+        if url.path.rstrip("/").endswith(("/chat/completions", "/messages")):
+            raise ValueError("请输入服务基础地址，不要包含 /chat/completions 或 /messages")
         if not model or len(model) > 200 or any(ord(char) < 32 for char in model):
             raise ValueError("请输入模型名称")
         with self.lock:
@@ -107,7 +111,7 @@ class ResearchConfig:
                 data["key"] = self.cipher(api_key.strip())
             if not data.get("key"):
                 raise ValueError("请先填写 API Key")
-            data.update(base_url=base_url, model=model)
+            data.update(protocol=protocol, base_url=base_url, model=model)
             data.pop("web_check", None)
             self._write(data)
             return self.public()
@@ -117,13 +121,13 @@ class ResearchConfig:
             data = self._load()
             if not data.get("key") or not data.get("model"):
                 raise ValueError("请先配置 AI 服务")
-            return {"base_url": data["base_url"], "model": data["model"],
+            return {"protocol": data.get("protocol", "anthropic"), "base_url": data["base_url"], "model": data["model"],
                     "api_key": self.cipher(data["key"], decrypt=True)}
 
     def delete(self):
         with self.lock:
             data = self._load()
-            self._write({"base_url": DEFAULT_BASE_URL, "model": "", "preferences": data.get("preferences", {})})
+            self._write({"protocol": "openai", "base_url": DEFAULT_BASE_URL, "model": "deepseek-flash", "preferences": data.get("preferences", {})})
             return self.public()
 
     def preference(self, space_id):

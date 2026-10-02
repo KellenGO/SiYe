@@ -64,3 +64,32 @@ def page_text(html: str) -> tuple[str, str]:
     selector.xpath("//script|//style|//nav|//footer|//noscript").drop()
     text = "\n".join(part.strip() for part in selector.xpath("//body//text()").getall() if part.strip())
     return title, text
+
+
+async def search_public(query: str) -> list[dict]:
+    """Public HTML search; no model vendor-specific search capability or key."""
+    from urllib.parse import parse_qs, urlencode
+
+    if not isinstance(query, str) or not query.strip() or len(query) > 300:
+        raise ValueError("搜索问题无效")
+    _, html = await public_get("https://html.duckduckgo.com/html/?" + urlencode({"q": query}))
+    results = []
+    for row in Selector(text=html).css(".result"):
+        link = row.css(".result__a")
+        url = link.attrib.get("href", "")
+        if url.startswith("//"):
+            url = "https:" + url
+        url = parse_qs(urlsplit(url).query).get("uddg", [url])[0]
+        try:
+            await public_target(url)
+        except (ValueError, OSError):
+            continue
+        title = "".join(link.xpath(".//text()").getall()).strip()
+        snippet = "".join(row.css(".result__snippet").xpath(".//text()").getall()).strip()
+        if title and url not in {item["url"] for item in results}:
+            results.append({"url": url, "title": title[:200], "snippet": snippet[:1200]})
+        if len(results) >= 5:
+            break
+    if not results:
+        raise ValueError("公开搜索暂时不可用")
+    return results

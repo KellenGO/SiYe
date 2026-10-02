@@ -138,6 +138,6 @@ export default function SpaceNoteController({ spaceId, open, onClose, researchOp
   }, [editor, session, detail.data]);
   return editor && session && detail.data ? <>
     {createPortal(<NotePanel key={spaceId} editor={editor} session={session} name={detail.data.name} spaceId={detail.data.id} archived={detail.data.archived} modal={modal} onClose={onClose} />, container)}
-    <SpaceResearchPanel key={spaceId} spaceId={spaceId} editor={editor} session={session} archived={detail.data.archived} open={researchOpen} onClose={onCloseResearch} />
+    <SpaceResearchPanel key={spaceId} spaceId={spaceId} spaceName={detail.data.name} sourceCount={detail.data.items.length} editor={editor} session={session} archived={detail.data.archived} open={researchOpen} onClose={onCloseResearch} />
   </> : null;
 }

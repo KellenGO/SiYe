@@ -2,6 +2,7 @@ import axios from "axios";
 import type { NoteDocument } from "./spaceNotes.js";
 
 export interface ResearchConfig {
+  protocol: "openai" | "anthropic";
   base_url: string; model: string; has_key: boolean; key_mask: string;
   runtime: { sdk_available: boolean; cli_available: boolean; sdk_version: string; cli_version: string };
 }
@@ -20,6 +21,7 @@ export interface ResearchJob {
   phase: string; message: string; error: string; materials: ResearchMaterial[];
   total_materials: number;
   document: NoteDocument | null; stale_snapshot?: boolean;
+  activity?: { tool: string; message: string }[];
   coverage: { key: string; title: string; chunks: number; read_chunks: number; complete: boolean }[];
   external_sources: { id: string; title: string; url: string; level: string; fetched_at: string }[];
   web_errors: string[]; usage: Record<string, number> | null; cost_usd: number | null;
@@ -27,8 +29,8 @@ export interface ResearchJob {
 
 const BASE = "/api/research";
 export async function getResearchConfig(): Promise<ResearchConfig> { return (await axios.get(`${BASE}/config`)).data; }
-export async function saveResearchConfig(base_url: string, model: string, api_key?: string): Promise<ResearchConfig> {
-  return (await axios.put(`${BASE}/config`, { base_url, model, api_key })).data;
+export async function saveResearchConfig(base_url: string, model: string, api_key?: string, protocol: ResearchConfig["protocol"] = "openai"): Promise<ResearchConfig> {
+  return (await axios.put(`${BASE}/config`, { base_url, model, api_key, protocol })).data;
 }
 export async function deleteResearchConfig(): Promise<ResearchConfig> { return (await axios.delete(`${BASE}/config`)).data; }
 export async function testResearchConnection(web_enabled: boolean): Promise<{ connection_ok: boolean; web_ok: boolean }> {
