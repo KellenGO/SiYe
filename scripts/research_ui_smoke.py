@@ -66,19 +66,28 @@ def main():
                 return {"document": result_document(result, job["materials"], [], access.coverage(), job["web_enabled"]),
                         "coverage": access.coverage(), "external_sources": [], "web_errors": []}
             manager.process = process
+            tested_models = []
+            async def probe(web_enabled):
+                tested_models.append(config.credentials()["model"])
+                return {"connection_ok": True, "web_ok": web_enabled}
+            manager.probe = probe
+            fail_append = False
             app = FastAPI()
             app.include_router(spaces_router)
             app.include_router(research_router)
             app.dependency_overrides[get_spaces_store] = lambda: store
             app.dependency_overrides[get_research_config] = lambda: config
             app.dependency_overrides[get_research_jobs] = lambda: manager
-            with TestClient(app) as client:
+            with TestClient(app, base_url="http://127.0.0.1") as client:
                 def route_request(route):
                     request = route.request
                     path = urlparse(request.url).path
                     if not request.url.startswith(origin + "/"):
                         route.abort()
                     elif path.startswith(("/api/spaces", "/api/research")):
+                        if fail_append and path.endswith("/note") and request.method == "PUT":
+                            route.fulfill(status=503, json={"detail": "测试保存失败"})
+                            return
                         response = client.request(request.method, path, content=request.post_data, headers={"content-type": "application/json"})
                         if path.endswith("/note") and response.status_code >= 400:
                             raise AssertionError("Rich-note save rejected: " + request.post_data)
@@ -92,41 +101,77 @@ def main():
                 context.add_init_script("localStorage.setItem('mediacrawler_license_accepted','true');localStorage.setItem('siye_onboarding_preference_v1','completed');localStorage.setItem('mediacrawler_language','zh-CN')")
                 context.route("**/*", route_request)
                 page = context.new_page()
+                page.on("dialog", lambda event: event.accept())
                 errors = []
                 page.on("pageerror", lambda error: errors.append(str(error)))
                 def open_panel():
+                    panel = page.locator(".space-research:visible")
+                    if panel.count():
+                        return panel
                     edge = page.locator(".space-edge-right:visible")
                     if "is-open" not in edge.get_attribute("class"):
                         edge.get_by_role("button", name="打开笔记", exact=True).click()
                     if not edge.get_by_role("button", name="取消固定研究笔记", exact=True).count():
                         edge.get_by_role("button", name="固定研究笔记", exact=True).click()
-                    panel = page.locator(".space-research:visible")
-                    if not panel.get_attribute("open") == "":
-                        panel.locator("summary").first.click()
+                    page.get_by_role("button", name="打开研究助手", exact=True).click()
                     expect(panel.get_by_label("允许联网补充", exact=True)).to_be_enabled()
                     return panel
                 page.goto(origin + f"/#/spaces/{first}")
                 panel = open_panel()
+                panel.get_by_role("button", name="AI 服务配置", exact=True).click()
+                panel.get_by_label("模型名称", exact=True).fill("new-model")
+                panel.get_by_role("button", name="保存并测试连接", exact=True).click()
+                expect(panel.get_by_text("SDK 工具调用测试通过", exact=True)).to_be_visible()
+                assert tested_models == ["new-model"], "Connection test ignored current inputs"
+                panel.get_by_role("button", name="返回研究", exact=True).click()
                 web = panel.get_by_label("允许联网补充", exact=True)
                 expect(web).not_to_be_checked()
                 note = page.get_by_role("textbox", name="空间笔记编辑器", exact=True)
+                panel.get_by_role("button", name="关闭研究助手", exact=True).click()
                 note.fill("生成前的手写笔记")
+                panel = open_panel()
                 panel.get_by_role("button", name="生成研究笔记", exact=True).click()
                 expect(panel.get_by_text("等待检查资料", exact=True)).to_be_visible()
                 expect(panel.get_by_text("测试评论读取失败", exact=False)).to_be_visible()
+                panel.locator(".space-research-options summary").click()
                 web.check()
                 expect(panel.get_by_text("本次任务：联网补充关闭", exact=True)).to_be_visible()
                 panel.get_by_role("button", name="使用这些资料开始分析", exact=True).click()
+                panel.get_by_role("button", name="关闭研究助手", exact=True).click()
                 note.press("Control+End")
                 note.press_sequentially("，生成期间继续写")
+                panel = open_panel()
                 expect(panel.get_by_role("button", name="追加到笔记", exact=True)).to_be_visible(timeout=15000)
                 expect(note).not_to_contain_text("AI生成的苏州研究结果")
+                expect(page.locator(".space-note-status")).to_contain_text("已保存到本机")
+                fail_append = True
+                panel.get_by_role("button", name="追加到笔记", exact=True).click()
+                expect(panel.get_by_role("button", name="重试保存笔记", exact=True)).to_be_enabled()
+                expect(panel.get_by_role("alert")).to_contain_text("保存失败")
+                assert "AI生成的苏州研究结果" not in json.dumps(store.get_space(first)["note_document"], ensure_ascii=False)
+                fail_append = False
+                page.reload()
+                panel = open_panel()
+                note = page.get_by_role("textbox", name="空间笔记编辑器", exact=True)
+                expect(note).not_to_contain_text("AI生成的苏州研究结果")
+                expect(panel.get_by_role("button", name="追加到笔记", exact=True)).to_be_enabled()
                 panel.get_by_role("button", name="追加到笔记", exact=True).click()
                 expect(note).to_contain_text("生成期间继续写")
                 expect(note).to_contain_text("AI生成的苏州研究结果")
                 expect(page.locator(".space-note-status")).to_contain_text("已保存到本机")
                 assert "AI生成的苏州研究结果" in json.dumps(store.get_space(first)["note_document"], ensure_ascii=False)
-                assert page.locator(".space-note-content").bounding_box()["height"] >= 100, "AI panel leaves too little room for writing"
+                panel.get_by_role("button", name="重新生成", exact=True).click()
+                expect(panel.get_by_text("等待检查资料", exact=True)).to_be_visible()
+                panel.get_by_role("button", name="使用这些资料开始分析", exact=True).click()
+                expect(panel.get_by_role("button", name="追加到笔记", exact=True)).to_be_visible(timeout=15000)
+                fail_append = True
+                panel.get_by_role("button", name="追加到笔记", exact=True).click()
+                expect(panel.get_by_role("button", name="重试保存笔记", exact=True)).to_be_enabled()
+                fail_append = False
+                panel.get_by_role("button", name="重试保存笔记", exact=True).click()
+                expect(panel.get_by_role("button", name="已追加到笔记", exact=True)).to_be_disabled()
+                assert json.dumps(store.get_space(first)["note_document"], ensure_ascii=False).count("AI生成的苏州研究结果") == 2, "Retry inserted the same result twice"
+                assert page.locator(".space-note-content").bounding_box()["height"] >= 300, "Research entry leaves too little room for writing"
                 expect(panel.get_by_role("button", name="已追加到笔记", exact=True)).to_be_disabled()
                 expect(page.get_by_role("textbox", name="空间笔记编辑器", exact=True)).to_contain_text("AI生成的苏州研究结果")
                 page.screenshot(path=str(ROOT / "build/research-desktop.png"), full_page=True)
@@ -143,10 +188,24 @@ def main():
                 expect(panel).to_be_visible()
                 assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
                 page.screenshot(path=str(ROOT / "build/research-mobile.png"), full_page=True)
+                assert page.locator(".space-research-dialog").evaluate("element => element.matches(':modal')"), "Resizing removed the dialog from the top layer"
+                bounds = panel.bounding_box()
+                assert bounds["width"] >= 380 and bounds["height"] >= 830
+                footer = panel.locator(".space-research-footer").bounding_box()
+                assert footer["y"] + footer["height"] <= 845
+                page.set_viewport_size({"width": 320, "height": 640})
+                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+                assert panel.locator(".space-research-footer").bounding_box()["y"] + panel.locator(".space-research-footer").bounding_box()["height"] <= 641
+                panel.get_by_role("button", name="AI 服务配置", exact=True).focus()
+                page.keyboard.press("Tab")
+                assert page.locator(".space-research-dialog").evaluate("element => element.contains(document.activeElement)")
+                page.keyboard.press("Escape")
+                expect(page.locator(".space-research-dialog")).not_to_be_visible()
+                expect(page.get_by_role("textbox", name="空间笔记编辑器", exact=True)).to_be_visible()
                 assert not errors, errors
                 context.close()
                 browser.close()
-                print("PASS: preview, missing components, frozen task preference, editing during generation, append once across reload, space-specific preference and mobile")
+                print("PASS: current configuration test, source review, task preference, editing during generation, failed save recovery after reload, append once, independent preferences, desktop and fullscreen mobile")
     finally:
         server.shutdown()
 

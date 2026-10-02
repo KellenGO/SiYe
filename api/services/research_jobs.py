@@ -18,6 +18,8 @@ from .research_materials import material
 from .worker_process import terminate_worker
 
 ACTIVE_SECONDS = 600
+MAX_FINISHED_JOBS = 10
+MAX_RETAINED_BYTES = 32 * 1024 * 1024
 
 
 def task_command():
@@ -71,17 +73,46 @@ class ResearchJobs:
 
     def public(self, job_id, store=None):
         job = self.get(job_id)
-        visible = {key: copy.deepcopy(value) for key, value in job.items() if key not in {"snapshot", "elapsed", "workdir"}}
+        visible = {key: copy.deepcopy(value) for key, value in job.items() if key not in {"snapshot", "elapsed", "workdir", "materials"}}
+        visible["total_materials"] = len(job["snapshot"]["items"])
+        visible["materials"] = []
+        for row in job["materials"]:
+            summary = {key: row[key] for key in ("key", "platform", "title", "url")}
+            for name in ("body", "comments", "subtitles"):
+                values = row[name]
+                summary[name] = {key: values[key] for key in ("state", "reason", "truncated")}
+                summary[name]["count"] = len(values["entries"])
+                if "sort" in values:
+                    summary[name]["sort"] = values["sort"]
+            visible["materials"].append(summary)
         if store and job.get("space_id"):
             current = store.get_space(job["space_id"])
             visible["stale_snapshot"] = current["items"] != job["snapshot"]["items"]
         return visible
+
+    def prune(self):
+        retained, size = 0, 0
+        for identity in reversed(list(self.jobs)):
+            job = self.jobs[identity]
+            if identity == self.active or job["status"] not in {"ready", "failed", "cancelled"}:
+                continue
+            task = self.tasks.get(identity)
+            if task and not task.done():
+                continue
+            weight = len(json.dumps(job, ensure_ascii=False).encode("utf-8"))
+            if retained and (retained >= MAX_FINISHED_JOBS or size + weight > MAX_RETAINED_BYTES):
+                del self.jobs[identity]
+                self.tasks.pop(identity, None)
+            else:
+                retained += 1
+                size += weight
 
     async def claim(self, identity):
         async with self.lock:
             if self.active is not None:
                 raise ValueError("已有研究任务正在运行或等待确认，请先完成或取消")
             self.active = identity
+            self.prune()
 
     async def release(self, identity):
         async with self.lock:
@@ -107,6 +138,7 @@ class ResearchJobs:
             "message": "正在获取空间资料", "materials": [], "elapsed": 0.0, "error": "",
             "document": None, "coverage": [], "external_sources": [], "web_errors": [], "usage": None, "cost_usd": None}
         self.tasks[identity] = asyncio.create_task(self.collect(identity))
+        self.tasks[identity].add_done_callback(lambda _: self.prune())
         return self.public(identity)
 
     async def process(self, job, payload, credentials=None):
@@ -226,6 +258,7 @@ class ResearchJobs:
             await self.claim(identity)
         job.update(status="collecting", phase="collecting", error="")
         self.tasks[identity] = asyncio.create_task(self.collect(identity, retry=True))
+        self.tasks[identity].add_done_callback(lambda _: self.prune())
         return self.public(identity)
 
     async def generate(self, identity, archived=False):
@@ -236,6 +269,7 @@ class ResearchJobs:
             await self.claim(identity)
         job.update(status="analyzing", phase="analyzing", error="", message="AI 正在整理研究笔记")
         self.tasks[identity] = asyncio.create_task(self.analyze(identity))
+        self.tasks[identity].add_done_callback(lambda _: self.prune())
         return self.public(identity)
 
     async def analyze(self, identity):
@@ -267,7 +301,7 @@ class ResearchJobs:
 
     async def cancel_space(self, space_id):
         for identity, job in list(self.jobs.items()):
-            if job.get("space_id") == space_id:
+            if identity in self.jobs and job.get("space_id") == space_id:
                 await self.cancel(identity)
 
     async def probe(self, web_enabled):
@@ -291,7 +325,8 @@ class ResearchJobs:
             task.cancel()
         await asyncio.gather(*pending, return_exceptions=True)
         for identity in list(self.tasks):
-            await self.cancel(identity)
+            if identity in self.jobs:
+                await self.cancel(identity)
 
 
 research_jobs = ResearchJobs()

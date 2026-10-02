@@ -11,7 +11,7 @@
 
 ## 待接手事项
 
-- `SPACE-AI-20261002`：实现已集成到 master（按任务 ID 查提交），修改范围已释放。SDK 接本机模拟服务、Windows 包及界面验收通过；真实付费服务、四平台真人资料与字幕尚未逐一验证，边界见 [空间 AI wiki](features/space-research-ai.md)。当前测试包在 `build/ai-package/SiYe-Windows-x64.zip`，含本次源码与前端；常用 `dist/` 未替换。后续由实际使用者配置服务后验证来源获取与联网兼容性。
+- `SPACE-AI-20261002`：实现及评审修复已集成到 master（按任务 ID 查提交），修改范围已释放。SDK 接本机模拟服务、Windows 包及界面验收通过；真实付费服务、四平台真人资料与字幕尚未逐一验证，边界见 [空间 AI wiki](features/space-research-ai.md)。当前测试包 `build/ai-package/SiYe-Windows-x64.zip` 对应 `949f6ff`，尚未包含 `SPACE-AI-FIX-20261002` 的修复；源码和 `webui/dist` 已更新，常用 `dist/` 未替换。需使用 EXE 时重新构建，并由实际使用者配置服务后验证来源获取与联网兼容性。
 - `SPACES-20261001` 验证限制：空间及搜索收藏隔离验收通过；`scripts/favorites_ui_smoke.py` 在 320px 收藏夹信息菜单边界检查失败，独立构建的原始 `cb803f4` 也在同一处失败（菜单左侧越界），不是空间新增回归。本次未接管旧收藏菜单修复；如接手应单独处理。完整变更与验证见 `docs/history/2026-10-01-研究空间交付.md`，提交按任务 ID 定位。
 
 仅保留未集成、未完成、阻塞、归属不明的改动，或代码和 wiki 难以重建的验证限制。每项用任务 ID 或提交定位，写清现状、下一步和负责人；解决后删除。不替其他会话宣布完成。

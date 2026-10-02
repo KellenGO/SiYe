@@ -258,7 +258,7 @@
     "key": "API Key",
     "keyHint": "Key 在本机加密保存；留空保留已有 Key。连接测试和生成可能产生服务费用。",
     "saveConfig": "保存配置",
-    "test": "测试连接与当前联网模式",
+    "test": "保存并测试连接",
     "clearConfig": "清除 AI 配置",
     "configSaved": "配置已保存",
     "testPassed": "SDK 工具调用测试通过",
@@ -306,6 +306,23 @@
       "restricted": "访问受限",
       "failed": "读取失败",
       "not_applicable": "不适用"
-    }
+    },
+    "nextSettings": "下次研究设置",
+    "open": "打开研究助手",
+    "close": "关闭研究助手",
+    "back": "返回研究",
+    "sharedConfig": "所有空间共用此 AI 服务设置。保存并测试会使用当前输入的配置及当前联网模式。",
+    "setupRequired": "请先打开 AI 服务配置，填写模型和 API Key。",
+    "progress": "研究进度",
+    "step": {
+      "collect": "读取资料",
+      "review": "检查缺口",
+      "analyze": "分析整理",
+      "result": "预览笔记"
+    },
+    "regenerate": "重新生成",
+    "retrySave": "重试保存笔记",
+    "appendSaveFailed": "内容已插入草稿，但保存失败。请重试保存；预览已保留。",
+    "draftInserted": "已插入当前草稿，尚未保存到本机。重试保存不会重复插入。"
   }
 }

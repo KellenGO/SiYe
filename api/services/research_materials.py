@@ -140,12 +140,15 @@ class MaterialCollector(ResultHydrator):
         except PermissionError:
             for name in ("body", "comments", "subtitles"):
                 if result[name]["state"] not in {"ok", "not_applicable"}:
-                    result[name] = component("restricted", reason="需要本机会话，请先检查平台账号")
+                    result[name].update(state="restricted", reason="需要本机会话，请先检查平台账号")
+                    result[name]["truncated"] = bool(result[name]["entries"] or result[name]["text"])
             return result
         except Exception as error:
             for name in ("body", "comments", "subtitles"):
                 if result[name]["state"] not in {"ok", "not_applicable"}:
-                    result[name] = failure(error)
+                    failed = failure(error)
+                    result[name].update(state=failed["state"], reason=failed["reason"],
+                                        truncated=bool(result[name]["entries"] or result[name]["text"]))
             return result
         detail = None
         try:

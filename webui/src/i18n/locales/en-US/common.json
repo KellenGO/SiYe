@@ -258,7 +258,7 @@
     "key": "API key",
     "keyHint": "The key is encrypted on this computer. Leave blank to keep it. Connection tests and generation may incur provider charges.",
     "saveConfig": "Save settings",
-    "test": "Test connection and current web mode",
+    "test": "Save and test connection",
     "clearConfig": "Clear AI settings",
     "configSaved": "Settings saved",
     "testPassed": "SDK tool test passed",
@@ -306,6 +306,23 @@
       "restricted": "Access restricted",
       "failed": "Read failed",
       "not_applicable": "Not applicable"
-    }
+    },
+    "nextSettings": "Settings for the next research task",
+    "open": "Open research assistant",
+    "close": "Close research assistant",
+    "back": "Back to research",
+    "sharedConfig": "All spaces share these AI settings. Save and test uses the current inputs and web mode.",
+    "setupRequired": "Open AI service settings and enter a model and API key first.",
+    "progress": "Research progress",
+    "step": {
+      "collect": "Read sources",
+      "review": "Review gaps",
+      "analyze": "Analyze",
+      "result": "Preview note"
+    },
+    "regenerate": "Generate again",
+    "retrySave": "Retry saving note",
+    "appendSaveFailed": "Content was inserted into the draft, but saving failed. Retry saving; the preview is kept.",
+    "draftInserted": "Inserted into the current draft but not saved yet. Retrying the save will not insert it twice."
   }
 }

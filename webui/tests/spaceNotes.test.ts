@@ -5,6 +5,27 @@ import { spaceSources } from "../src/lib/spacesApi.js";
 import type { UnifiedSearchResult } from "../src/types/search.js";
 
 const doc = (text: string): NoteDocument => ({ type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text }] }] });
+
+test("research is marked saved only after a successful save, and retry does not duplicate it", async () => {
+  let fail = true;
+  const session = new NoteSession(doc("原笔记"), 0, async () => {
+    if (fail) throw new Error("network failed");
+    return { note_revision: 1 };
+  }, () => {});
+  session.appendResearch("failed-save", doc("研究结果"), (content) => {
+    session.change({ type: "doc", content: [...session.document.content!, ...content] });
+    return true;
+  });
+  assert.equal(await session.flush(), false);
+  assert.equal(session.hasResearch("failed-save"), true);
+  assert.equal(session.hasSavedResearch("failed-save"), false);
+  assert.equal(session.appendResearch("failed-save", doc("重复"), () => true), false);
+  fail = false;
+  assert.equal(await session.flush(), true);
+  assert.equal(session.hasSavedResearch("failed-save"), true);
+  assert.equal(noteText(session.document).match(/研究结果/g)?.length, 1);
+  session.dispose();
+});
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((done) => { resolve = done; });

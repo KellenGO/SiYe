@@ -84,9 +84,15 @@ export default function SpaceNoteController({ spaceId, open, onClose, target }: 
   }, []);
   const modal = Boolean(narrow && open && target && !target.closest(".local-content-research-layout"));
   useLayoutEffect(() => {
+    const research = container.querySelector<HTMLDialogElement>(".space-research-dialog[open]");
+    const focused = document.activeElement as HTMLElement | null;
     container.style.display = open ? "" : "none";
     container.className = modal ? "space-note-floating" : "";
-    if (target && open) (modal ? document.body : target).appendChild(container);
+    if (target && open) {
+      (modal ? document.body : target).appendChild(container);
+      // Moving the editor host removes native dialogs from the browser's top layer.
+      if (research) { research.close(); research.showModal(); focused?.isConnected && focused.focus(); }
+    }
     return () => { container.remove(); };
   }, [container, open, target, modal]);
   const editor = useEditor({
@@ -113,6 +119,7 @@ export default function SpaceNoteController({ spaceId, open, onClose, target }: 
     first()?.focus();
     const controls = () => [...container.querySelectorAll<HTMLElement>('button:not(:disabled), select:not(:disabled), input:not(:disabled), textarea:not(:disabled), summary, a[href], [contenteditable="true"]')].filter((control) => control.getClientRects().length > 0 && control.tabIndex >= 0);
     const keyboard = (event: KeyboardEvent) => {
+      if ((event.target as HTMLElement).closest("dialog[open]")) return;
       if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onClose(); }
       if (event.key === "Tab") {
         const all = controls();

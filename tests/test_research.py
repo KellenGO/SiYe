@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 from fastapi import FastAPI
@@ -88,8 +89,11 @@ def note_result(ref="xhs|one", kind="space"):
 
 
 def test_result_keeps_sources_distinct_and_rejects_invented_links():
-    item = material(source())
+    item = material(source(text="研究" * 6000))
     access = MaterialAccess([item])
+    with pytest.raises(ValueError, match="未读取"):
+        result_document(note_result(), [item], [], access.coverage(), False)
+    access.chunk(item["key"], 0)
     document = result_document(note_result(), [item], [], access.coverage(), False)
     encoded = json.dumps(document, ensure_ascii=False)
     assert "未完整分析" in encoded and "关闭" in encoded and "private" not in encoded
@@ -175,7 +179,7 @@ def test_routes_configuration_origin_and_preferences(config, tmp_path):
     space_id = store.create_space("攻略")["id"]
     app.dependency_overrides[get_research_config] = lambda: config
     app.dependency_overrides[get_spaces_store] = lambda: store
-    with TestClient(app) as client:
+    with TestClient(app, base_url="http://127.0.0.1") as client:
         assert client.put("/api/research/config", json={"base_url": "https://example.com", "model": "m", "api_key": "secret"}).status_code == 200
         assert "secret" not in client.get("/api/research/config").text
         assert client.get("/api/research/config", headers={"Origin": "https://evil.example"}).status_code == 403
@@ -200,7 +204,9 @@ async def test_sdk_actual_options_deny_other_tools_and_read_coverage(monkeypatch
             pass
         async def receive_response(self):
             yield sdk.SystemMessage("init", {"tools": ["mcp__research__manifest", "mcp__research__read_material"]})
-            yield sdk.ResultMessage("success", 1, 1, False, 1, "test", structured_output=note_result())
+            result = note_result()
+            result["sections"][0]["paragraphs"][0]["sources"] = []
+            yield sdk.ResultMessage("success", 1, 1, False, 1, "test", structured_output=result)
     monkeypatch.setattr(sdk, "ClaudeSDKClient", Client)
     payload = {"mode": "analyze", "web_enabled": False, "materials": [material(source())], "workdir": str(tmp_path),
                "model": "test", "base_url": "https://example.com", "space_name": "攻略", "description": ""}
@@ -333,3 +339,74 @@ async def test_enabled_web_tracks_search_and_partial_page_separately(monkeypatch
     assert result["external_sources"][0]["level"] == "仅搜索摘要"
     assert result["external_sources"][1]["level"] == "网页正文（部分已读）"
     assert "联网补充" in json.dumps(result["document"], ensure_ascii=False)
+
+
+@pytest.mark.parametrize("host", ["evil.example", "localhost.evil.example", "127.0.0.1.evil.example"])
+def test_matching_untrusted_host_and_origin_cannot_change_credentials(config, host):
+    config.save("https://original.example", "original", "secret")
+    app = FastAPI()
+    app.include_router(research_router)
+    app.dependency_overrides[get_research_config] = lambda: config
+    with TestClient(app, base_url=f"http://{host}:8080") as client:
+        response = client.put("/api/research/config", headers={"Origin": f"http://{host}:8080", "Sec-Fetch-Site": "same-origin"},
+            json={"base_url": "https://evil.example", "model": "changed"})
+        assert response.status_code == 403
+        assert client.post("/api/research/connection-test", json={}).status_code == 403
+    assert config.credentials() == {"base_url": "https://original.example", "model": "original", "api_key": "secret"}
+
+
+@pytest.mark.parametrize("url", ["http://localhost:8080", "http://127.0.0.1:8080", "http://[::1]:8080"])
+def test_local_hosts_and_development_origin_remain_supported(config, url):
+    app = FastAPI()
+    app.include_router(research_router)
+    app.dependency_overrides[get_research_config] = lambda: config
+    with TestClient(app, base_url="http://127.0.0.1:8080", headers={"Host": urlsplit(url).netloc}) as client:
+        assert client.get("/api/research/config", headers={"Origin": url}).status_code == 200
+        assert client.get("/api/research/config", headers={"Origin": "http://localhost:5173"}).status_code == 200
+        assert client.get("/api/research/config", headers={"Origin": "http://evil.example:8080"}).status_code == 403
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error", [PermissionError("missing session"), RuntimeError("client failed")])
+async def test_retry_client_failure_keeps_partial_evidence(monkeypatch, error):
+    collector = MaterialCollector()
+    async def client(_):
+        raise error
+    monkeypatch.setattr(collector, "client", client)
+    previous = material(source())
+    previous["body"] = component("ok", text="已读取正文")
+    previous["comments"] = component("failed", entries=[{"id": "one", "text": "部分评论"}])
+    previous["subtitles"] = component("failed", entries=[{"start": 0, "text": "部分字幕"}])
+    result = await collector.collect(source(), previous)
+    assert result["body"]["text"] == "已读取正文"
+    for name in ("comments", "subtitles"):
+        assert result[name]["entries"] == previous[name]["entries"] and result[name]["entries"]
+        assert result[name]["truncated"] and result[name]["reason"]
+
+
+def test_poll_response_omits_evidence_but_preserves_counts(config):
+    manager = ResearchJobs(config)
+    row = material(source(text="private snippet"))
+    row["body"] = component("ok", text="private body" * 10000)
+    row["comments"] = component("failed", entries=[{"id": "1", "text": "private comment"}], reason="读取失败")
+    manager.jobs["job"] = {"space_id": 1, "snapshot": {"items": [source()]}, "materials": [row], "elapsed": 0}
+    response = manager.public("job")
+    encoded = json.dumps(response)
+    assert "private" not in encoded and len(encoded) < 2000
+    assert response["materials"][0]["comments"]["count"] == 1 and response["total_materials"] == 1
+    response["materials"][0]["body"]["state"] = "failed"
+    assert row["body"]["state"] == "ok"
+
+
+def test_finished_jobs_are_bounded_and_active_job_is_preserved(config, monkeypatch):
+    from api.services import research_jobs as module
+    manager = ResearchJobs(config)
+    manager.jobs["active"] = {"status": "awaiting_sources"}
+    manager.active = "active"
+    for index in range(20):
+        manager.jobs[str(index)] = {"status": "ready", "evidence": "内容"}
+    manager.prune()
+    assert list(manager.jobs) == ["active", *map(str, range(10, 20))]
+    monkeypatch.setattr(module, "MAX_RETAINED_BYTES", 70)
+    manager.prune()
+    assert list(manager.jobs) == ["active", "19"]

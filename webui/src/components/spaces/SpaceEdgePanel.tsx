@@ -50,6 +50,7 @@ export function SpaceEdgePanel({ side, label, triggerLabel, icon, open, pinned, 
       }, 220);
     };
     const keyboard = (event: KeyboardEvent) => {
+      if ((event.target as HTMLElement).closest("dialog[open]")) return;
       if (event.key === "Escape" && open) { event.preventDefault(); event.stopPropagation(); close(); }
     };
     element.addEventListener("keydown", keyboard);

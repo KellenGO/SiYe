@@ -44,6 +44,7 @@ export class NoteSession {
   private flight?: Promise<boolean>;
   private disposed = false;
   private appendedResearch = new Set<string>();
+  private savedResearch = new Set<string>();
 
   constructor(document: NoteDocument, revision: number, private save: SaveNote, private changed: () => void) {
     this.document = document;
@@ -84,8 +85,13 @@ export class NoteSession {
         }
         const generation = this.generation;
         const document = this.document;
+        const research = [...this.appendedResearch];
         const saved = await this.save(document, this.revision);
         this.revision = saved.note_revision;
+        for (const identity of research) {
+          this.savedResearch.add(identity);
+          try { sessionStorage.setItem(`siye-research-applied:${identity}`, "1"); } catch { /* Saved state remains available in this session. */ }
+        }
         if (generation === this.generation) this.dirty = false;
       }
       return true;
@@ -109,6 +115,7 @@ export class NoteSession {
   cancelScheduledSave(): void { clearTimeout(this.timer); }
 
   hasResearch(jobId: string): boolean { return this.appendedResearch.has(jobId); }
+  hasSavedResearch(jobId: string): boolean { return this.savedResearch.has(jobId); }
 
   appendResearch(jobId: string, generated: NoteDocument, apply: (content: NoteDocument[]) => boolean): boolean {
     if (this.disposed || this.conflict || this.appendedResearch.has(jobId)) return false;

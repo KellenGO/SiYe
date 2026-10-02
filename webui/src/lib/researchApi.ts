@@ -6,17 +6,18 @@ export interface ResearchConfig {
   runtime: { sdk_available: boolean; cli_available: boolean; sdk_version: string; cli_version: string };
 }
 export interface MaterialComponent {
-  state: string; text: string; entries: { id?: string; text: string; parent_id?: string; start?: number }[];
+  state: string; count: number;
   reason: string; truncated: boolean; sort?: string;
 }
 export interface ResearchMaterial {
-  key: string; platform: string; title: string; url: string; snippet: string;
+  key: string; platform: string; title: string; url: string;
   body: MaterialComponent; comments: MaterialComponent; subtitles: MaterialComponent;
 }
 export interface ResearchJob {
   job_id: string; space_id: number; web_enabled: boolean; question: string;
   status: "collecting" | "awaiting_sources" | "analyzing" | "ready" | "failed" | "cancelled";
   phase: string; message: string; error: string; materials: ResearchMaterial[];
+  total_materials: number;
   document: NoteDocument | null; stale_snapshot?: boolean;
   coverage: { key: string; title: string; chunks: number; read_chunks: number; complete: boolean }[];
   external_sources: { id: string; title: string; url: string; level: string; fetched_at: string }[];

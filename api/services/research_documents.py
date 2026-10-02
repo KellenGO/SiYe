@@ -1,7 +1,7 @@
 """Trusted rich-text conversion and bounded source access for AI results."""
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 from urllib.parse import urlsplit, urlunsplit
 
 from .space_notes import validate_note
@@ -61,13 +61,14 @@ def result_document(result, materials, external, coverage, web_enabled):
         raise ValueError("AI 未返回有效的研究笔记，请重试")
     sources = {item["key"]: {"title": item["title"], "url": item["url"], "kind": "space"} for item in materials}
     sources.update({item["id"]: {**item, "kind": "web"} for item in external})
+    read_sources = {row["key"] for row in coverage if row.get("read_chunks", 0) > 0}
     content = []
 
     def paragraph(text):
         return {"type": "paragraph", "content": [{"type": "text", "text": text}]}
 
     content.append({"type": "heading", "attrs": {"level": 2}, "content": [{"type": "text", "text": "AI 研究笔记"}]})
-    content.append(paragraph(f"生成于 {datetime.now(timezone.utc).isoformat()} · 联网补充：{'开启' if web_enabled else '关闭'}"))
+    content.append(paragraph(f"生成于 {datetime.now().astimezone().strftime('%Y-%m-%d %H:%M')} · 联网补充：{'开启' if web_enabled else '关闭'}"))
     for kind, label in (("space", "空间资料结论"), ("web", "联网补充"), ("gaps", "分歧与信息缺口")):
         if kind == "web" and not web_enabled:
             continue
@@ -83,6 +84,8 @@ def result_document(result, materials, external, coverage, web_enabled):
                     raise ValueError("AI 笔记段落无效")
                 refs = row.get("sources", [])
                 if not isinstance(refs, list) or any(not isinstance(ref, str) or ref not in sources for ref in refs):
+                    raise ValueError("AI 返回了未读取来源的引用，请重试")
+                if any(sources[ref]["kind"] == "space" and ref not in read_sources for ref in refs):
                     raise ValueError("AI 返回了未读取来源的引用，请重试")
                 if any(sources[ref]["kind"] == "web" for ref in refs) and (not web_enabled or kind == "space"):
                     raise ValueError("AI 混淆了空间资料与外部来源，请重试")

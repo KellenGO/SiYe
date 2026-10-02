@@ -20,6 +20,8 @@ def get_research_config():
 
 async def local_request(request: Request):
     # Credential APIs and paid actions must not be callable by arbitrary websites.
+    if request.url.hostname not in {"localhost", "127.0.0.1", "::1"}:
+        raise HTTPException(403, "研究接口仅允许四野本机页面访问")
     origin = request.headers.get("origin")
     if origin and origin not in {str(request.base_url).rstrip("/"), "http://localhost:5173", "http://127.0.0.1:5173"}:
         raise HTTPException(403, "研究接口仅允许四野本机页面访问")
