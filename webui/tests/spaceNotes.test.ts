@@ -11,6 +11,26 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+test("research append uses the latest draft, prevents duplicate application and preserves limits", () => {
+  const session = new NoteSession(doc("原笔记"), 0, async () => ({ note_revision: 1 }), () => {});
+  session.change(doc("生成期间的最新手写"));
+  let applied = 0;
+  assert.equal(session.appendResearch("job", doc("研究结果"), (content) => {
+    applied++;
+    session.change({ type: "doc", content: [...session.document.content!, ...content] });
+    return true;
+  }), true);
+  assert.equal(noteText(session.document).includes("最新手写"), true);
+  assert.equal(noteText(session.document).includes("研究结果"), true);
+  assert.equal(session.appendResearch("job", doc("重复"), () => { applied++; return true; }), false);
+  assert.equal(applied, 1);
+  assert.throws(() => session.appendResearch("too-long", doc("文".repeat(50000)), () => true));
+  assert.equal(session.hasResearch("too-long"), false);
+  session.conflict = true;
+  assert.equal(session.appendResearch("conflict", doc("新内容"), () => true), false);
+  session.dispose();
+});
+
 test("autosave serializes edits arriving during a save without overwriting the newest draft", async () => {
   const first = deferred<{ note_revision: number }>();
   const writes: { text: string; revision: number }[] = [];

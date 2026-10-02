@@ -63,11 +63,11 @@ def validate_note(document: dict, format_version: int = 1) -> str:
                 continue
             if name == "textStyle" and set(values) == {"fontSize"} and isinstance(values["fontSize"], str) and values["fontSize"] in FONT_SIZES:
                 continue
-            if name == "link" and not set(values) - {"href", "target", "rel", "class"}:
+            if name == "link" and not set(values) - {"href", "target", "rel", "class", "title"}:
                 if not isinstance(values.get("href"), str):
                     raise ValueError("笔记链接无效")
                 url = urlsplit(values.get("href", ""))
-                if url.scheme in {"http", "https"} and url.netloc and not url.username and not url.password and values.get("target") in (None, "_blank") and values.get("class") is None and values.get("rel") in (None, "noopener noreferrer nofollow", "noopener noreferrer"):
+                if url.scheme in {"http", "https"} and url.netloc and not url.username and not url.password and values.get("target") in (None, "_blank") and values.get("class") is None and values.get("title") is None and values.get("rel") in (None, "noopener noreferrer nofollow", "noopener noreferrer"):
                     continue
             raise ValueError("笔记文字样式或链接无效")
         children = node.get("content", [])

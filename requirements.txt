@@ -6,7 +6,8 @@ opencv-python>=4.11.0.86
 redis~=4.6.0
 pydantic>=2.13.4
 fastapi==0.110.2
-uvicorn==0.29.0
+uvicorn==0.31.1
+claude-agent-sdk==0.2.163
 parsel==1.9.1
 pyexecjs==1.5.1
 xhshow>=0.2.0

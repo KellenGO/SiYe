@@ -2211,6 +2211,22 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
 
 .result-row > .row-actions > button, .result-row > .row-actions > .relative > button { min-width: 40px; min-height: 40px; height: 40px; }
 .result-row > .row-actions > button > svg, .result-row > .row-actions > .relative > button > svg { width: 18px; height: 18px; }
+.space-research { flex: 0 0 auto; border-bottom: 1px solid var(--siye-line); padding: 8px 12px; font-size: 13px; }
+.space-research > summary { cursor: pointer; color: var(--siye-brand); font-weight: 600; }
+.space-research-body { display: flex; flex-direction: column; gap: 8px; max-height: min(320px, 32vh); overflow-y: auto; overscroll-behavior: contain; padding: 8px 0; }
+.space-research-body label:not(.space-research-web) { display: flex; flex-direction: column; gap: 4px; }
+.space-research-body input:not([type="checkbox"]), .space-research-body textarea { width: 100%; min-width: 0; border: 1px solid var(--siye-line); border-radius: 8px; padding: 7px; background: transparent; color: inherit; font: inherit; }
+.space-research-body p { margin: 4px 0; overflow-wrap: anywhere; }
+.space-research-hint { color: var(--siye-secondary); font-size: 12px; line-height: 1.5; }
+.space-research-web { display: flex; align-items: center; gap: 8px; }
+.space-research-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.space-research-config > summary, .space-research-job summary { cursor: pointer; }
+.space-research-config { display: grid; gap: 6px; }
+.space-research-materials { max-height: 180px; overflow-y: auto; }
+.space-research-materials > div { padding: 6px 0; border-bottom: 1px solid var(--siye-line); }
+.space-research-preview { padding: 10px; border: 1px solid var(--siye-line); border-radius: 8px; line-height: 1.65; }
+.space-research-preview h3 { font-weight: 600; margin-top: 12px; }
+.space-research-preview a, .space-research-materials a { color: var(--siye-brand); overflow-wrap: anywhere; }
 @media (max-width: 700px), (pointer: coarse) {
   .result-row > .row-actions > button, .result-row > .row-actions > .relative > button { min-width: 44px; min-height: 44px; height: 44px; }
 }

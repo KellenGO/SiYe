@@ -202,3 +202,4 @@ database/*.db
 .pytest_tmp/
 .tmp_pytest_*/
 .tmp-pytest/
+/agent_runtime/

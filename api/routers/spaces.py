@@ -45,13 +45,21 @@ def update_info(space_id: int, payload: SpaceInfoInput, store: SpacesStore = Dep
 
 
 @spaces_router.put("/{space_id}/archive")
-def archive_space(space_id: int, payload: SpaceArchiveInput, store: SpacesStore = Depends(get_spaces_store)):
+async def archive_space(space_id: int, payload: SpaceArchiveInput, store: SpacesStore = Depends(get_spaces_store)):
+    if payload.archived:
+        from ..services.research_jobs import research_jobs
+        await research_jobs.cancel_space(space_id)
     return _call(store.set_archived, space_id, payload.archived)
 
 
 @spaces_router.delete("/{space_id}")
-def delete_space(space_id: int, store: SpacesStore = Depends(get_spaces_store)):
-    return _call(store.delete_space, space_id)
+async def delete_space(space_id: int, store: SpacesStore = Depends(get_spaces_store)):
+    from ..services.research_jobs import research_jobs
+    from ..services.research_config import research_config
+    await research_jobs.cancel_space(space_id)
+    result = _call(store.delete_space, space_id)
+    research_config.remove_preference(space_id)
+    return result
 
 
 @spaces_router.post("/{space_id}/items")

@@ -246,5 +246,66 @@
   "unit": {
     "entries": "条记录",
     "records": "条"
+  },
+  "research": {
+    "title": "AI 研究助手",
+    "intro": "读取空间资料，生成带出处的研究笔记。你选择的资料与问题会发送给配置的 AI 服务。",
+    "configure": "AI 服务配置",
+    "runtimeReady": "AI 运行环境已就绪",
+    "runtimeMissing": "AI 运行环境不完整，请使用包含 AI 运行程序的安装包。",
+    "address": "Anthropic 兼容服务地址",
+    "model": "模型名称",
+    "key": "API Key",
+    "keyHint": "Key 在本机加密保存；留空保留已有 Key。连接测试和生成可能产生服务费用。",
+    "saveConfig": "保存配置",
+    "test": "测试连接与当前联网模式",
+    "clearConfig": "清除 AI 配置",
+    "configSaved": "配置已保存",
+    "testPassed": "SDK 工具调用测试通过",
+    "webTestPassed": "SDK 工具及联网测试通过",
+    "question": "研究问题（可选）",
+    "questionHint": "例如：整理三天路线，重点看交通和避坑；留空按空间主题总结",
+    "allowWeb": "允许联网补充",
+    "webHint": "允许查找空间以外的公开资料；外部来源会单独标注。修改只影响下次任务。",
+    "localHint": "只依据空间资料分析，不搜索外部来源。",
+    "generate": "生成研究笔记",
+    "taskWebOn": "本次任务：联网补充开启",
+    "taskWebOff": "本次任务：联网补充关闭",
+    "stale": "空间资料已变化，本次结果基于生成开始时的资料快照。",
+    "coverage": "资料读取情况",
+    "partial": "仅获取部分内容",
+    "reviewHint": "检查缺失内容后，可重试失败项或使用已取得的资料继续。长资料可能需要多次模型调用。",
+    "retrySources": "重试失败项",
+    "continue": "使用这些资料开始分析",
+    "cancel": "取消研究",
+    "preview": "AI 笔记预览",
+    "append": "追加到笔记",
+    "appended": "已追加到笔记",
+    "unread": "部分空间资料未完整分析，详情已写入预览。",
+    "webFailed": "部分联网搜索或网页读取失败，已有分析保留。",
+    "cost": "本次模型报告费用：约 ${{cost}}",
+    "archived": "空间已归档，请先继续研究",
+    "noteConflict": "笔记版本已变化或保存冲突，请先处理笔记保存，再追加；预览已保留。",
+    "finishTyping": "请先完成当前输入法组词，再追加笔记。",
+    "status": {
+      "collecting": "正在获取资料",
+      "awaiting_sources": "等待检查资料",
+      "analyzing": "正在分析资料",
+      "ready": "笔记已生成",
+      "failed": "研究未完成",
+      "cancelled": "研究已取消"
+    },
+    "component": {
+      "body": "正文",
+      "comments": "评论",
+      "subtitles": "字幕"
+    },
+    "state": {
+      "ok": "已读取",
+      "missing": "未提供可读内容",
+      "restricted": "访问受限",
+      "failed": "读取失败",
+      "not_applicable": "不适用"
+    }
   }
 }

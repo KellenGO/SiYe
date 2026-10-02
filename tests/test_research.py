@@ -1,0 +1,335 @@
+"""Isolated configuration, source coverage, lifecycle and agent permission tests."""
+
+import asyncio
+import json
+import os
+from pathlib import Path
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from api.routers.research import research_router, get_research_config, get_research_jobs
+from api.services.research_config import ResearchConfig, protect_key
+from api.services.research_documents import MaterialAccess, result_document
+from api.services.research_jobs import ResearchJobs, task_environment
+from api.services.research_materials import material, normalize_comments, component, subtitle_entries, MaterialCollector
+from api.services.research_web import public_target, page_text
+from api.services.spaces_store import SpacesStore, get_spaces_store
+
+
+def cipher(value, decrypt=False):
+    return value.removeprefix("encrypted:") if decrypt else "encrypted:" + value
+
+
+@pytest.fixture
+def config(tmp_path):
+    return ResearchConfig(tmp_path / "ai.json", cipher=cipher)
+
+
+def source(identity="one", platform="xhs", text="正文"):
+    domains = {"xhs": "www.xiaohongshu.com", "bilibili": "www.bilibili.com", "douyin": "www.douyin.com", "zhihu": "www.zhihu.com"}
+    return {"key": f"{platform}|{identity}", "result": {"platform": platform, "content_id": identity,
+        "title": "攻略", "snippet": text, "content_type": "note", "url": f"https://{domains[platform]}/{identity}?xsec_token=private"}}
+
+
+def test_config_masks_key_keeps_preference_and_restarts(config):
+    config.save("https://example.com", "test-model", "sk-private")
+    assert "sk-private" not in json.dumps(config.public())
+    assert config.credentials()["api_key"] == "sk-private"
+    config.set_preference(1, True)
+    config.save("https://other.example", "other")
+    reopened = ResearchConfig(config.path, cipher)
+    assert reopened.preference(1) and not reopened.preference(2)
+    assert reopened.credentials()["api_key"] == "sk-private"
+    reopened.delete()
+    assert reopened.preference(1) and not reopened.public()["has_key"]
+    reopened.remove_preference(1)
+    assert not reopened.preference(1)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows DPAPI")
+def test_dpapi_roundtrip_is_not_plaintext():
+    encrypted = protect_key("unit-test-secret")
+    assert "unit-test-secret" not in encrypted
+    assert protect_key(encrypted, decrypt=True) == "unit-test-secret"
+
+
+def test_key_configuration_rejects_credentials_in_url(config):
+    with pytest.raises(ValueError):
+        config.save("https://user:password@example.com", "model", "secret")
+
+
+def test_chunked_source_access_tracks_exact_reads_and_drops_tokens():
+    item = material(source(text="研究" * 6000))
+    access = MaterialAccess([item])
+    assert "private" not in json.dumps(access.manifest())
+    assert not access.coverage()[0]["complete"]
+    with pytest.raises(ValueError):
+        access.chunk("another-space", 0)
+    with pytest.raises(ValueError):
+        access.chunk(item["key"], -1)
+    for index in range(access.manifest()[0]["chunks"]):
+        access.chunk(item["key"], index)
+    assert access.coverage()[0]["complete"]
+
+
+def test_comments_cap_dedup_reply_identity_and_subtitles():
+    rows = [{"id": str(index), "content": f"观点{index}", "sub_comments": [
+        {"id": f"reply{index}", "content": "补充", "user_info": {"nickname": "读者"}}]} for index in range(60)]
+    entries = normalize_comments(rows + rows, "xhs")
+    assert len(entries) == 50 and len({row["id"] for row in entries}) == 50
+    assert entries[1]["parent_id"] == "0" and entries[1]["author"] == "读者"
+    assert subtitle_entries({"body": [{"from": 12, "to": 14, "content": "<b>字幕</b>"}]}) == [{"text": "字幕", "start": 12, "end": 14}]
+
+
+def note_result(ref="xhs|one", kind="space"):
+    return {"sections": [{"kind": kind, "title": "发现", "paragraphs": [{"text": "有依据的观点", "sources": [ref]}]}]}
+
+
+def test_result_keeps_sources_distinct_and_rejects_invented_links():
+    item = material(source())
+    access = MaterialAccess([item])
+    document = result_document(note_result(), [item], [], access.coverage(), False)
+    encoded = json.dumps(document, ensure_ascii=False)
+    assert "未完整分析" in encoded and "关闭" in encoded and "private" not in encoded
+    with pytest.raises(ValueError, match="引用"):
+        result_document(note_result("invented"), [item], [], access.coverage(), False)
+    external = [{"id": "web|1", "title": "官方", "url": "https://example.com", "level": "仅搜索摘要", "fetched_at": "now"}]
+    with pytest.raises(ValueError, match="混淆"):
+        result_document(note_result("web|1"), [item], external, access.coverage(), True)
+    generated = result_document(note_result("web|1", "web"), [item], external, access.coverage(), True)
+    assert "仅搜索摘要" in json.dumps(generated, ensure_ascii=False)
+
+
+def test_reference_link_survives_editor_default_attributes():
+    from api.services.space_notes import validate_note
+    link = {"type": "doc", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "来源", "marks": [
+        {"type": "link", "attrs": {"href": "https://example.com", "target": "_blank", "rel": "noopener noreferrer", "class": None, "title": None}}]}]}]}
+    validate_note(link)
+    link["content"][0]["content"][0]["marks"][0]["attrs"]["title"] = {"unexpected": True}
+    with pytest.raises(ValueError):
+        validate_note(link)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("url", ["http://127.0.0.1", "http://[::1]", "http://localhost", "http://169.254.169.254", "file:///etc/passwd", "https://u:p@example.com", "http://192.168.1.1", "http://example.com:8080"])
+async def test_web_rejects_private_targets(url):
+    with pytest.raises(ValueError):
+        await public_target(url)
+
+
+@pytest.mark.asyncio
+async def test_web_rejects_mixed_public_private_dns(monkeypatch):
+    async def resolve(*args, **kwargs):
+        return [(2, 1, 6, "", ("93.184.216.34", 443)), (2, 1, 6, "", ("127.0.0.1", 443))]
+    monkeypatch.setattr(asyncio.get_running_loop(), "getaddrinfo", resolve)
+    with pytest.raises(ValueError):
+        await public_target("https://example.com")
+    assert page_text("<html><head><title>T</title></head><body><script>secret</script><p>正文</p></body></html>") == ("T", "正文")
+
+
+@pytest.mark.asyncio
+async def test_jobs_gap_confirmation_retry_cancel_and_snapshot(config, monkeypatch):
+    from api.services import research_jobs as module
+    monkeypatch.setattr(module, "get_session_snapshot", lambda _: {"a1": "private"})
+    manager = ResearchJobs(config)
+    monkeypatch.setattr(manager, "require_runtime", lambda: None)
+    config.save("https://example.com", "model", "secret")
+    async def process(job, payload, credentials=None):
+        if payload["mode"] == "collect":
+            job["materials"] = [material(row) for row in payload["items"]]
+            return {"collected": True}
+        return {"document": {"type": "doc", "content": [{"type": "paragraph"}]}, "coverage": []}
+    monkeypatch.setattr(manager, "process", process)
+    snapshot = {"id": 1, "archived": False, "items": [source()], "name": "攻略", "description": ""}
+    job = await manager.create(snapshot, "路线", False)
+    identity = job["job_id"]
+    await manager.tasks[identity]
+    assert manager.get(identity)["status"] == "awaiting_sources"
+    with pytest.raises(ValueError, match="已有"):
+        await manager.create(snapshot, "", True)
+    snapshot["items"].append(source("two"))
+    assert len(manager.get(identity)["snapshot"]["items"]) == 1
+    await manager.generate(identity)
+    await manager.tasks[identity]
+    assert manager.get(identity)["status"] == "ready" and manager.active is None
+    next_job = await manager.create(snapshot, "", True)
+    await manager.tasks[next_job["job_id"]]
+    await manager.cancel_space(1)
+    assert manager.get(next_job["job_id"])["status"] == "cancelled" and manager.active is None
+
+
+def test_task_environment_does_not_inherit_claude_settings(monkeypatch, tmp_path):
+    monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "subscription-secret")
+    monkeypatch.setenv("CLAUDE_CODE_USE_BEDROCK", "1")
+    env = task_environment(tmp_path, {"api_key": "own-key", "base_url": "https://example.com"})
+    assert "ANTHROPIC_AUTH_TOKEN" not in env and "CLAUDE_CODE_USE_BEDROCK" not in env
+    assert env["ANTHROPIC_API_KEY"] == "own-key"
+
+
+def test_routes_configuration_origin_and_preferences(config, tmp_path):
+    app = FastAPI()
+    app.include_router(research_router)
+    store = SpacesStore(tmp_path / "library.db")
+    space_id = store.create_space("攻略")["id"]
+    app.dependency_overrides[get_research_config] = lambda: config
+    app.dependency_overrides[get_spaces_store] = lambda: store
+    with TestClient(app) as client:
+        assert client.put("/api/research/config", json={"base_url": "https://example.com", "model": "m", "api_key": "secret"}).status_code == 200
+        assert "secret" not in client.get("/api/research/config").text
+        assert client.get("/api/research/config", headers={"Origin": "https://evil.example"}).status_code == 403
+        assert client.get(f"/api/research/spaces/{space_id}/preference").json() == {"web_enabled": False}
+        assert client.put(f"/api/research/spaces/{space_id}/preference", json={"web_enabled": True}).json() == {"web_enabled": True}
+        assert client.get("/api/research/spaces/999/preference").status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_sdk_actual_options_deny_other_tools_and_read_coverage(monkeypatch, tmp_path):
+    import claude_agent_sdk as sdk
+    from api.services.research_agent import run_agent
+    captured = {}
+    class Client:
+        def __init__(self, options):
+            captured["options"] = options
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            pass
+        async def query(self, prompt):
+            pass
+        async def receive_response(self):
+            yield sdk.SystemMessage("init", {"tools": ["mcp__research__manifest", "mcp__research__read_material"]})
+            yield sdk.ResultMessage("success", 1, 1, False, 1, "test", structured_output=note_result())
+    monkeypatch.setattr(sdk, "ClaudeSDKClient", Client)
+    payload = {"mode": "analyze", "web_enabled": False, "materials": [material(source())], "workdir": str(tmp_path),
+               "model": "test", "base_url": "https://example.com", "space_name": "攻略", "description": ""}
+    result = await run_agent(payload, lambda event: None)
+    options = captured["options"]
+    assert options.tools == [] and options.setting_sources == [] and options.strict_mcp_config
+    guard = options.hooks["PreToolUse"][0].hooks[0]
+    for name in ["WebSearch", "WebFetch", "Bash", "Read", "Write", "PowerShell"]:
+        assert (await guard({"tool_name": name}, None, None))["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert not result["coverage"][0]["complete"]
+
+
+@pytest.mark.asyncio
+async def test_partial_component_failure_does_not_replace_success(monkeypatch):
+    collector = MaterialCollector({"xhs": {"a1": "session"}})
+    class Client:
+        async def get_note_by_id(self, *args):
+            return {"desc": "完整正文"}
+    async def client(_):
+        return Client()
+    async def comments(*args):
+        raise TimeoutError()
+    monkeypatch.setattr(collector, "client", client)
+    monkeypatch.setattr(collector, "comments", comments)
+    previous = material(source())
+    previous["body"] = component("ok", text="已成功的正文")
+    current = await collector.collect(source(), previous)
+    assert current["body"]["text"] == "已成功的正文"
+    assert current["comments"]["state"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_later_comment_page_failure_keeps_read_entries(monkeypatch):
+    collector = MaterialCollector()
+    calls = 0
+    async def request(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise TimeoutError()
+        return {"comments": [{"id": "first", "content": "已获取的评论"}], "cursor": "next", "has_more": True}
+    class Client:
+        async def get(self, *args, **kwargs):
+            pass
+    monkeypatch.setattr(collector, "request", request)
+    result = await collector.comments(Client(), source()["result"], None)
+    assert result["state"] == "failed" and result["truncated"]
+    assert result["entries"][0]["text"] == "已获取的评论"
+
+
+@pytest.mark.asyncio
+async def test_collection_failure_accounts_for_every_selected_source(config, monkeypatch):
+    from api.services import research_jobs as module
+    monkeypatch.setattr(module, "get_session_snapshot", lambda _: {"a1": "test"})
+    manager = ResearchJobs(config)
+    monkeypatch.setattr(manager, "require_runtime", lambda: None)
+    async def process(*args, **kwargs):
+        raise TimeoutError()
+    monkeypatch.setattr(manager, "process", process)
+    job = await manager.create({"id": 1, "archived": False, "items": [source(), source("two")], "name": "主题", "description": ""}, "", False)
+    await manager.tasks[job["job_id"]]
+    failed = manager.get(job["job_id"])
+    assert failed["status"] == "failed" and len(failed["materials"]) == 2
+    assert all(row["body"]["state"] == "failed" for row in failed["materials"])
+    assert manager.active is None
+
+
+@pytest.mark.asyncio
+async def test_web_rechecks_redirect_destinations(monkeypatch):
+    import httpx
+    from api.services import research_web as module
+    original = httpx.AsyncClient
+    calls = []
+    async def target(url):
+        calls.append(url)
+        if "127.0.0.1" in url:
+            raise ValueError("private")
+        return "https://93.184.216.34/", "example.com"
+    async def redirect(request):
+        assert request.headers["Host"] == "example.com"
+        return httpx.Response(302, headers={"location": "http://127.0.0.1/secret"})
+    monkeypatch.setattr(module, "public_target", target)
+    monkeypatch.setattr(module.httpx, "AsyncClient", lambda **kwargs: original(transport=httpx.MockTransport(redirect), **kwargs))
+    with pytest.raises(ValueError, match="private"):
+        await module.public_get("https://example.com")
+    assert calls == ["https://example.com", "http://127.0.0.1/secret"]
+
+
+@pytest.mark.asyncio
+async def test_enabled_web_tracks_search_and_partial_page_separately(monkeypatch, tmp_path):
+    import claude_agent_sdk as sdk
+    from api.services import research_agent as module
+    functions = {}
+    def tool(name, description, schema):
+        def wrap(function):
+            functions[name] = function
+            return function
+        return wrap
+    monkeypatch.setattr(sdk, "tool", tool)
+    monkeypatch.setattr(sdk, "create_sdk_mcp_server", lambda *args, **kwargs: {})
+    async def target(url):
+        return url, "example.com"
+    async def webpage(url):
+        return url, "<html><head><title>公开网页</title></head><body>" + "资料" * 8000 + "</body></html>"
+    monkeypatch.setattr(module, "public_target", target)
+    monkeypatch.setattr(module, "public_get", webpage)
+    class Client:
+        def __init__(self, options):
+            self.options = options
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            pass
+        async def query(self, prompt):
+            assert self.options.tools == ["WebSearch"]
+        async def receive_response(self):
+            yield sdk.SystemMessage("init", {"tools": ["WebSearch"]})
+            guard = self.options.hooks["PreToolUse"][0].hooks[0]
+            assert (await guard({"tool_name": "WebSearch"}, None, None))["hookSpecificOutput"]["permissionDecision"] == "allow"
+            assert (await guard({"tool_name": "WebFetch"}, None, None))["hookSpecificOutput"]["permissionDecision"] == "deny"
+            await functions["read_material"]({"key": "xhs|one", "index": 0})
+            post = self.options.hooks["PostToolUse"][0].hooks[0]
+            await post({"tool_name": "WebSearch", "tool_response": {"results": [{"url": "https://example.com/search-only"}]}}, None, None)
+            await functions["read_webpage"]({"url": "https://example.com/page"})
+            yield sdk.ResultMessage("success", 1, 1, False, 1, "test", structured_output=note_result("web|2", "web"))
+    monkeypatch.setattr(sdk, "ClaudeSDKClient", Client)
+    result = await module.run_agent({"mode": "analyze", "web_enabled": True, "materials": [material(source())],
+        "workdir": str(tmp_path), "model": "test", "base_url": "https://example.com", "space_name": "攻略", "description": ""}, lambda event: None)
+    assert result["coverage"][0]["complete"]
+    assert result["external_sources"][0]["level"] == "仅搜索摘要"
+    assert result["external_sources"][1]["level"] == "网页正文（部分已读）"
+    assert "联网补充" in json.dumps(result["document"], ensure_ascii=False)

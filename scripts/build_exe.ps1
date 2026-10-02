@@ -47,6 +47,7 @@ if (-not $SkipTests) {
     Invoke-Checked $pythonCommand ($pythonPrefix + @("-m", "pytest", "-q"))
 }
 
+Invoke-Checked $pythonCommand ($pythonPrefix + @("scripts/prepare_agent_runtime.py"))
 Invoke-Checked $pythonCommand ($pythonPrefix + @("-m", "PyInstaller", "--clean", "--noconfirm", "MediaCrawler.spec"))
 
 $distribution = Join-Path $repoRoot "dist\SiYe"

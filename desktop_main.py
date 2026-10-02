@@ -128,6 +128,9 @@ def _run_worker() -> int:
 def main() -> int:
     _configure_frozen_runtime()
     os.chdir(application_root())
+    if "--research-worker" in sys.argv:
+        from api.services.research_worker import main as research_main
+        return research_main()
     if "--aggregate-worker" in sys.argv:
         return _run_worker()
     if "--frozen-runtime-smoke" in sys.argv:

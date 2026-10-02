@@ -43,6 +43,7 @@ export class NoteSession {
   private timer?: ReturnType<typeof setTimeout>;
   private flight?: Promise<boolean>;
   private disposed = false;
+  private appendedResearch = new Set<string>();
 
   constructor(document: NoteDocument, revision: number, private save: SaveNote, private changed: () => void) {
     this.document = document;
@@ -106,6 +107,18 @@ export class NoteSession {
   }
 
   cancelScheduledSave(): void { clearTimeout(this.timer); }
+
+  hasResearch(jobId: string): boolean { return this.appendedResearch.has(jobId); }
+
+  appendResearch(jobId: string, generated: NoteDocument, apply: (content: NoteDocument[]) => boolean): boolean {
+    if (this.disposed || this.conflict || this.appendedResearch.has(jobId)) return false;
+    const combined = { ...this.document, content: [...(this.document.content ?? []), ...(generated.content ?? [])] };
+    if (!noteWithinLimits(combined)) throw new Error("笔记最多 50000 字，格式数据最多 2 MB；预览已保留，请缩短后追加");
+    if (!apply(generated.content ?? [])) return false;
+    this.appendedResearch.add(jobId);
+    this.changed();
+    return true;
+  }
 
   dispose(): void { this.disposed = true; clearTimeout(this.timer); }
 

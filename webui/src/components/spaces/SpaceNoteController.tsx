@@ -10,6 +10,7 @@ import { useTranslation } from "react-i18next";
 import { useSpaceDetail, useSpaces } from "@/hooks/useSpaces";
 import { EMPTY_NOTE, NOTE_FONT_SIZES, noteText, spaceError, type NoteDocument, type NoteSession } from "@/lib/spaceNotes";
 import { fetchSpace } from "@/lib/spacesApi";
+import SpaceResearchPanel from "./SpaceResearchPanel";
 
 function cleanPastedNode(node: EditorNode): EditorNode {
   const marks = node.marks.filter((mark) => mark.type.name !== "textStyle" || NOTE_FONT_SIZES.some((size) => mark.attrs.fontSize === `${size}px`));
@@ -34,6 +35,7 @@ function NotePanel({ editor, session, name, spaceId, archived, modal, onClose }:
   const action = (label: string, icon: ReactNode, active: boolean, apply: () => void, disabled = false) => <button type="button" title={t(label)} aria-label={t(label)} aria-pressed={active} disabled={archived || disabled} onMouseDown={(event) => event.preventDefault()} onClick={apply}>{icon}</button>;
   return <aside className="space-note-panel" aria-label={t("spaces.note")} role={modal ? "dialog" : undefined} aria-modal={modal || undefined}>
     <div className="space-note-head"><div><span className="eyebrow">{t("spaces.note")}</span><h2>{name}</h2></div><button type="button" className="btn small" aria-label={t("spaces.closeNote")} onClick={onClose}><X aria-hidden="true" /></button></div>
+    <SpaceResearchPanel spaceId={spaceId} editor={editor} session={session} archived={archived} />
     <div className="space-note-toolbar" role="toolbar" aria-label={t("spaces.formatting")}>
       <select aria-label={t("spaces.paragraphStyle")} disabled={archived} value={[1, 2, 3].find((level) => editor.isActive("heading", { level })) ?? 0} onChange={(event) => {
         const level = Number(event.target.value);
@@ -109,7 +111,7 @@ export default function SpaceNoteController({ spaceId, open, onClose, target }: 
     const previous = document.activeElement as HTMLElement | null;
     const first = () => container.querySelector<HTMLElement>("button:not(:disabled)");
     first()?.focus();
-    const controls = () => [...container.querySelectorAll<HTMLElement>('button:not(:disabled), select:not(:disabled), input:not(:disabled), [contenteditable="true"]')].filter((control) => control.getClientRects().length > 0 && control.tabIndex >= 0);
+    const controls = () => [...container.querySelectorAll<HTMLElement>('button:not(:disabled), select:not(:disabled), input:not(:disabled), textarea:not(:disabled), summary, a[href], [contenteditable="true"]')].filter((control) => control.getClientRects().length > 0 && control.tabIndex >= 0);
     const keyboard = (event: KeyboardEvent) => {
       if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onClose(); }
       if (event.key === "Tab") {

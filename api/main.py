@@ -35,6 +35,7 @@ from .routers.library import library_router
 from .routers.history import history_router
 from .routers.trending import trending_router
 from .routers.spaces import spaces_router
+from .routers.research import research_router
 from .schemas.search import HealthResponse
 from .services.environment_health import build_health_response
 from .services.search_job_manager import search_job_manager
@@ -68,6 +69,8 @@ async def _shutdown_cleanup():
 
     await search_job_manager.cleanup()
     await favorites_job_manager.cleanup()
+    from .services.research_jobs import research_jobs
+    await research_jobs.cleanup()
     await _cleanup_login_on_shutdown()
     await cancel_verify_tasks()
 
@@ -92,6 +95,7 @@ app.include_router(library_router)  # local bookmark library, /api/library prefi
 app.include_router(history_router)  # watch history, /api/history prefix
 app.include_router(trending_router)  # platform trending words, /api/trending prefix
 app.include_router(spaces_router)
+app.include_router(research_router)
 
 
 @app.get("/api/health", response_model=HealthResponse)

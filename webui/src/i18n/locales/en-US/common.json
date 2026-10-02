@@ -246,5 +246,66 @@
   "unit": {
     "entries": "entries",
     "records": "records"
+  },
+  "research": {
+    "title": "AI research assistant",
+    "intro": "Read your space sources and draft a cited note. Your selected material and question are sent to the configured AI service.",
+    "configure": "AI service settings",
+    "runtimeReady": "AI runtime ready",
+    "runtimeMissing": "AI runtime is incomplete. Use an installer that includes the AI runtime.",
+    "address": "Anthropic-compatible service URL",
+    "model": "Model name",
+    "key": "API key",
+    "keyHint": "The key is encrypted on this computer. Leave blank to keep it. Connection tests and generation may incur provider charges.",
+    "saveConfig": "Save settings",
+    "test": "Test connection and current web mode",
+    "clearConfig": "Clear AI settings",
+    "configSaved": "Settings saved",
+    "testPassed": "SDK tool test passed",
+    "webTestPassed": "SDK tools and web test passed",
+    "question": "Research question (optional)",
+    "questionHint": "For example: plan a three-day trip with transport tips. Leave blank to summarize the space topic.",
+    "allowWeb": "Allow web supplements",
+    "webHint": "May consult public sources outside this space, labeled separately. Changes apply to the next task.",
+    "localHint": "Use space material only, without external searches.",
+    "generate": "Generate research note",
+    "taskWebOn": "This task: web supplements enabled",
+    "taskWebOff": "This task: web supplements disabled",
+    "stale": "Space sources have changed. This task uses the sources captured when it started.",
+    "coverage": "Source reading coverage",
+    "partial": "Partial content",
+    "reviewHint": "Review missing content, then retry failed items or continue with available material. Long sources may require multiple model calls.",
+    "retrySources": "Retry failed items",
+    "continue": "Analyze this material",
+    "cancel": "Cancel research",
+    "preview": "AI note preview",
+    "append": "Append to note",
+    "appended": "Appended to note",
+    "unread": "Some space sources were not fully analyzed. Details are included in the preview.",
+    "webFailed": "Some web searches or page reads failed. Available analysis was retained.",
+    "cost": "Provider-reported cost: approximately ${{cost}}",
+    "archived": "Resume this archived space before continuing.",
+    "noteConflict": "The note version changed or saving conflicted. Resolve saving before appending. The preview was retained.",
+    "finishTyping": "Finish the current input-method composition before appending.",
+    "status": {
+      "collecting": "Fetching sources",
+      "awaiting_sources": "Review sources",
+      "analyzing": "Analyzing sources",
+      "ready": "Note generated",
+      "failed": "Research incomplete",
+      "cancelled": "Research canceled"
+    },
+    "component": {
+      "body": "Body",
+      "comments": "Comments",
+      "subtitles": "Subtitles"
+    },
+    "state": {
+      "ok": "Read",
+      "missing": "No readable content",
+      "restricted": "Access restricted",
+      "failed": "Read failed",
+      "not_applicable": "Not applicable"
+    }
   }
 }

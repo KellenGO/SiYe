@@ -390,6 +390,11 @@ def run_launcher() -> int:
 
 def main() -> int:
     _configure_standard_streams()
+    if "--research-worker" in sys.argv:
+        import desktop_main
+        desktop_main._configure_frozen_runtime()
+        from api.services.research_worker import main as research_main
+        return research_main()
     role = detect_role(sys.argv[1:])
 
     if role == ROLE_LAUNCHER:
