@@ -45,7 +45,7 @@ export function SpacesPage({ spaceId, onReturnSearch }: { spaceId: number | null
           <button type="button" className="btn danger small" disabled={spaces.busy} onClick={() => setDeleting(space)}><Trash2 aria-hidden="true" />{t("spaces.discard")}</button>
         </div></div>
         <SpaceWorkspace spaceId={space.id} panelsHidden={!!editing || !!deleting}><ResultTabs viewScope="spaces" results={space.items.map((item) => item.result)} overall="completed" platforms={[...PLATFORM_SLUGS]} library={library} disableSort pageSize={100} showExportTools={false} emptyMessage={t("spaces.noMaterials")}
-          renderExtraActions={!space.archived ? (result) => <button type="button" aria-label={`${t("spaces.removeMaterial")}：${result.title}`} title={t("spaces.removeMaterial")} disabled={removing} onClick={async () => {
+          renderExtraActions={!space.archived ? (result) => <button type="button" className="text-cyber-text-muted" aria-label={`${t("spaces.removeMaterial")}：${result.title}`} title={t("spaces.removeMaterial")} disabled={removing} onClick={async () => {
             if (removing) return;
             setRemoving(true);
             try { await removeSpaceItem(space.id, result); await spaces.refresh(); }
