@@ -56,6 +56,7 @@ def main():
                     for row in job["materials"]:
                         row.update(body=component("ok", text="完整正文"), comments=component("failed", reason="测试评论读取失败"))
                     return {}
+                conversation_inputs.append(payload.get("conversation", []))
                 await asyncio.sleep(1.2)
                 access = MaterialAccess(job["materials"])
                 for row in access.manifest():
@@ -67,6 +68,7 @@ def main():
                         "coverage": access.coverage(), "external_sources": [], "web_errors": []}
             manager.process = process
             tested_models = []
+            conversation_inputs = []
             async def probe(web_enabled):
                 tested_models.append(config.credentials()["model"])
                 return {"connection_ok": True, "web_ok": web_enabled}
@@ -104,40 +106,45 @@ def main():
                 page.on("dialog", lambda event: event.accept())
                 errors = []
                 page.on("pageerror", lambda error: errors.append(str(error)))
-                def open_panel():
-                    panel = page.locator(".space-research:visible")
-                    if panel.count():
-                        return panel
+                def open_note():
                     edge = page.locator(".space-edge-right:visible")
                     if "is-open" not in edge.get_attribute("class"):
                         edge.get_by_role("button", name="打开笔记", exact=True).click()
-                    if not edge.get_by_role("button", name="取消固定研究笔记", exact=True).count():
+                    if page.viewport_size["width"] > 1000 and not edge.get_by_role("button", name="取消固定研究笔记", exact=True).count():
                         edge.get_by_role("button", name="固定研究笔记", exact=True).click()
-                    page.get_by_role("button", name="打开研究助手", exact=True).click()
+                    return page.get_by_role("textbox", name="空间笔记编辑器", exact=True)
+                def open_panel():
+                    panel = page.locator(".space-research:visible")
+                    if not panel.count():
+                        page.get_by_role("button", name="打开研究助手", exact=True).click()
                     expect(panel.get_by_label("允许联网补充", exact=True)).to_be_enabled()
+                    expect(panel.get_by_role("button", name="新会话", exact=True)).to_be_enabled()
+                    assert not panel.get_by_label("模型名称", exact=True).count(), "Configuration still appears inside the assistant"
                     return panel
-                page.goto(origin + f"/#/spaces/{first}")
-                panel = open_panel()
-                panel.get_by_role("button", name="AI 服务配置", exact=True).click()
-                panel.get_by_label("模型名称", exact=True).fill("new-model")
-                panel.get_by_role("button", name="保存并测试连接", exact=True).click()
-                expect(panel.get_by_text("SDK 工具调用测试通过", exact=True)).to_be_visible()
+                page.goto(origin + "/#/settings/ai")
+                settings = page.locator(".research-settings")
+                settings.get_by_label("模型名称", exact=True).fill("new-model")
+                page.screenshot(path=str(ROOT / "build/research-settings.png"), full_page=True)
+                settings.get_by_role("button", name="保存并测试连接", exact=True).click()
+                expect(settings.get_by_text("SDK 工具调用测试通过", exact=True)).to_be_visible()
                 assert tested_models == ["new-model"], "Connection test ignored current inputs"
-                panel.get_by_role("button", name="返回研究", exact=True).click()
+                page.goto(origin + f"/#/spaces/{first}")
+                full_width = page.locator(".app-main-inner").bounding_box()["width"]
+                panel = open_panel()
+                assert page.locator(".app-main-inner").bounding_box()["width"] <= full_width - 400, "Sidebar did not compress the main content"
+                assert not page.locator(".space-research-dialog").evaluate("element => element.matches(':modal')"), "Desktop assistant blocks the main content"
                 web = panel.get_by_label("允许联网补充", exact=True)
                 expect(web).not_to_be_checked()
-                note = page.get_by_role("textbox", name="空间笔记编辑器", exact=True)
+                note = open_note()
                 panel.get_by_role("button", name="关闭研究助手", exact=True).click()
                 note.fill("生成前的手写笔记")
                 panel = open_panel()
                 panel.get_by_role("button", name="生成研究笔记", exact=True).click()
                 expect(panel.get_by_text("等待检查资料", exact=True)).to_be_visible()
                 expect(panel.get_by_text("测试评论读取失败", exact=False)).to_be_visible()
-                panel.locator(".space-research-options summary").click()
                 web.check()
                 expect(panel.get_by_text("本次任务：联网补充关闭", exact=True)).to_be_visible()
                 panel.get_by_role("button", name="使用这些资料开始分析", exact=True).click()
-                panel.get_by_role("button", name="关闭研究助手", exact=True).click()
                 note.press("Control+End")
                 note.press_sequentially("，生成期间继续写")
                 panel = open_panel()
@@ -152,7 +159,7 @@ def main():
                 fail_append = False
                 page.reload()
                 panel = open_panel()
-                note = page.get_by_role("textbox", name="空间笔记编辑器", exact=True)
+                note = open_note()
                 expect(note).not_to_contain_text("AI生成的苏州研究结果")
                 expect(panel.get_by_role("button", name="追加到笔记", exact=True)).to_be_enabled()
                 panel.get_by_role("button", name="追加到笔记", exact=True).click()
@@ -160,9 +167,12 @@ def main():
                 expect(note).to_contain_text("AI生成的苏州研究结果")
                 expect(page.locator(".space-note-status")).to_contain_text("已保存到本机")
                 assert "AI生成的苏州研究结果" in json.dumps(store.get_space(first)["note_document"], ensure_ascii=False)
-                panel.get_by_role("button", name="重新生成", exact=True).click()
-                expect(panel.get_by_text("等待检查资料", exact=True)).to_be_visible()
-                panel.get_by_role("button", name="使用这些资料开始分析", exact=True).click()
+                first_conversation = panel.get_by_label("会话历史", exact=True).input_value()
+                panel.get_by_label("研究问题（可选）", exact=True).fill("交通预算是多少？")
+                panel.get_by_role("button", name="发送追问", exact=True).click()
+                expect(panel.get_by_text("正在分析资料", exact=True)).to_be_visible()
+                assert panel.get_by_label("会话历史", exact=True).input_value() == first_conversation
+                expect(panel.get_by_role("button", name="新会话", exact=True)).to_be_disabled()
                 expect(panel.get_by_role("button", name="追加到笔记", exact=True)).to_be_visible(timeout=15000)
                 fail_append = True
                 panel.get_by_role("button", name="追加到笔记", exact=True).click()
@@ -175,8 +185,30 @@ def main():
                 expect(panel.get_by_role("button", name="已追加到笔记", exact=True)).to_be_disabled()
                 expect(page.get_by_role("textbox", name="空间笔记编辑器", exact=True)).to_contain_text("AI生成的苏州研究结果")
                 page.screenshot(path=str(ROOT / "build/research-desktop.png"), full_page=True)
+                assert conversation_inputs[0] == [] and conversation_inputs[1][0]["answer"], "Follow-up lost prior answers"
+                panel.get_by_role("button", name="新会话", exact=True).click()
+                expect(panel.get_by_label("会话历史", exact=True)).to_have_value("")
+                expect(panel.get_by_label("研究问题（可选）", exact=True)).to_have_value("")
+                expect(panel.locator(".space-research-preview")).to_have_count(0)
+                panel.get_by_role("button", name="生成研究笔记", exact=True).click()
+                expect(panel.get_by_text("等待检查资料", exact=True)).to_be_visible()
+                panel.get_by_role("button", name="取消研究", exact=True).click()
+                expect(panel.get_by_text("研究已取消", exact=True)).to_be_visible()
+                assert panel.get_by_label("会话历史", exact=True).input_value() != first_conversation
+                panel.get_by_label("研究问题（可选）", exact=True).fill("重新开始")
+                panel.get_by_role("button", name="生成研究笔记", exact=True).click()
+                expect(panel.get_by_text("等待检查资料", exact=True)).to_be_visible()
+                expect(panel.locator(".space-research-turn")).to_have_count(0)
+                panel.get_by_role("button", name="取消研究", exact=True).click()
+                expect(panel.get_by_text("研究已取消", exact=True)).to_be_visible()
+                panel.get_by_label("会话历史", exact=True).select_option(first_conversation)
+                expect(panel.get_by_role("button", name="已追加到笔记", exact=True)).to_be_disabled()
+                expect(panel.locator(".space-research-turn")).to_have_count(1)
+                panel.locator(".space-research-turn summary").click()
+                expect(panel.locator(".space-research-turn")).to_contain_text("AI生成的苏州研究结果")
                 page.reload()
                 panel = open_panel()
+                panel.get_by_label("会话历史", exact=True).select_option(first_conversation)
                 expect(panel.get_by_label("允许联网补充", exact=True)).to_be_checked()
                 expect(panel.get_by_role("button", name="已追加到笔记", exact=True)).to_be_disabled()
                 page.goto(origin + f"/#/spaces/{second}")
@@ -196,16 +228,16 @@ def main():
                 page.set_viewport_size({"width": 320, "height": 640})
                 assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
                 assert panel.locator(".space-research-footer").bounding_box()["y"] + panel.locator(".space-research-footer").bounding_box()["height"] <= 641
-                panel.get_by_role("button", name="AI 服务配置", exact=True).focus()
+                panel.get_by_role("button", name="新会话", exact=True).focus()
                 page.keyboard.press("Tab")
                 assert page.locator(".space-research-dialog").evaluate("element => element.contains(document.activeElement)")
                 page.keyboard.press("Escape")
                 expect(page.locator(".space-research-dialog")).not_to_be_visible()
-                expect(page.get_by_role("textbox", name="空间笔记编辑器", exact=True)).to_be_visible()
+                expect(open_note()).to_be_visible()
                 assert not errors, errors
                 context.close()
                 browser.close()
-                print("PASS: current configuration test, source review, task preference, editing during generation, failed save recovery after reload, append once, independent preferences, desktop and fullscreen mobile")
+                print("PASS: current configuration test, source review, task preference, editing during generation, failed save recovery after reload, append once, independent preferences, docked desktop, conversations and fullscreen mobile")
     finally:
         server.shutdown()
 

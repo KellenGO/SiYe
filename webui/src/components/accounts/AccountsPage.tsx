@@ -8,6 +8,7 @@ import type { PlatformSlug } from "@/types/search";
 import { invalidateAccounts, useAccounts } from "@/hooks/useAccounts";
 import { usePlatformLimits } from "@/hooks/usePlatformLimits";
 import { useSlidingIndicator } from "@/hooks/useSlidingIndicator";
+import { ResearchSettings } from "./ResearchSettings";
 import {
   accountSearchVerdict,
   accountActionHint,
@@ -624,10 +625,12 @@ export function AccountsPage({ activeSection, onSectionChange, onNavigateHelp }:
           <button type="button" className={activeSection === "search" ? "active" : ""} data-indicator-active={activeSection === "search"} onClick={() => onSectionChange("search")}><SlidersHorizontal />搜索设置</button>
           <button type="button" className={activeSection === "accounts" ? "active" : ""} data-indicator-active={activeSection === "accounts"} onClick={() => onSectionChange("accounts")}><UserRound />账号与登录</button>
           <button type="button" className={activeSection === "appearance" ? "active" : ""} data-indicator-active={activeSection === "appearance"} onClick={() => onSectionChange("appearance")}><Palette />外观与首页</button>
-          <p className="aside-note">让工具适应你的习惯。<br />设置保存在当前浏览器。</p>
+          <button type="button" className={activeSection === "ai" ? "active" : ""} data-indicator-active={activeSection === "ai"} onClick={() => onSectionChange("ai")}><Plug />AI 服务配置</button>
+          <p className="aside-note">让工具适应你的习惯。<br />{activeSection === "ai" ? "AI 配置保存在本机，所有空间共用。" : "设置保存在当前浏览器。"}</p>
         </aside>
 
         <div className="settings-content">
+          {activeSection === "ai" && <ResearchSettings />}
 
       {/* ── 搜索设置（） ── */}
       {activeSection === "search" && <section className="settings-section-enter">

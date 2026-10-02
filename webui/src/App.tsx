@@ -44,6 +44,7 @@ function routeFromHash(): { view: ViewMode; settings: SettingsSection; favorites
   if (path.startsWith('/favorites')) return { view: 'favorites', settings: 'search', favorites: 'local', home: false }
   if (path.startsWith('/settings/accounts')) return { view: 'accounts', settings: 'accounts', favorites: 'local', home: false }
   if (path.startsWith('/settings/appearance')) return { view: 'accounts', settings: 'appearance', favorites: 'local', home: false }
+  if (path.startsWith('/settings/ai')) return { view: 'accounts', settings: 'ai', favorites: 'local', home: false }
   if (path.startsWith('/settings')) return { view: 'accounts', settings: 'search', favorites: 'local', home: false }
   if (path.startsWith('/history')) return { view: 'history', settings: 'search', favorites: 'local', home: false }
   if (path.startsWith('/help')) return { view: 'help', settings: 'search', favorites: 'local', home: false }

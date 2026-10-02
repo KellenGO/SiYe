@@ -73,7 +73,7 @@ class ResearchJobs:
 
     def public(self, job_id, store=None):
         job = self.get(job_id)
-        visible = {key: copy.deepcopy(value) for key, value in job.items() if key not in {"snapshot", "elapsed", "workdir", "materials"}}
+        visible = {key: copy.deepcopy(value) for key, value in job.items() if key not in {"snapshot", "elapsed", "workdir", "materials", "history"}}
         visible["total_materials"] = len(job["snapshot"]["items"])
         visible["materials"] = []
         for row in job["materials"]:
@@ -125,21 +125,57 @@ class ResearchJobs:
             raise ValueError("AI 运行环境不完整，请使用包含 AI 运行程序的四野安装包")
         self.config.credentials()
 
-    async def create(self, space, question, web_enabled):
+    def conversation_jobs(self, space_id, conversation_id):
+        matches = [job for job in self.jobs.values() if job.get("conversation_id", job["job_id"]) == conversation_id]
+        if not matches or any(job["space_id"] != space_id for job in matches):
+            raise ValueError("会话不存在或不属于此空间，请新建会话")
+        return matches
+
+    def conversations(self, space_id):
+        groups = {}
+        for job in self.jobs.values():
+            if job["space_id"] != space_id:
+                continue
+            identity = job.get("conversation_id", job["job_id"])
+            if identity not in groups:
+                groups[identity] = {"id": identity, "title": (job["question"] or job["snapshot"]["name"])[:60], "turns": 0}
+            groups[identity].update(status=job["status"], latest_job_id=job["job_id"])
+            groups[identity]["turns"] += 1
+            groups[identity] = groups.pop(identity)
+        return list(reversed(list(groups.values())))
+
+    async def create(self, space, question, web_enabled, conversation_id=None):
         if space["archived"]:
             raise ValueError("空间已归档，请先继续研究")
-        if not space["items"]:
+        if not space["items"] and not conversation_id:
             raise ValueError("请先向空间加入资料")
         self.require_runtime()
+        previous = self.conversation_jobs(space["id"], conversation_id) if conversation_id else []
+        if previous and previous[-1]["status"] != "ready":
+            raise ValueError("请先完成当前会话的研究，或新建会话")
+        latest = previous[-1] if previous else None
+        history = [{"question": row["question"], "answer": self.document_text(row["document"])[:8000]}
+                   for row in previous if row["status"] == "ready"][-3:]
         identity = uuid.uuid4().hex
         await self.claim(identity)
-        self.jobs[identity] = {"job_id": identity, "space_id": space["id"], "snapshot": copy.deepcopy(space),
+        self.jobs[identity] = {"job_id": identity, "space_id": space["id"], "snapshot": copy.deepcopy(latest["snapshot"] if latest else space),
+            "conversation_id": conversation_id or identity, "history": history,
             "question": question, "web_enabled": web_enabled, "status": "collecting", "phase": "collecting",
             "message": "正在获取空间资料", "materials": [], "elapsed": 0.0, "error": "",
             "document": None, "coverage": [], "external_sources": [], "web_errors": [], "usage": None, "cost_usd": None}
-        self.tasks[identity] = asyncio.create_task(self.collect(identity))
+        if latest:
+            self.jobs[identity].update(materials=copy.deepcopy(latest["materials"]), status="analyzing", phase="analyzing", message="正在继续分析当前会话资料")
+        self.tasks[identity] = asyncio.create_task(self.analyze(identity) if latest else self.collect(identity))
         self.tasks[identity].add_done_callback(lambda _: self.prune())
         return self.public(identity)
+
+    @classmethod
+    def document_text(cls, node):
+        if not isinstance(node, dict):
+            return ""
+        if node.get("type") == "text":
+            return node.get("text", "")
+        return "\n".join(cls.document_text(child) for child in node.get("content", []))
 
     async def process(self, job, payload, credentials=None):
         root = library_data_root() / "research-tmp"
@@ -277,7 +313,7 @@ class ResearchJobs:
         try:
             result = await self.process(job, {"mode": "analyze", "materials": copy.deepcopy(job["materials"]),
                 "space_name": job["snapshot"]["name"], "description": job["snapshot"]["description"],
-                "question": job["question"], "web_enabled": job["web_enabled"]}, self.config.credentials())
+                "question": job["question"], "web_enabled": job["web_enabled"], "conversation": job.get("history", [])}, self.config.credentials())
             job.update(result)
             job.update(status="ready", phase="ready", message="笔记已生成，请预览后追加")
         except asyncio.CancelledError:

@@ -201,7 +201,7 @@ async def test_sdk_actual_options_deny_other_tools_and_read_coverage(monkeypatch
         async def __aexit__(self, *args):
             pass
         async def query(self, prompt):
-            pass
+            captured["prompt"] = json.loads(prompt)
         async def receive_response(self):
             yield sdk.SystemMessage("init", {"tools": ["mcp__research__manifest", "mcp__research__read_material"]})
             result = note_result()
@@ -209,9 +209,10 @@ async def test_sdk_actual_options_deny_other_tools_and_read_coverage(monkeypatch
             yield sdk.ResultMessage("success", 1, 1, False, 1, "test", structured_output=result)
     monkeypatch.setattr(sdk, "ClaudeSDKClient", Client)
     payload = {"mode": "analyze", "web_enabled": False, "materials": [material(source())], "workdir": str(tmp_path),
-               "model": "test", "base_url": "https://example.com", "space_name": "攻略", "description": ""}
+               "model": "test", "base_url": "https://example.com", "space_name": "攻略", "description": "", "conversation": [{"question": "previous", "answer": "context"}]}
     result = await run_agent(payload, lambda event: None)
     options = captured["options"]
+    assert captured["prompt"]["conversation"] == payload["conversation"]
     assert options.tools == [] and options.setting_sources == [] and options.strict_mcp_config
     guard = options.hooks["PreToolUse"][0].hooks[0]
     for name in ["WebSearch", "WebFetch", "Bash", "Read", "Write", "PowerShell"]:
@@ -410,3 +411,77 @@ def test_finished_jobs_are_bounded_and_active_job_is_preserved(config, monkeypat
     monkeypatch.setattr(module, "MAX_RETAINED_BYTES", 70)
     manager.prune()
     assert list(manager.jobs) == ["active", "19"]
+
+
+@pytest.mark.asyncio
+async def test_conversation_followups_reuse_sources_and_limit_context(config, monkeypatch):
+    from api.services import research_jobs as module
+    monkeypatch.setattr(module, "get_session_snapshot", lambda _: {"a1": "private"})
+    manager = ResearchJobs(config)
+    monkeypatch.setattr(manager, "require_runtime", lambda: None)
+    config.save("https://example.com", "model", "secret")
+    requests = []
+    async def process(job, payload, credentials=None):
+        requests.append(payload)
+        if payload["mode"] == "collect":
+            job["materials"] = [material(row) for row in payload["items"]]
+            return {}
+        return {"document": {"type": "doc", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "answer" * 2000}]}]}, "coverage": []}
+    monkeypatch.setattr(manager, "process", process)
+    snapshot = {"id": 1, "archived": False, "items": [source()], "name": "攻略", "description": ""}
+    first = await manager.create(snapshot, "路线", False)
+    identity = first["job_id"]
+    await manager.tasks[identity]
+    with pytest.raises(ValueError, match="完成"):
+        await manager.create(snapshot, "追问", False, first["conversation_id"])
+    await manager.generate(identity)
+    await manager.tasks[identity]
+    snapshot["items"].append(source("two"))
+    for index in range(5):
+        followup = await manager.create(snapshot, f"追问{index}", index == 0, first["conversation_id"])
+        assert followup["status"] == "analyzing" and followup["conversation_id"] == identity
+        assert "history" not in followup
+        await manager.tasks[followup["job_id"]]
+        internal = manager.get(followup["job_id"])
+        assert len(internal["snapshot"]["items"]) == 1
+        assert 1 <= len(internal["history"]) <= 3
+        assert all(len(row["answer"]) == 8000 for row in internal["history"])
+    assert sum(row["mode"] == "collect" for row in requests) == 1
+    assert requests[-1]["conversation"][-1]["question"] == "追问3"
+    groups = manager.conversations(1)
+    assert len(groups) == 1 and groups[0]["turns"] == 6
+    with pytest.raises(ValueError, match="不属于"):
+        await manager.create({**snapshot, "id": 2}, "别的空间", False, identity)
+    with pytest.raises(ValueError, match="不存在"):
+        await manager.create(snapshot, "未知会话", False, "unknown")
+    fresh = await manager.create(snapshot, "新会话", False)
+    assert fresh["conversation_id"] != identity and fresh["status"] == "collecting"
+    await manager.tasks[fresh["job_id"]]
+    assert len(manager.get(fresh["job_id"])["snapshot"]["items"]) == 2
+    assert manager.get(fresh["job_id"])["history"] == []
+    await manager.cancel(fresh["job_id"])
+
+
+def test_conversation_routes_isolate_spaces_and_lock_configuration(config, tmp_path):
+    app = FastAPI()
+    app.include_router(research_router)
+    store = SpacesStore(tmp_path / "library.db")
+    first = store.create_space("第一空间")["id"]
+    second = store.create_space("第二空间")["id"]
+    manager = ResearchJobs(config)
+    manager.jobs["one"] = {"job_id": "one", "conversation_id": "conversation", "space_id": first,
+        "question": "路线", "status": "ready", "snapshot": {"items": [], "name": "主题"}, "materials": [], "history": [{"answer": "private"}]}
+    app.dependency_overrides[get_research_config] = lambda: config
+    app.dependency_overrides[get_research_jobs] = lambda: manager
+    app.dependency_overrides[get_spaces_store] = lambda: store
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        response = client.get(f"/api/research/spaces/{first}/conversations")
+        assert response.json()[0]["id"] == "conversation"
+        assert client.get(f"/api/research/spaces/{second}/conversations").json() == []
+        assert "private" not in client.get(f"/api/research/spaces/{first}/conversations/conversation").text
+        assert client.get(f"/api/research/spaces/{second}/conversations/conversation").status_code == 400
+        manager.active = "one"
+        assert client.put("/api/research/config", json={"base_url": "https://example.com", "model": "m", "api_key": "secret"}).status_code == 409
+        assert client.delete("/api/research/config").status_code == 409
+        manager.active = None
+        assert client.put("/api/research/config", json={"base_url": "https://example.com", "model": "m", "api_key": "secret"}).status_code == 200

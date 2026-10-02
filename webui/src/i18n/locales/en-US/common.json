@@ -248,6 +248,13 @@
     "records": "records"
   },
   "research": {
+    "testWebHint": "Used only for the connection test. Choose web access in the research assistant for each request.",
+    "testWeb": "Test web access",
+    "sendFollowup": "Send follow-up",
+    "followupHint": "Ask a follow-up about these sources, e.g. estimated transport costs?",
+    "historyHint": "History is kept for this app session. Older records are cleared automatically.",
+    "history": "Conversation history",
+    "newConversation": "New conversation",
     "title": "AI research assistant",
     "intro": "Read your space sources and draft a cited note. Your selected material and question are sent to the configured AI service.",
     "configure": "AI service settings",
@@ -271,7 +278,7 @@
     "generate": "Generate research note",
     "taskWebOn": "This task: web supplements enabled",
     "taskWebOff": "This task: web supplements disabled",
-    "stale": "Space sources have changed. This task uses the sources captured when it started.",
+    "stale": "Sources have changed. This conversation uses its original selection; start a new conversation to read updated sources.",
     "coverage": "Source reading coverage",
     "partial": "Partial content",
     "reviewHint": "Review missing content, then retry failed items or continue with available material. Long sources may require multiple model calls.",
@@ -311,7 +318,7 @@
     "open": "Open research assistant",
     "close": "Close research assistant",
     "back": "Back to research",
-    "sharedConfig": "All spaces share these AI settings. Save and test uses the current inputs and web mode.",
+    "sharedConfig": "All spaces share these AI service settings. Save and test uses the current inputs.",
     "setupRequired": "Open AI service settings and enter a model and API key first.",
     "progress": "Research progress",
     "step": {

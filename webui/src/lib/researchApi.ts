@@ -15,6 +15,7 @@ export interface ResearchMaterial {
 }
 export interface ResearchJob {
   job_id: string; space_id: number; web_enabled: boolean; question: string;
+  conversation_id: string;
   status: "collecting" | "awaiting_sources" | "analyzing" | "ready" | "failed" | "cancelled";
   phase: string; message: string; error: string; materials: ResearchMaterial[];
   total_materials: number;
@@ -38,9 +39,12 @@ export async function saveWebPreference(spaceId: number, web_enabled: boolean): 
   return (await axios.put(`${BASE}/spaces/${spaceId}/preference`, { web_enabled })).data;
 }
 export async function latestResearch(spaceId: number): Promise<ResearchJob | null> { return (await axios.get(`${BASE}/spaces/${spaceId}/latest`)).data; }
-export async function createResearch(space_id: number, question: string, web_enabled: boolean): Promise<ResearchJob> {
-  return (await axios.post(`${BASE}/jobs`, { space_id, question, web_enabled })).data;
+export async function createResearch(space_id: number, question: string, web_enabled: boolean, conversation_id?: string): Promise<ResearchJob> {
+  return (await axios.post(`${BASE}/jobs`, { space_id, question, web_enabled, conversation_id })).data;
 }
+export interface ResearchConversation { id: string; title: string; turns: number; status: ResearchJob["status"]; latest_job_id: string; }
+export async function listResearchConversations(spaceId: number): Promise<ResearchConversation[]> { return (await axios.get(`${BASE}/spaces/${spaceId}/conversations`)).data; }
+export async function getResearchConversation(spaceId: number, id: string): Promise<ResearchJob[]> { return (await axios.get(`${BASE}/spaces/${spaceId}/conversations/${id}`)).data; }
 export async function getResearch(id: string): Promise<ResearchJob> { return (await axios.get(`${BASE}/jobs/${id}`)).data; }
 export async function researchAction(id: string, action: "retry" | "generate" | "cancel"): Promise<ResearchJob> {
   return (await axios.post(`${BASE}/jobs/${id}/${action}`)).data;

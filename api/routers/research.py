@@ -47,6 +47,7 @@ class WebInput(BaseModel):
 class TaskInput(WebInput):
     space_id: int
     question: str = Field(default="", max_length=2000)
+    conversation_id: str | None = Field(default=None, max_length=64)
 
 
 def translate(error):
@@ -62,7 +63,9 @@ def config_get(config=Depends(get_research_config)):
 
 
 @research_router.put("/config")
-def config_save(payload: ConfigInput, config=Depends(get_research_config)):
+async def config_save(payload: ConfigInput, config=Depends(get_research_config), manager=Depends(get_research_jobs)):
+    if manager.active:
+        raise HTTPException(409, "研究正在运行或等待确认，请先完成或取消后修改 AI 配置")
     try:
         return config.save(payload.base_url, payload.model, payload.api_key)
     except ValueError as error:
@@ -70,7 +73,9 @@ def config_save(payload: ConfigInput, config=Depends(get_research_config)):
 
 
 @research_router.delete("/config")
-def config_delete(config=Depends(get_research_config)):
+async def config_delete(config=Depends(get_research_config), manager=Depends(get_research_jobs)):
+    if manager.active:
+        raise HTTPException(409, "研究正在运行或等待确认，请先完成或取消后修改 AI 配置")
     return config.delete()
 
 
@@ -103,7 +108,7 @@ def preference_save(space_id: int, payload: WebInput, store: SpacesStore = Depen
 @research_router.post("/jobs", status_code=201)
 async def job_create(payload: TaskInput, store: SpacesStore = Depends(get_spaces_store), manager=Depends(get_research_jobs)):
     try:
-        return await manager.create(store.get_space(payload.space_id), payload.question, payload.web_enabled)
+        return await manager.create(store.get_space(payload.space_id), payload.question, payload.web_enabled, payload.conversation_id)
     except ValueError as error:
         translate(error)
 
@@ -114,6 +119,24 @@ def latest(space_id: int, store: SpacesStore = Depends(get_spaces_store), manage
         store.get_space(space_id)
         matches = [identity for identity, job in manager.jobs.items() if job["space_id"] == space_id]
         return manager.public(matches[-1], store) if matches else None
+    except ValueError as error:
+        translate(error)
+
+
+@research_router.get("/spaces/{space_id}/conversations")
+async def conversations(space_id: int, store: SpacesStore = Depends(get_spaces_store), manager=Depends(get_research_jobs)):
+    try:
+        store.get_space(space_id)
+        return manager.conversations(space_id)
+    except ValueError as error:
+        translate(error)
+
+
+@research_router.get("/spaces/{space_id}/conversations/{conversation_id}")
+async def conversation(space_id: int, conversation_id: str, store: SpacesStore = Depends(get_spaces_store), manager=Depends(get_research_jobs)):
+    try:
+        store.get_space(space_id)
+        return [manager.public(job["job_id"], store) for job in manager.conversation_jobs(space_id, conversation_id)]
     except ValueError as error:
         translate(error)
 

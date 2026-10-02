@@ -35,7 +35,6 @@ function NotePanel({ editor, session, name, spaceId, archived, modal, onClose }:
   const action = (label: string, icon: ReactNode, active: boolean, apply: () => void, disabled = false) => <button type="button" title={t(label)} aria-label={t(label)} aria-pressed={active} disabled={archived || disabled} onMouseDown={(event) => event.preventDefault()} onClick={apply}>{icon}</button>;
   return <aside className="space-note-panel" aria-label={t("spaces.note")} role={modal ? "dialog" : undefined} aria-modal={modal || undefined}>
     <div className="space-note-head"><div><span className="eyebrow">{t("spaces.note")}</span><h2>{name}</h2></div><button type="button" className="btn small" aria-label={t("spaces.closeNote")} onClick={onClose}><X aria-hidden="true" /></button></div>
-    <SpaceResearchPanel spaceId={spaceId} editor={editor} session={session} archived={archived} />
     <div className="space-note-toolbar" role="toolbar" aria-label={t("spaces.formatting")}>
       <select aria-label={t("spaces.paragraphStyle")} disabled={archived} value={[1, 2, 3].find((level) => editor.isActive("heading", { level })) ?? 0} onChange={(event) => {
         const level = Number(event.target.value);
@@ -67,7 +66,7 @@ function NotePanel({ editor, session, name, spaceId, archived, modal, onClose }:
   </aside>;
 }
 
-export default function SpaceNoteController({ spaceId, open, onClose, target }: { spaceId: number; open: boolean; onClose: () => void; target: HTMLDivElement | null }) {
+export default function SpaceNoteController({ spaceId, open, onClose, researchOpen, onCloseResearch, target }: { spaceId: number; open: boolean; onClose: () => void; researchOpen: boolean; onCloseResearch: () => void; target: HTMLDivElement | null }) {
   const { t } = useTranslation();
   const spaces = useSpaces();
   const detail = useSpaceDetail(spaceId);
@@ -84,15 +83,9 @@ export default function SpaceNoteController({ spaceId, open, onClose, target }: 
   }, []);
   const modal = Boolean(narrow && open && target && !target.closest(".local-content-research-layout"));
   useLayoutEffect(() => {
-    const research = container.querySelector<HTMLDialogElement>(".space-research-dialog[open]");
-    const focused = document.activeElement as HTMLElement | null;
     container.style.display = open ? "" : "none";
     container.className = modal ? "space-note-floating" : "";
-    if (target && open) {
-      (modal ? document.body : target).appendChild(container);
-      // Moving the editor host removes native dialogs from the browser's top layer.
-      if (research) { research.close(); research.showModal(); focused?.isConnected && focused.focus(); }
-    }
+    if (target && open) (modal ? document.body : target).appendChild(container);
     return () => { container.remove(); };
   }, [container, open, target, modal]);
   const editor = useEditor({
@@ -127,7 +120,7 @@ export default function SpaceNoteController({ spaceId, open, onClose, target }: 
         if (document.activeElement === (event.shiftKey ? all[0] : all[all.length - 1])) { event.preventDefault(); end?.focus(); }
       }
     };
-    const focus = (event: FocusEvent) => { if (!container.contains(event.target as Node)) first()?.focus(); };
+    const focus = (event: FocusEvent) => { if (!(event.target as HTMLElement).closest(".space-research-dialog[open]") && !container.contains(event.target as Node)) first()?.focus(); };
     const outside = (event: PointerEvent) => { if (event.target === container) onClose(); };
     container.addEventListener("keydown", keyboard);
     container.addEventListener("pointerdown", outside);
@@ -143,5 +136,8 @@ export default function SpaceNoteController({ spaceId, open, onClose, target }: 
   useEffect(() => {
     if (session && detail.data && session.sync(detail.data.note_document, detail.data.note_revision)) editor?.commands.setContent(session.document, { emitUpdate: false });
   }, [editor, session, detail.data]);
-  return editor && session && detail.data ? createPortal(<NotePanel key={spaceId} editor={editor} session={session} name={detail.data.name} spaceId={detail.data.id} archived={detail.data.archived} modal={modal} onClose={onClose} />, container) : null;
+  return editor && session && detail.data ? <>
+    {createPortal(<NotePanel key={spaceId} editor={editor} session={session} name={detail.data.name} spaceId={detail.data.id} archived={detail.data.archived} modal={modal} onClose={onClose} />, container)}
+    <SpaceResearchPanel key={spaceId} spaceId={spaceId} editor={editor} session={session} archived={detail.data.archived} open={researchOpen} onClose={onCloseResearch} />
+  </> : null;
 }
