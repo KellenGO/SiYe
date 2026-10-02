@@ -565,6 +565,7 @@ body {
 .space-note-status { display: flex; justify-content: space-between; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--siye-line); font-size: 11px; color: var(--siye-muted); }
 .space-note-error { padding: 10px 16px; max-height: 220px; overflow: auto; font-size: 12px; color: var(--siye-red); }
 .space-note-conflict pre { white-space: pre-wrap; color: var(--siye-ink); }
+.space-add { color: rgb(var(--cyber-text-muted)); }
 .space-add.is-added { color: var(--siye-green); }
 .space-detail-actions { display: flex; flex-wrap: wrap; margin: 14px 0; gap: 10px; }
 .space-detail-actions button { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border: 1px solid var(--siye-line); border-radius: 6px; }
