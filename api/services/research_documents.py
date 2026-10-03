@@ -1,12 +1,76 @@
 """Trusted rich-text conversion and bounded source access for AI results."""
 
 import json
+import re
 from datetime import datetime
 from urllib.parse import urlsplit, urlunsplit
 
 from .space_notes import validate_note
 
 CHUNK_SIZE = 8000
+
+
+class ToolActivity:
+    """Public execution records, separate from provider reasoning and raw arguments."""
+    def __init__(self, emit):
+        self.emit = emit
+        self.counter = 0
+
+    def start(self, tool, message):
+        self.counter += 1
+        identity = f"step-{self.counter}"
+        self.emit({"type": "activity", "id": identity, "tool": tool, "message": message, "status": "running"})
+        return identity
+
+    def finish(self, identity, tool, message, summary, failed=False):
+        self.emit({"type": "activity", "id": identity, "tool": tool, "message": message,
+                   "status": "failed" if failed else "completed", "summary": summary})
+
+    def commentary(self, text):
+        if isinstance(text, str) and text.strip():
+            self.counter += 1
+            self.emit({"type": "activity", "id": f"step-{self.counter}", "tool": "assistant",
+                       "message": text[:4000], "status": "completed", "kind": "commentary"})
+
+
+def answer_document(text, web_enabled):
+    """Accept ordinary assistant text without imposing a research output schema."""
+    if not isinstance(text, str) or not text.strip():
+        raise ValueError("AI 未返回回答，请重试")
+    content = [{"type": "heading", "attrs": {"level": 2}, "content": [{"type": "text", "text": "AI 回答"}]},
+               {"type": "paragraph", "content": [{"type": "text", "text": f"生成于 {datetime.now().astimezone().strftime('%Y-%m-%d %H:%M')} · 联网补充：{'开启' if web_enabled else '关闭'}"}]}]
+    def inline(value):
+        nodes = []
+        for part in re.split(r"(\*\*[^*\n]+\*\*)", value):
+            if part:
+                bold = bool(re.fullmatch(r"\*\*[^*\n]+\*\*", part))
+                nodes.append({"type": "text", "text": part[2:-2] if bold else part,
+                              **({"marks": [{"type": "bold"}]} if bold else {})})
+        return nodes
+
+    in_code = False
+    for line in text.strip().splitlines():
+        if line.startswith("```"):
+            in_code = not in_code
+            content.append({"type": "paragraph", "content": inline(line)})
+            continue
+        heading = None if in_code else re.match(r"^(#{1,6})\s+(.+)$", line)
+        item = None if in_code else re.match(r"^\s*(?:([-*+])\s+|(\d+)\.\s+)(.+)$", line)
+        if heading:
+            content.append({"type": "heading", "attrs": {"level": min(len(heading[1]), 3)}, "content": inline(heading[2])})
+        elif item:
+            kind = "bulletList" if item[1] else "orderedList"
+            node = {"type": "listItem", "content": [{"type": "paragraph", "content": inline(item[3])}]}
+            if content[-1]["type"] == kind:
+                content[-1]["content"].append(node)
+            else:
+                start = max(1, min(int(item[2][:6]), 100000)) if item[2] else 1
+                content.append({"type": kind, **({"attrs": {"start": start}} if item[2] else {}), "content": [node]})
+        else:
+            content.append({"type": "paragraph", **({"content": inline(line)} if line else {})})
+    document = {"type": "doc", "content": content}
+    validate_note(document)
+    return document
 
 
 def public_url(url):

@@ -248,6 +248,12 @@
     "records": "records"
   },
   "research": {
+    "resizePanel": "Resize AI sidebar",
+    "expandPanel": "Expand AI workspace",
+    "collapsePanel": "Collapse to sidebar",
+    "toolProcess": "Tool activity",
+    "processCommentary": "Progress commentary",
+    "toolState": { "running": "Running", "completed": "Completed", "failed": "Failed", "cancelled": "Interrupted" },
     "addSourcesFirst": "Add sources from search or favorites to this space before asking a question.",
     "conversationTurns": "{{count}} turns",
     "searchHistory": "Search conversations",

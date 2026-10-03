@@ -54,7 +54,7 @@ class Provider(BaseHTTPRequestHandler):
                 assert previous[-1]["tool_calls"][0]["extra_content"]["google"]["thought_signature"] == "opaque-signature"
                 type(self).native_metadata = True
             used = {call["function"]["name"] for row in previous for call in row["tool_calls"]}
-            chosen = next((name for name in ("check_connection", "manifest", "read_material", "submit_result") if name in names and name not in used), None)
+            chosen = next((name for name in ("check_connection", "manifest", "read_material", "submit_result") if name in names and name not in used and not (getattr(self, "plain", False) and name == "submit_result")), None)
             args = {"key": "xhs|one", "index": 0} if chosen == "read_material" else {}
             if chosen == "submit_result":
                 args = {"sections": [{"kind": "space", "title": "发现", "paragraphs": [{"text": "OpenAI 兼容研究结果", "sources": ["xhs|one"]}]}]}
@@ -130,9 +130,11 @@ async def smoke(executable=None):
             source = material({"key": "xhs|one", "result": {"platform": "xhs", "title": "测试来源", "url": "https://example.com/one",
                                                           "snippet": "简介", "content_type": "note"}})
             source.update(body=component("ok", text="完整正文"), comments=component("ok"))
-            result = await manager.process({"elapsed": 510}, {"mode": "analyze", "web_enabled": False, "materials": [source],
+            legacy_job = {"elapsed": 510}
+            result = await manager.process(legacy_job, {"mode": "analyze", "web_enabled": False, "materials": [source],
                 "space_name": "测试空间", "description": ""}, credentials)
             assert result["coverage"][0]["complete"] and result["document"]["content"]
+            assert legacy_job["activity"] and all(row["status"] == "completed" for row in legacy_job["activity"])
             assert Provider.exposed <= {"mcp__research__manifest", "mcp__research__read_material", "mcp__research__check_connection", "StructuredOutput"}
             native_credentials = {**credentials, "protocol": "openai", "model": "deepseek-flash", "base_url": credentials["base_url"] + "/v1"}
             assert (await manager.process({"elapsed": 510}, {"mode": "probe", "web_enabled": False}, native_credentials))["connection_ok"]
@@ -140,8 +142,14 @@ async def smoke(executable=None):
             native = await manager.process(native_job, {"mode": "analyze", "web_enabled": False, "materials": [source],
                 "space_name": "测试空间", "description": ""}, native_credentials)
             assert native["coverage"][0]["complete"] and native_job["activity"]
+            assert len(native_job["activity"]) == 3 and all(row["status"] == "completed" for row in native_job["activity"])
             assert Provider.native_exposed <= {"manifest", "read_material", "check_connection", "submit_result"}
             assert Provider.native_metadata
+            Provider.plain = True
+            ordinary = await manager.process({"elapsed": 510}, {"mode": "analyze", "web_enabled": False, "materials": [source],
+                "space_name": "测试空间", "description": "", "question": "普通聊天"}, native_credentials)
+            assert ordinary["coverage"][0]["complete"] and "OK" in json.dumps(ordinary["document"])
+            Provider.plain = False
             Provider.block = True
             pending = asyncio.create_task(manager.process({"elapsed": 510}, {"mode": "probe", "web_enabled": False}, credentials))
             assert await asyncio.to_thread(Provider.entered.wait, 20)
@@ -171,7 +179,7 @@ async def smoke(executable=None):
             pending.cancel()
             await asyncio.gather(pending, return_exceptions=True)
             assert not list((Path(directory) / "research-tmp").iterdir()), "Temporary source files remain"
-        print("PASS: OpenAI and legacy SDK tool loops, provider metadata, structured notes, restricted tools, cancellation and temporary cleanup")
+        print("PASS: OpenAI and legacy SDK tool loops, ordinary replies, provider metadata, tool-state updates, restricted tools, cancellation and temporary cleanup")
     finally:
         Provider.resume.set()
         server.shutdown()

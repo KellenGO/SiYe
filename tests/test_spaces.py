@@ -28,7 +28,11 @@ def store(tmp_path):
 
 
 @pytest.fixture
-def client(store):
+def client(store, tmp_path, monkeypatch):
+    from api.services import research_config as config_module, research_jobs as jobs_module
+    config = config_module.ResearchConfig(tmp_path / "research-ai.json", cipher=lambda value, decrypt=False: value)
+    monkeypatch.setattr(config_module, "research_config", config)
+    monkeypatch.setattr(jobs_module, "research_jobs", jobs_module.ResearchJobs(config))
     app = FastAPI()
     app.include_router(spaces_router)
     app.dependency_overrides[get_spaces_store] = lambda: store

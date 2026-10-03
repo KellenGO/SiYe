@@ -57,8 +57,11 @@ def main():
                         row.update(body=component("ok", text="完整正文"), comments=component("failed", reason="测试评论读取失败"))
                     return {}
                 conversation_inputs.append(payload.get("conversation", []))
-                job["activity"] = [{"tool": "manifest", "message": "已列出本次空间资料"}, {"tool": "read_material", "message": "已读取资料第 1 段"}]
+                job["activity"] = [{"id": "step-1", "tool": "manifest", "message": "manifest", "status": "completed", "summary": "1 条空间资料"},
+                    {"id": "step-2", "tool": "assistant", "kind": "commentary", "message": "我先查看攻略中的路线和交通信息。", "status": "completed"},
+                    {"id": "step-3", "tool": "read_material", "message": "read_material", "status": "running"}]
                 await asyncio.sleep(1.2)
+                job["activity"][-1].update(status="completed", summary="苏州攻略 · 第 1 段 · 128 字符")
                 access = MaterialAccess(job["materials"])
                 for row in access.manifest():
                     for index in range(row["chunks"]):
@@ -126,7 +129,7 @@ def main():
                     return panel.locator(".research-chat-turn").last
                 def choose_history(panel, title):
                     panel.get_by_role("button", name="会话历史", exact=True).click()
-                    sessions = panel.get_by_role("complementary", name="会话历史", exact=True)
+                    sessions = page.get_by_role("complementary", name="会话历史", exact=True)
                     sessions.get_by_label("搜索会话", exact=True).fill(title)
                     sessions.locator(".research-session-list button").filter(has_text=title).click()
                     expect(sessions).not_to_be_visible()
@@ -153,6 +156,25 @@ def main():
                 panel = open_panel()
                 assert page.locator(".app-main-inner").bounding_box()["width"] <= full_width - 450, "Sidebar did not compress the main content"
                 assert not page.locator(".space-research-dialog").evaluate("element => element.matches(':modal')"), "Desktop assistant blocks the main content"
+                resize = panel.locator("xpath=..").get_by_role("separator", name="调整 AI 侧栏宽度", exact=True)
+                box = resize.bounding_box()
+                width_before = panel.bounding_box()["width"]
+                page.mouse.move(box["x"] + 3, box["y"] + 100)
+                page.mouse.down()
+                page.mouse.move(box["x"] - 140, box["y"] + 100, steps=8)
+                page.mouse.up()
+                assert panel.bounding_box()["width"] >= width_before + 135, "Drag did not resize the sidebar"
+                resize.focus()
+                page.keyboard.press("ArrowRight")
+                assert panel.bounding_box()["width"] < width_before + 140
+                panel.get_by_role("button", name="展开 AI 工作区", exact=True).click()
+                assert page.locator(".space-research-dialog").bounding_box()["width"] >= 1300
+                assert page.locator(".space-research-dialog").evaluate("element => element.matches(':modal')")
+                sessions = page.get_by_role("complementary", name="会话历史", exact=True)
+                assert sessions.bounding_box()["x"] >= panel.bounding_box()["x"] + panel.bounding_box()["width"] - 1, "Sessions cover the expanded chat"
+                panel.get_by_role("button", name="收起为侧栏", exact=True).click()
+                sessions.get_by_role("button", name="关闭会话列表", exact=True).click()
+                assert not page.locator(".space-research-dialog").evaluate("element => element.matches(':modal')")
                 assert not panel.locator(".space-research-steps").count(), "Old workflow still replaces the chat"
                 web = panel.get_by_label("允许联网补充", exact=True)
                 expect(web).not_to_be_checked()
@@ -181,6 +203,7 @@ def main():
                 fail_append = False
                 page.reload()
                 panel = open_panel()
+                assert panel.bounding_box()["width"] >= 670, "Saved sidebar width was lost after reload"
                 note = open_note()
                 expect(note).not_to_contain_text("AI生成的苏州研究结果")
                 last_turn(panel).get_by_role("button", name="追加到笔记", exact=True).click()
@@ -204,12 +227,19 @@ def main():
                 assert json.dumps(store.get_space(first)["note_document"], ensure_ascii=False).count("AI生成的苏州研究结果") == 2, "Retry inserted the same result twice"
                 assert conversation_inputs[0] == [] and conversation_inputs[1][0]["answer"], "Follow-up lost prior answers"
                 assert page.locator(".space-note-content").bounding_box()["height"] >= 300
-                panel.locator(".research-tool-trace > summary").last.click()
+                expect(panel.get_by_label("工具调用过程", exact=True).last).to_be_visible()
+                expect(panel.get_by_text("我先查看攻略中的路线和交通信息。", exact=True).last).to_be_visible()
+                panel.locator(".research-tool-step > summary").last.click()
+                expect(panel.get_by_text("苏州攻略 · 第 1 段 · 128 字符", exact=True).last).to_be_visible()
                 page.screenshot(path=str(ROOT / "build/research-desktop.png"), full_page=True)
                 page.locator(".space-research-dialog").screenshot(path=str(ROOT / "build/research-chat.png"))
+                panel.get_by_role("button", name="展开 AI 工作区", exact=True).click()
+                page.screenshot(path=str(ROOT / "build/research-expanded.png"), full_page=True)
+                panel.get_by_role("button", name="收起为侧栏", exact=True).click()
+                page.get_by_role("complementary", name="会话历史", exact=True).get_by_role("button", name="关闭会话列表", exact=True).click()
                 panel.get_by_role("button", name="会话历史", exact=True).click()
                 page.screenshot(path=str(ROOT / "build/research-sessions.png"), full_page=True)
-                panel.get_by_role("button", name="关闭会话列表", exact=True).click()
+                page.get_by_role("complementary", name="会话历史", exact=True).get_by_role("button", name="关闭会话列表", exact=True).click()
                 panel.get_by_role("button", name="新会话", exact=True).click()
                 expect(panel.get_by_label("给 AI 发送消息", exact=True)).to_have_value("")
                 expect(panel.locator(".research-chat-turn")).to_have_count(0)
@@ -262,7 +292,7 @@ def main():
                 assert not errors, errors
                 context.close()
                 browser.close()
-                print("PASS: OpenAI provider settings, source review, chat messages and reading records, writing during generation, save recovery, per-turn append, session search, independent preferences, docked desktop and fullscreen mobile")
+                print("PASS: resizable and expanded workspace, inline tool states and public commentary, provider settings, source review, writing and save recovery, per-turn append, session search, docked desktop and fullscreen mobile")
     finally:
         server.shutdown()
 

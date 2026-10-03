@@ -35,6 +35,19 @@ def response(name=None, args=None, **extra):
         "usage": {"prompt_tokens": 10, "completion_tokens": 2, "total_tokens": 12}}
 
 
+def test_ordinary_answer_keeps_basic_markdown_and_treats_html_as_text():
+    from api.services.research_documents import answer_document
+    from api.services.space_notes import validate_note
+    document = answer_document("## 计划\n- **第一天**\n- 第二天\n2. 出发\n3. 返回\n<script>alert(1)</script>", False)
+    validate_note(document)
+    blocks = document["content"][2:]
+    assert [row["type"] for row in blocks] == ["heading", "bulletList", "orderedList", "paragraph"]
+    assert len(blocks[1]["content"]) == 2 and blocks[2]["attrs"]["start"] == 2
+    assert blocks[1]["content"][0]["content"][0]["content"][0]["marks"] == [{"type": "bold"}]
+    assert blocks[-1]["content"][0]["text"] == "<script>alert(1)</script>"
+    validate_note(answer_document("**\n" + "9" * 5000 + ". 序号", False))
+
+
 @pytest.mark.asyncio
 async def test_native_loop_preserves_provider_metadata_and_source_coverage(monkeypatch):
     first = response("read_material", {"key": "xhs|one", "index": 0}, reasoning_content="provider-private-thinking")
@@ -48,11 +61,44 @@ async def test_native_loop_preserves_provider_metadata_and_source_coverage(monke
     monkeypatch.setattr(module, "completion", completion)
     output = await module.run_openai(payload(conversation=[{"question": "以前", "answer": "上下文"}]), events.append)
     assert output["coverage"][0]["complete"]
-    assert captured[1][2] == first["choices"][0]["message"]
-    assert json.loads(captured[0][1]["content"])["conversation"][0]["answer"] == "上下文"
+    assert captured[1][1] == first["choices"][0]["message"]
+    assert json.loads(captured[0][0]["content"])["conversation"][0]["answer"] == "上下文"
+    assert all(row["role"] != "system" for row in captured[0])
     assert "provider-private-thinking" not in json.dumps(events)
     assert "opaque-signature" not in json.dumps(events)
-    assert events[-1]["usage"]["total_tokens"] == 24
+    assert [event for event in events if event["type"] == "usage"][-1]["usage"]["total_tokens"] == 24
+    activity = [event for event in events if event["type"] == "activity" and event["tool"] == "read_material"]
+    assert [event["status"] for event in activity] == ["running", "completed"]
+    assert activity[0]["id"] == activity[1]["id"] and "攻略" in activity[1]["summary"]
+
+
+@pytest.mark.asyncio
+async def test_ordinary_reply_and_public_commentary_work_without_a_system_prompt(monkeypatch):
+    replies = [response("manifest", content="先查看你选入的资料。", reasoning_content="private-thinking"),
+               response(content="可以，你可以直接告诉我想了解什么。", reasoning_content="private-thinking")]
+    events = []
+    async def completion(client, data, messages, tools):
+        assert not any(row["role"] == "system" for row in messages)
+        assert "围绕空间主题整理研究笔记" not in messages[0]["content"]
+        return replies.pop(0)
+    monkeypatch.setattr(module, "completion", completion)
+    output = await module.run_openai(payload(question="你好"), events.append)
+    assert "可以，你可以直接告诉我" in json.dumps(output["document"], ensure_ascii=False)
+    assert not output["coverage"][0]["complete"]
+    assert any(event.get("kind") == "commentary" and event["message"] == "先查看你选入的资料。" for event in events)
+    assert "private-thinking" not in json.dumps(events)
+
+
+@pytest.mark.asyncio
+async def test_invalid_tool_activity_ends_with_failure(monkeypatch):
+    replies = [response("read_material", {"key": "other", "index": 0}), response(content="没有读取成功。")]
+    events = []
+    async def completion(*args):
+        return replies.pop(0)
+    monkeypatch.setattr(module, "completion", completion)
+    await module.run_openai(payload(), events.append)
+    activity = [event for event in events if event["type"] == "activity"]
+    assert [event["status"] for event in activity] == ["running", "failed"]
 
 
 @pytest.mark.asyncio

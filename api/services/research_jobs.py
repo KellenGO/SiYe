@@ -222,8 +222,14 @@ class ResearchJobs:
                     elif kind == "progress":
                         job.update(phase=event["phase"], message=event["message"])
                     elif kind == "activity":
-                        job.setdefault("activity", []).append({"tool": event["tool"], "message": event["message"]})
-                        job["activity"] = job["activity"][-40:]
+                        records = job.setdefault("activity", [])
+                        record = {key: event[key] for key in ("id", "tool", "message", "status", "summary", "kind") if key in event}
+                        existing = next((row for row in records if record.get("id") and row.get("id") == record["id"]), None)
+                        if existing is not None:
+                            existing.update(record)
+                        else:
+                            records.append(record)
+                        job["activity"] = records[-40:]
                     elif kind == "usage":
                         job.update(usage=event.get("usage"), cost_usd=event.get("cost_usd"))
                     elif kind == "done":
@@ -330,6 +336,9 @@ class ResearchJobs:
         except Exception as error:
             job.update(status="failed", phase="failed", error=self.safe_error(error))
         finally:
+            for record in job.get("activity", []):
+                if record.get("status") == "running":
+                    record.update(status="cancelled" if job["status"] == "cancelled" else "failed", summary="执行已中断")
             await self.release(identity)
 
     async def cancel(self, identity):

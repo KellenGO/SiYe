@@ -212,6 +212,7 @@ async def test_sdk_actual_options_deny_other_tools_and_read_coverage(monkeypatch
                "model": "test", "base_url": "https://example.com", "space_name": "攻略", "description": "", "conversation": [{"question": "previous", "answer": "context"}]}
     result = await run_agent(payload, lambda event: None)
     options = captured["options"]
+    assert options.system_prompt == "" and options.output_format is None
     assert captured["prompt"]["conversation"] == payload["conversation"]
     assert options.tools == [] and options.setting_sources == [] and options.strict_mcp_config
     guard = options.hooks["PreToolUse"][0].hooks[0]
@@ -512,3 +513,23 @@ def test_openai_runtime_does_not_require_claude_sdk(config, monkeypatch):
     config.save("https://api.anthropic.com", "model", "secret", "anthropic")
     with pytest.raises(ValueError, match="运行环境"):
         ResearchJobs(config).require_runtime()
+
+
+@pytest.mark.asyncio
+async def test_cancel_updates_running_tool_records(config, monkeypatch):
+    manager = ResearchJobs(config)
+    config.save("https://example.com", "model", "isolated-key")
+    manager.jobs["job"] = {"job_id": "job", "space_id": 1, "status": "analyzing", "materials": [], "history": [],
+        "snapshot": {"name": "主题", "description": "", "items": []}, "question": "你好", "web_enabled": False,
+        "activity": [{"id": "step-1", "tool": "read_material", "status": "running", "message": "read_material"}]}
+    started = asyncio.Event()
+    async def process(*args):
+        started.set()
+        await asyncio.Event().wait()
+    monkeypatch.setattr(manager, "process", process)
+    manager.active = "job"
+    manager.tasks["job"] = asyncio.create_task(manager.analyze("job"))
+    await started.wait()
+    await manager.cancel("job")
+    assert manager.jobs["job"]["activity"][0]["status"] == "cancelled"
+    assert manager.active is None

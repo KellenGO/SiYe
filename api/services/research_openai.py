@@ -6,8 +6,7 @@ from datetime import datetime, timezone
 
 import httpx
 
-from .research_agent import SYSTEM_PROMPT
-from .research_documents import CHUNK_SIZE, MaterialAccess, RESULT_SCHEMA, result_document
+from .research_documents import CHUNK_SIZE, MaterialAccess, RESULT_SCHEMA, ToolActivity, answer_document, public_url, result_document
 from .research_web import page_text, public_get, search_public
 
 
@@ -48,6 +47,7 @@ async def run_openai(payload, emit):
     access = MaterialAccess(payload.get("materials", []))
     external, texts, web_errors = {}, {}, []
     checked, searched, fetched = False, False, False
+    activity = ToolActivity(emit)
     tools = [function("check_connection", "验证工具调用后再回复 OK")] if probe else [
         function("manifest", "列出选定空间资料及外部来源、分段数、读取情况"),
         function("read_material", "读取选定资料或已获取网页的一个分段",
@@ -60,27 +60,22 @@ async def run_openai(payload, emit):
                   function("read_webpage", "读取公开网页正文，不读取登录网页、音视频或本机文件",
                            {"url": {"type": "string"}}, ["url"])]
     allowed = {row["function"]["name"] for row in tools}
-    prompt = SYSTEM_PROMPT.replace("WebSearch", "search_web")
-    prompt += "\n完成阅读后单独调用 submit_result 提交结论；无需生成文件。"
     question = "调用 check_connection，然后回复 OK。" if probe else json.dumps({
         "space_name": payload["space_name"], "description": payload["description"],
-        "question": payload.get("question") or "围绕空间主题整理研究笔记",
+        "question": payload.get("question", ""),
         "conversation": payload.get("conversation", []), "web_enabled": web}, ensure_ascii=False)
     if probe and web:
         question += "先用 search_web 搜索 OpenAI 官方文档，再用 read_webpage 读取 https://example.com。"
-    messages = [{"role": "system", "content": prompt}, {"role": "user", "content": question}]
+    messages = [{"role": "user", "content": question}]
     usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
-    def activity(name, label):
-        emit({"type": "activity", "tool": name, "message": label})
-        emit({"type": "progress", "phase": "analyzing", "message": label})
-
-    def finish(output):
+    def finish(output=None, text=None):
         for row in external.values():
             if row["chunks"] and len(row["read_chunks"]) < row["chunks"]:
                 row["level"] = "网页正文（部分已读）"
         coverage = access.coverage()
-        document = result_document(output, list(access.materials.values()), list(external.values()), coverage, web)
+        document = (answer_document(text, web) if text is not None else
+                    result_document(output, list(access.materials.values()), list(external.values()), coverage, web))
         return {"document": document, "coverage": coverage, "external_sources": list(external.values()), "web_errors": web_errors}
 
     async with httpx.AsyncClient(timeout=120, trust_env=False, follow_redirects=False) as client:
@@ -119,13 +114,14 @@ async def run_openai(payload, emit):
                     raise ValueError("AI 工具或联网测试未通过，不能确认服务兼容")
                 text = message.get("content") or ""
                 try:
-                    text = text.strip()
-                    if text.startswith("```"):
-                        text = text.split("\n", 1)[1].rsplit("```", 1)[0]
-                    output = json.loads(text)
+                    encoded = text.strip()
+                    if encoded.startswith("```json") or encoded.startswith("```\n"):
+                        encoded = encoded.split("\n", 1)[1].rsplit("```", 1)[0]
+                    output = json.loads(encoded)
                 except (ValueError, AttributeError, IndexError):
-                    raise ValueError("AI 未提交有效研究结论，请使用支持工具调用的模型") from None
-                return finish(output)
+                    return finish(text=text)
+                return finish(output) if isinstance(output, dict) and "sections" in output else finish(text=text)
+            activity.commentary(message.get("content"))
             for call in calls:
                 declaration = call.get("function") if isinstance(call, dict) else None
                 if not isinstance(declaration, dict) or not isinstance(declaration.get("name"), str):
@@ -135,6 +131,9 @@ async def run_openai(payload, emit):
                 if not isinstance(identity, str) or not identity:
                     raise ValueError("AI 工具调用缺少标识")
                 result = None
+                tool_name = name if name in allowed else "denied"
+                label, summary = tool_name, "工具执行完成"
+                step = activity.start(tool_name, label)
                 try:
                     if name not in allowed:
                         raise ValueError("本次研究没有开放此工具")
@@ -145,7 +144,7 @@ async def run_openai(payload, emit):
                         checked = True
                         result = {"ok": True}
                     elif name == "manifest":
-                        activity(name, "已列出本次空间资料")
+                        summary = f"{len(access.materials)} 条空间资料，{len(external)} 条外部来源"
                         result = {"space": access.coverage(), "external": list(external.values())}
                     elif name == "read_material":
                         key, index = args["key"], args["index"]
@@ -157,7 +156,8 @@ async def run_openai(payload, emit):
                             text = texts[key][index * CHUNK_SIZE:(index + 1) * CHUNK_SIZE]
                         else:
                             text = access.chunk(key, index)
-                        activity(name, f"已读取资料第 {index + 1} 段")
+                        title = (external.get(key) or access.materials.get(key) or {}).get("title", "资料")
+                        summary = f"{title[:200]} · 第 {index + 1} 段 · {len(text)} 字符"
                         result = {"key": key, "index": index, "text": text}
                     elif name == "search_web":
                         try:
@@ -169,7 +169,7 @@ async def run_openai(payload, emit):
                                         "fetched_at": datetime.now(timezone.utc).isoformat(), "chunks": 0, "read_chunks": []}
                                 row["id"] = key
                             searched = True
-                            activity(name, "已检索公开网页")
+                            summary = f"取得 {len(rows)} 条公开搜索结果"
                             result = rows
                         except Exception:
                             web_errors.append("公开搜索未能完成")
@@ -186,7 +186,7 @@ async def run_openai(payload, emit):
                                 "read_chunks": [0]}
                             texts[key] = text
                             fetched = True
-                            activity(name, "已读取公开网页正文")
+                            summary = f"{title[:200]} · {public_url(url)} · {len(text)} 字符"
                             result = {**external[key], "text": text[:CHUNK_SIZE]}
                         except Exception:
                             web_errors.append("外部网页未能读取")
@@ -194,10 +194,13 @@ async def run_openai(payload, emit):
                     elif name == "submit_result":
                         if len(calls) != 1:
                             raise ValueError("完成资料读取后，再单独提交结论")
-                        return finish(args)
+                        output = finish(args)
+                        activity.finish(step, tool_name, label, "结果已提交")
+                        return output
                 except (ValueError, KeyError, TypeError):
                     # Never reflect provider arguments, source text or credentials in logs/errors.
                     result = {"error": "工具调用未成功，请检查参数、可用来源或读取缺口后重试"}
-                    activity(name if name in allowed else "denied", "一次工具调用未完成")
+                    summary = result["error"]
+                activity.finish(step, tool_name, label, summary, isinstance(result, dict) and "error" in result)
                 messages.append({"role": "tool", "tool_call_id": identity, "content": json.dumps(result, ensure_ascii=False)})
     raise ValueError("AI 达到工具调用轮次上限，请缩小研究范围后重试")

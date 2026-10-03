@@ -248,6 +248,12 @@
     "records": "条"
   },
   "research": {
+    "resizePanel": "调整 AI 侧栏宽度",
+    "expandPanel": "展开 AI 工作区",
+    "collapsePanel": "收起为侧栏",
+    "toolProcess": "工具调用过程",
+    "processCommentary": "过程说明",
+    "toolState": { "running": "执行中", "completed": "已完成", "failed": "失败", "cancelled": "已中断" },
     "addSourcesFirst": "先从搜索或收藏加入空间资料，再开始提问。",
     "conversationTurns": "{{count}} 轮对话",
     "searchHistory": "搜索会话",
