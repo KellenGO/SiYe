@@ -32,7 +32,7 @@ export default function SpaceResearchPanel({ spaceId, spaceName, sourceCount, ed
   const body = useRef<HTMLDivElement>(null);
   const [narrow, setNarrow] = useState(() => window.matchMedia("(max-width: 1000px)").matches);
   const [width, setWidth] = useState(() => {
-    try { return Math.max(360, Math.min(Number(localStorage.getItem("siye-research-width")) || 560, window.innerWidth - 320)); } catch { return 560; }
+    try { return Math.max(360, Math.min(Number(localStorage.getItem("siye-research-width")) || 560, window.innerWidth)); } catch { return 560; }
   });
   const [viewportWidth, setViewportWidth] = useState(window.innerWidth);
   const [expanded, setExpanded] = useState(false);
@@ -68,19 +68,21 @@ export default function SpaceResearchPanel({ spaceId, spaceName, sourceCount, ed
     window.addEventListener("resize", resize);
     return () => { media.removeEventListener("change", update); window.removeEventListener("resize", resize); };
   }, []);
-  const panelWidth = narrow ? viewportWidth : expanded ? viewportWidth - 72 : Math.min(width, viewportWidth - 320);
+  const minimumWidth = sessionsOpen ? 680 : 360;
+  const panelWidth = narrow || expanded ? viewportWidth : Math.min(Math.max(width, minimumWidth), viewportWidth);
+  const fullscreen = !narrow && panelWidth === viewportWidth;
   useEffect(() => {
     if (!open) return;
     document.body.style.setProperty("--research-panel-width", `${panelWidth}px`);
-    document.body.classList.toggle("has-ai-expanded", expanded && !narrow);
+    document.body.classList.toggle("has-ai-expanded", fullscreen);
     return () => { document.body.style.removeProperty("--research-panel-width"); document.body.classList.remove("has-ai-expanded"); };
-  }, [open, panelWidth, expanded, narrow]);
+  }, [open, panelWidth, fullscreen]);
   useEffect(() => {
     const element = dialog.current;
     if (!element || !open) return;
-    if (narrow || expanded) element.showModal(); else element.show();
+    if (narrow) element.showModal(); else element.show();
     return () => { element.close(); };
-  }, [open, narrow, expanded]);
+  }, [open, narrow]);
   const running = job?.status === "collecting" || job?.status === "analyzing";
   const locked = busy || running || job?.status === "awaiting_sources";
   useEffect(() => {
@@ -124,7 +126,6 @@ export default function SpaceResearchPanel({ spaceId, spaceName, sourceCount, ed
     setQuestion("");
   });
   const newConversation = () => {
-    setSessionsOpen(false); setSessionSearch("");
     jobVersion.current += 1; setInitialized(true); setJob(null); setTurns([]); setQuestion(""); setError(""); setNotice("");
     dialog.current?.querySelector<HTMLTextAreaElement>("textarea")?.focus();
   };
@@ -132,7 +133,8 @@ export default function SpaceResearchPanel({ spaceId, spaceName, sourceCount, ed
     const version = ++jobVersion.current;
     const history = await api.getResearchConversation(spaceId, id);
     if (version !== jobVersion.current) return;
-    setTurns(history.slice(-10)); setJob(history[history.length - 1] ?? null); setInitialized(true); setQuestion(""); setSessionsOpen(false);
+    setTurns(history.slice(-10)); setJob(history[history.length - 1] ?? null); setInitialized(true); setQuestion("");
+    if (narrow) setSessionsOpen(false);
   });
   const append = (result: api.ResearchJob) => run(async () => {
     if (!result.document || session.hasSavedResearch(result.job_id) || wasApplied(result.job_id)) return;
@@ -151,22 +153,31 @@ export default function SpaceResearchPanel({ spaceId, spaceName, sourceCount, ed
   const send = () => { if (!pending.current) void start(); };
   const sendDisabled = (sourceCount === 0 && job?.status !== "ready") || archived || busy || !initialized || !config.data?.has_key || !preference.data || !question.trim();
   const cancel = () => run(async () => { if (job) await updateJob(() => api.researchAction(job.job_id, "cancel")); });
-  return createPortal(<dialog ref={dialog} className={`space-research-dialog${expanded ? " is-expanded" : ""}${sessionsOpen && !narrow && panelWidth >= 760 ? " has-session-column" : ""}`} aria-labelledby={titleId}
+  const toggleExpanded = () => {
+    if (fullscreen) {
+      setExpanded(false);
+      if (width >= viewportWidth) {
+        setWidth(560);
+        try { localStorage.setItem("siye-research-width", "560"); } catch { /* Storage may be unavailable. */ }
+      }
+    } else { setExpanded(true); setSessionsOpen(true); }
+  };
+  return createPortal(<dialog ref={dialog} className={`space-research-dialog${fullscreen ? " is-expanded" : ""}${sessionsOpen && !narrow ? " has-session-column" : ""}`} aria-labelledby={titleId}
     onCancel={(event) => { event.preventDefault(); onClose(); }}
     onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); if (sessionsOpen) setSessionsOpen(false); else onClose(); } }}>
-    {!narrow && !expanded && <div className="research-resize-handle" role="separator" tabIndex={0} aria-orientation="vertical" aria-label={t("research.resizePanel")} aria-valuemin={360} aria-valuemax={viewportWidth - 320} aria-valuenow={panelWidth}
+    {!narrow && <div className="research-resize-handle" role="separator" tabIndex={0} aria-orientation="vertical" aria-label={t("research.resizePanel")} aria-valuemin={minimumWidth} aria-valuemax={viewportWidth} aria-valuenow={panelWidth}
       onPointerDown={(event) => { if (event.button !== 0) return; event.preventDefault(); event.currentTarget.setPointerCapture(event.pointerId); drag.current = { pointer: event.pointerId, x: event.clientX, width: panelWidth, latest: panelWidth }; }}
-      onPointerMove={(event) => { const start = drag.current; if (!start || start.pointer !== event.pointerId) return; start.latest = Math.max(360, Math.min(start.width + start.x - event.clientX, viewportWidth - 320)); setWidth(start.latest); }}
+      onPointerMove={(event) => { const start = drag.current; if (!start || start.pointer !== event.pointerId) return; start.latest = Math.max(minimumWidth, Math.min(start.width + start.x - event.clientX, viewportWidth)); setExpanded(false); setWidth(start.latest); }}
       onPointerUp={() => { if (drag.current) { try { localStorage.setItem("siye-research-width", String(drag.current.latest)); } catch { /* Storage may be unavailable. */ } drag.current = null; } }}
       onLostPointerCapture={() => { drag.current = null; }}
-      onKeyDown={(event) => { if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return; event.preventDefault(); const next = event.key === "Home" ? 360 : event.key === "End" ? viewportWidth - 320 : Math.max(360, Math.min(panelWidth + (event.key === "ArrowLeft" ? 24 : -24), viewportWidth - 320)); setWidth(next); try { localStorage.setItem("siye-research-width", String(next)); } catch { /* Storage may be unavailable. */ } }} />}
+      onKeyDown={(event) => { if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return; event.preventDefault(); const next = event.key === "Home" ? minimumWidth : event.key === "End" ? viewportWidth : Math.max(minimumWidth, Math.min(panelWidth + (event.key === "ArrowLeft" ? 24 : -24), viewportWidth)); setExpanded(false); setWidth(next); try { localStorage.setItem("siye-research-width", String(next)); } catch { /* Storage may be unavailable. */ } }} />}
     <section className="space-research">
       <header className="space-research-head">
         <div className="research-chat-title"><Sparkles aria-hidden="true" /><h2 id={titleId}>{t("research.title")}</h2></div>
         <div className="space-research-actions">
           <button type="button" className="research-icon-button" title={t("research.newConversation")} aria-label={t("research.newConversation")} disabled={!!locked || !initialized} onClick={newConversation}><Plus aria-hidden="true" /></button>
           <button type="button" className="research-icon-button" title={t("research.history")} aria-label={t("research.history")} aria-expanded={sessionsOpen} onClick={() => setSessionsOpen(!sessionsOpen)}><History aria-hidden="true" /></button>
-          {!narrow && <button type="button" className="research-icon-button" title={t(expanded ? "research.collapsePanel" : "research.expandPanel")} aria-label={t(expanded ? "research.collapsePanel" : "research.expandPanel")} aria-expanded={expanded} onClick={() => { setExpanded(!expanded); if (!expanded) setSessionsOpen(true); }}>{expanded ? <Minimize2 aria-hidden="true" /> : <Maximize2 aria-hidden="true" />}</button>}
+          {!narrow && <button type="button" className="research-icon-button" title={t(fullscreen ? "research.collapsePanel" : "research.expandPanel")} aria-label={t(fullscreen ? "research.collapsePanel" : "research.expandPanel")} aria-expanded={fullscreen} onClick={toggleExpanded}>{fullscreen ? <Minimize2 aria-hidden="true" /> : <Maximize2 aria-hidden="true" />}</button>}
           <button type="button" className="research-icon-button" aria-label={t("research.close")} onClick={onClose}><X aria-hidden="true" /></button>
         </div>
       </header>

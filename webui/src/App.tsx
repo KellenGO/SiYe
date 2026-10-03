@@ -163,7 +163,7 @@ function AppContent() {
   }
 
   return (
-    <div className={`min-h-screen flex flex-col relative ${viewMode === 'search' && searchHome ? 'home-route' : ''} ${onboarding.step !== null ? 'has-onboarding' : ''}`}>
+    <div className={`app-shell min-h-screen flex flex-col relative ${viewMode === 'search' && searchHome ? 'home-route' : ''} ${onboarding.step !== null ? 'has-onboarding' : ''}`}>
       {/* License Disclaimer Modal - Shows first or when triggered */}
       {(!licenseAccepted || showDisclaimer) && (
         <LicenseDisclaimer onAccept={handleLicenseAccept} />

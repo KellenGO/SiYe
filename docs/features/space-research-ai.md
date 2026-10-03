@@ -18,12 +18,13 @@
 | 研究接口 | `api/routers/research.py`（`research_router`） |
 | 全局 AI 服务设置 | `webui/src/components/accounts/ResearchSettings.tsx`、`webui/src/components/accounts/AccountsPage.tsx` |
 | 右侧助手、会话、缺口确认与追加 | `webui/src/components/spaces/SpaceWorkspace.tsx`、`webui/src/components/spaces/SpaceResearchPanel.tsx`、`webui/src/lib/researchApi.ts` |
+| 全高侧栏及主页、顶栏同步调整 | `webui/src/App.tsx`、`webui/src/index.css` |
 | 笔记追加、冲突与自动保存 | `webui/src/lib/spaceNotes.ts`（`NoteSession.appendResearch`）、`webui/src/components/spaces/SpaceNoteController.tsx` |
 | 内置运行程序准备与打包 | `scripts/prepare_agent_runtime.py`、`MediaCrawler.spec`、`scripts/build_exe.ps1` |
 
 ## 关键决定
 
-- 参照用户提供的 Claudian 截图，助手通过页面右上角独立入口打开，配置仍在设置页。桌面停靠在右侧，可拖动左边界调宽并记住宽度，同时压缩主内容；分隔线支持左右方向键、Home／End。展开工作区时使用较大模态面板，聊天与右侧会话列表并排，收起后恢复原侧栏宽度；手机使用全屏模态面板并限制焦点。Escape 先关闭会话列表，再关闭助手；关闭助手不取消任务。问题显示为右侧气泡，工具步骤直接展开在消息流中，单步详情及资料获取记录可折叠；底部固定输入、模型、联网及发送／停止。会话支持标题搜索，每轮回答都可追加笔记。没有移植 Obsidian 工作区 API 或引入新框架。
+- 参照用户提供的 Claudian 截图，助手通过页面右上角独立入口打开，配置仍在设置页。桌面使用贴齐窗口顶部和底部的非模态右侧栏，可拖动左边界调宽并记住宽度，同时压缩主页、顶栏和页脚；分隔线支持左右方向键、Home／End。桌面历史栏始终与聊天并排，窄侧栏打开历史时适度加宽，确保列表不遮挡输入。展开时填满整个窗口，不留顶部或左侧偏移、也不增加背景遮罩；全屏仍能拖回侧栏，收起按钮恢复之前的侧栏宽度。手机使用全屏模态面板并限制焦点。新会话保留历史栏及搜索条件，桌面切换会话也保留列表；只有手动关闭或 Escape 才收起历史栏，手机选中历史会话后收起列表以显示聊天。Escape 先关闭会话列表，再关闭助手；关闭助手不取消任务。问题显示为右侧气泡，工具步骤直接展开在消息流中，单步详情及资料获取记录可折叠；底部固定输入、模型、联网及发送／停止。会话支持标题搜索，每轮回答都可追加笔记。没有移植 Obsidian 工作区 API 或引入新框架。
 - 已清空应用内置系统提示词和默认研究问题，不预设角色、研究步骤、结论栏目或写作风格。只传用户问题、空间名称／简介、会话上下文和工具接口说明；连接测试仍有独立的工具测试请求，不用于正常聊天。OpenAI 不发送 system 消息，旧 SDK 显式使用空系统提示词并关闭强制结构化输出。普通文字回答可直接显示、追加，并支持基本标题、列表和加粗；结构化提交作为可选工具保留。此取舍见[清空提示词与公开执行过程](../decisions/2026-10-03-空间AI清空提示词与公开执行过程.md)。
 - AI 服务配置位于全局「设置 → AI 服务配置」，所有空间共用。默认使用 OpenAI Chat Completions 协议，提供 DeepSeek、Gemini、OpenAI 及自定义服务选项，模型名称可自行填写。填写服务基础地址、API Key 和模型名称；同一服务留空 Key 保留原配置，切换服务商需要填写对应 Key，可单独清除配置。旧配置未声明协议时仍按 Anthropic 执行，不静默更换地址或 Key。「保存并测试连接」先保存当前输入，再用设置页的测试联网选项验证；该选项不改变空间研究偏好；运行或等待确认时不能更改服务配置。密钥使用 Windows 当前用户加密，公开接口只返回是否已保存和遮罩。本机接口严格检查 Host 和 Origin，拒绝恶意域名自称同源。使用 API 计费，默认模式无需 Claude 账号或运行程序，不继承本机 Claude 订阅登录。连接测试也可能计费。
 - 点击生成先固定空间资料快照、研究问题和联网选择，再获取资料。新增或移出的来源只影响新会话，当前结果会提示快照已变化。抓取不会修改空间原快照、收藏或用户笔记。
@@ -55,4 +56,4 @@
 - 前端：`webui` 内运行 `npm run test:search` 和 `npm run build`，笔记测试覆盖生成期间修改、重复追加、冲突与超限。
 - SDK：先按项目锁文件安装依赖并运行 `scripts/prepare_agent_runtime.py`，再运行 `.venv/Scripts/python.exe scripts/research_ai_smoke.py`。真实 worker 连接本机模拟 OpenAI / Anthropic 服务，不用真实 Key、不产生服务费用；覆盖工具循环、DeepSeek/Gemini 元数据回传、结构化笔记、工具范围、进程树取消和临时目录清理。
 - Windows 包：上述 SDK smoke 加 `--exe build/ai-exe-dist/SiYe/SiYe.exe`，验证冻结后的研究 worker。构建仍由 `scripts/build_exe.ps1` 统一入口准备运行程序。
-- 界面：构建后运行 `scripts/research_ui_smoke.py` 与 `scripts/spaces_ui_smoke.py`。临时 SQLite 与模拟研究服务，覆盖设置、消息及执行记录、缺口确认、任务联网快照、手写与保存恢复、逐轮追加、独立偏好、拖拽／键盘调宽及刷新记忆、展开／收起的并排会话布局、新会话／追问／搜索历史和手机全屏／固定操作栏／Escape；截图在忽略的 `build/`。空间删除测试须隔离 AI 配置和任务管理器，不能只隔离 SQLite。
+- 界面：构建后运行 `scripts/research_ui_smoke.py` 与 `scripts/spaces_ui_smoke.py`。临时 SQLite 与模拟研究服务，覆盖设置、消息及执行记录、缺口确认、任务联网快照、手写与保存恢复、逐轮追加、独立偏好、拖拽／键盘调宽及刷新记忆、全高停靠与顶栏同步压缩、四边贴齐的全屏及拖回侧栏、新会话／切换历史保留列表与搜索条件、新会话／追问／搜索历史和手机全屏／固定操作栏／Escape；截图在忽略的 `build/`。空间删除测试须隔离 AI 配置和任务管理器，不能只隔离 SQLite。

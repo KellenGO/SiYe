@@ -128,11 +128,14 @@ def main():
                 def last_turn(panel):
                     return panel.locator(".research-chat-turn").last
                 def choose_history(panel, title):
-                    panel.get_by_role("button", name="会话历史", exact=True).click()
+                    toggle = panel.get_by_role("button", name="会话历史", exact=True)
+                    if toggle.get_attribute("aria-expanded") != "true":
+                        toggle.click()
                     sessions = page.get_by_role("complementary", name="会话历史", exact=True)
                     sessions.get_by_label("搜索会话", exact=True).fill(title)
                     sessions.locator(".research-session-list button").filter(has_text=title).click()
-                    expect(sessions).not_to_be_visible()
+                    expect(sessions).to_be_visible()
+                    sessions.get_by_role("button", name="关闭会话列表", exact=True).click()
                 page.goto(origin + "/#/settings/ai")
                 settings = page.locator(".research-settings")
                 settings.get_by_label("模型名称", exact=True).fill("new-model")
@@ -155,7 +158,17 @@ def main():
                 full_width = page.locator(".app-main-inner").bounding_box()["width"]
                 panel = open_panel()
                 assert page.locator(".app-main-inner").bounding_box()["width"] <= full_width - 450, "Sidebar did not compress the main content"
+                assert page.locator(".app-header").bounding_box()["width"] <= full_width - 450, "Sidebar did not compress the header"
+                bounds = page.locator(".space-research-dialog").bounding_box()
+                assert bounds["y"] == 0 and bounds["height"] == 1000, "Docked assistant leaves a gap at the top"
                 assert not page.locator(".space-research-dialog").evaluate("element => element.matches(':modal')"), "Desktop assistant blocks the main content"
+                panel.get_by_role("button", name="会话历史", exact=True).click()
+                sessions = page.get_by_role("complementary", name="会话历史", exact=True)
+                assert sessions.bounding_box()["x"] >= panel.bounding_box()["x"] + panel.bounding_box()["width"] - 1, "Docked history covers the chat composer"
+                panel.get_by_role("button", name="新会话", exact=True).click()
+                expect(sessions).to_be_visible()
+                assert page.locator(".space-research-dialog").bounding_box()["width"] < 1000, "New conversation unexpectedly expanded the sidebar"
+                sessions.get_by_role("button", name="关闭会话列表", exact=True).click()
                 resize = panel.locator("xpath=..").get_by_role("separator", name="调整 AI 侧栏宽度", exact=True)
                 box = resize.bounding_box()
                 width_before = panel.bounding_box()["width"]
@@ -164,14 +177,34 @@ def main():
                 page.mouse.move(box["x"] - 140, box["y"] + 100, steps=8)
                 page.mouse.up()
                 assert panel.bounding_box()["width"] >= width_before + 135, "Drag did not resize the sidebar"
+                assert page.locator(".app-main-inner").bounding_box()["width"] <= full_width - width_before - 135, "Dragging did not resize the main content"
                 resize.focus()
                 page.keyboard.press("ArrowRight")
                 assert panel.bounding_box()["width"] < width_before + 140
                 panel.get_by_role("button", name="展开 AI 工作区", exact=True).click()
-                assert page.locator(".space-research-dialog").bounding_box()["width"] >= 1300
-                assert page.locator(".space-research-dialog").evaluate("element => element.matches(':modal')")
+                bounds = page.locator(".space-research-dialog").bounding_box()
+                assert bounds == {"x": 0, "y": 0, "width": 1440, "height": 1000}, "Expanded workspace does not fill the viewport"
+                assert page.evaluate("document.documentElement.scrollHeight === innerHeight"), "Hidden main content leaves scroll space below fullscreen"
+                assert not page.locator(".space-research-dialog").evaluate("element => element.matches(':modal')"), "Desktop expansion introduces a modal backdrop"
                 sessions = page.get_by_role("complementary", name="会话历史", exact=True)
                 assert sessions.bounding_box()["x"] >= panel.bounding_box()["x"] + panel.bounding_box()["width"] - 1, "Sessions cover the expanded chat"
+                sessions.get_by_role("button", name="新会话", exact=True).click()
+                expect(sessions).to_be_visible()
+                expect(panel.get_by_label("给 AI 发送消息", exact=True)).to_be_focused()
+                panel.get_by_role("button", name="新会话", exact=True).click()
+                expect(sessions).to_be_visible()
+                assert page.locator(".space-research-dialog").bounding_box() == bounds, "New conversation changed the layout"
+                page.screenshot(path=str(ROOT / "build/research-new-fullscreen.png"), full_page=True)
+                box = resize.bounding_box()
+                page.mouse.move(box["x"] + 3, box["y"] + 100)
+                page.mouse.down()
+                page.mouse.move(box["x"] + 603, box["y"] + 100, steps=12)
+                page.mouse.up()
+                assert page.locator(".space-research-dialog").bounding_box()["width"] == 840, "Fullscreen workspace cannot be resized back to a dock"
+                assert page.locator(".app-main-inner").bounding_box()["width"] == 600, "Main content did not reclaim the dragged width"
+                expect(sessions).to_be_visible()
+                page.screenshot(path=str(ROOT / "build/research-docked-history.png"), full_page=True)
+                panel.get_by_role("button", name="展开 AI 工作区", exact=True).click()
                 panel.get_by_role("button", name="收起为侧栏", exact=True).click()
                 sessions.get_by_role("button", name="关闭会话列表", exact=True).click()
                 assert not page.locator(".space-research-dialog").evaluate("element => element.matches(':modal')")
@@ -240,9 +273,15 @@ def main():
                 panel.get_by_role("button", name="会话历史", exact=True).click()
                 page.screenshot(path=str(ROOT / "build/research-sessions.png"), full_page=True)
                 page.get_by_role("complementary", name="会话历史", exact=True).get_by_role("button", name="关闭会话列表", exact=True).click()
-                panel.get_by_role("button", name="新会话", exact=True).click()
+                panel.get_by_role("button", name="会话历史", exact=True).click()
+                sessions = page.get_by_role("complementary", name="会话历史", exact=True)
+                sessions.get_by_label("搜索会话", exact=True).fill("苏州")
+                sessions.get_by_role("button", name="新会话", exact=True).click()
+                expect(sessions).to_be_visible()
+                expect(sessions.get_by_label("搜索会话", exact=True)).to_have_value("苏州")
                 expect(panel.get_by_label("给 AI 发送消息", exact=True)).to_have_value("")
                 expect(panel.locator(".research-chat-turn")).to_have_count(0)
+                sessions.get_by_role("button", name="关闭会话列表", exact=True).click()
                 panel.get_by_role("button", name="总结这些资料的关键结论", exact=True).click()
                 expect(panel.get_by_label("给 AI 发送消息", exact=True)).to_have_value("总结这些资料的关键结论")
                 panel.get_by_role("button", name="发送消息", exact=True).click()
@@ -292,7 +331,7 @@ def main():
                 assert not errors, errors
                 context.close()
                 browser.close()
-                print("PASS: resizable and expanded workspace, inline tool states and public commentary, provider settings, source review, writing and save recovery, per-turn append, session search, docked desktop and fullscreen mobile")
+                print("PASS: persistent history on new/select conversation, edge-to-edge fullscreen, fullscreen-to-dock dragging and main/header resizing, provider settings, source review, writing and save recovery, per-turn append, tool steps, session search and fullscreen mobile")
     finally:
         server.shutdown()
 
