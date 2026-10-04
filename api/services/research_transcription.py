@@ -29,6 +29,39 @@ CACHE_BYTES = 32 * 1024 * 1024
 CACHE_FILES = 64
 
 
+class TranscriptionError(ValueError):
+    def __init__(self, code, stage, reason, state="failed", http_status=None):
+        self.code, self.stage, self.state, self.http_status = code, stage, state, http_status
+        super().__init__(reason)
+
+
+async def asr_component_status():
+    """Offline optional-component probe, isolated from the app's DLLs and secrets."""
+    executable = asr_python()
+    status = {"installed": bool(executable), "runtime_path": executable, "engine_version": None,
+              "model_ready": False, "model": MODEL, "usable": False, "reason": "not_installed"}
+    if not executable:
+        return status
+    proc = None
+    try:
+        proc = await asyncio.create_subprocess_exec(executable, "-I", "-X", "utf8",
+            str(resource_path("scripts", "research_asr_worker.py")), env=worker_environment(),
+            stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+        payload = json.dumps({"mode": "status", "models": str(library_data_root() / "research-asr" / "models"), "model": MODEL})
+        output, _ = await asyncio.wait_for(proc.communicate((payload + "\n").encode()), timeout=20)
+        data = json.loads(output)
+        if proc.returncode or data.get("type") != "done":
+            raise ValueError("component")
+        status.update(engine_version=str(data["engine_version"])[:32], model_ready=data.get("model_ready") is True,
+                      usable=data.get("model_ready") is True, reason="ready" if data.get("model_ready") else "model_not_ready")
+    except Exception:
+        status["reason"] = "runtime_unavailable"
+    finally:
+        await terminate_worker(proc)
+    return status
+
+
 def normalize_segments(rows):
     entries, size, truncated = [], 0, False
     for row in rows:
@@ -82,7 +115,8 @@ async def download_media(url, target, referer):
                         url = urljoin(url, location)
                         continue
                     if response.status_code in {401, 403, 429}:
-                        raise PermissionError("media restricted")
+                        raise TranscriptionError("cdn_restricted", "download", "媒体 CDN 拒绝公开访问或要求鉴权，保留正文和评论",
+                            "restricted", response.status_code)
                     response.raise_for_status()
                     if int(response.headers.get("content-length", "0")) > MAX_MEDIA_BYTES:
                         raise ValueError("媒体超过 96 MB 转写上限")
@@ -132,8 +166,11 @@ async def run_asr(executable, media, models, progress):
                     result = event
                 elif event.get("type") == "error":
                     reasons = {"duration": "音频超过 30 分钟转写上限", "model": "转写模型准备失败，请检查网络或可选组件",
-                        "unavailable": "本地转写组件不完整，请重新安装可选组件"}
-                    raise ValueError(reasons.get(event.get("code"), "本地转写失败，可重试"))
+                        "unavailable": "本地转写组件不完整，请重新安装可选组件", "decode": "本地转写无法解码媒体音轨",
+                        "no_audio": "媒体流没有可读取音轨，保留正文和评论",
+                        "transcript": "本地转写引擎未能完成语音识别"}
+                    code = event.get("code") if event.get("code") in reasons else "worker"
+                    raise TranscriptionError(code, "decode" if code in {"duration", "no_audio"} else code, reasons.get(code, "本地转写进程失败，可重试"))
             await proc.wait()
             if proc.returncode or result is None:
                 raise ValueError("本地转写进程未能完成")
@@ -169,6 +206,7 @@ class TranscriptionService:
                     or metadata["engine"] != "faster-whisper" or not math.isfinite(duration) or not 0 <= duration <= MAX_SECONDS):
                 return None
             return {"state": "ok", "entries": entries, "text": "", "reason": "", "truncated": False,
+                "diagnostics": {"component": "subtitles", "stage": "cache", "provider": "local_asr", "fallback_attempted": False},
                 "metadata": {"source": "local_asr", "engine": "faster-whisper", "model": MODEL,
                     "language": str(metadata.get("language") or "unknown")[:20], "duration": duration, "cached": True}}
         except (OSError, ValueError, KeyError, TypeError):
@@ -219,21 +257,29 @@ class TranscriptionService:
             if not math.isfinite(duration) or not 0 <= duration <= MAX_SECONDS:
                 raise ValueError("音频超过 30 分钟转写上限")
             result = {"state": "ok", "text": "", "entries": entries, "reason": "转写内容达到上限" if limited else "",
+                "diagnostics": {"component": "subtitles", "stage": "transcribe", "provider": "local_asr", "fallback_attempted": False},
                 "truncated": limited, "metadata": {"source": "local_asr", "engine": "faster-whisper", "model": MODEL,
                     "language": str(output.get("language") or "unknown")[:20], "duration": duration, "cached": False}}
             if not limited:
                 self.save(identity, result)
             return result
+        except TranscriptionError as error:
+            return self.missing(str(error), error.state, stage=error.stage, code=error.code, http_status=error.http_status)
         except PermissionError:
             return self.missing("媒体 CDN 拒绝公开访问或要求鉴权，保留正文和评论", "restricted")
         except (TimeoutError, httpx.TimeoutException):
             reason = "音轨获取超时（最多 90 秒）" if stage == "media" else "本地转写 worker 超时（模型准备与转写最多 6 分钟）"
-            return self.missing(reason + "，保留正文和评论，可重试", "failed")
+            return self.missing(reason + "，保留正文和评论，可重试", "failed", stage="download" if stage == "media" else "worker", code="timeout")
         except Exception as error:
             reason = str(error) if isinstance(error, ValueError) and str(error).startswith(("媒体超过", "音频超过", "转写模型", "本地转写")) else (
                 "音轨下载失败或媒体地址不可用，保留正文和评论，可重试" if stage == "media" else "本地转写失败，保留正文和评论，可重试")
-            return self.missing(reason, "failed")
+            return self.missing(reason, "failed", stage="download" if stage == "media" else "worker", code="size_limit" if reason.startswith("媒体超过") else "media_unavailable" if stage == "media" else "worker_failed")
 
     @staticmethod
-    def missing(reason, state="missing"):
-        return {"state": state, "text": "", "entries": [], "reason": reason, "truncated": False}
+    def missing(reason, state="missing", *, stage="asr", code="unavailable", http_status=None):
+        result = {"state": state, "text": "", "entries": [], "reason": reason, "truncated": False,
+                  "diagnostics": {"component": "subtitles", "stage": stage, "provider": "local_asr", "safe_error_code": code,
+                                  "fallback_attempted": False}}
+        if http_status is not None:
+            result["diagnostics"]["http_status"] = http_status
+        return result

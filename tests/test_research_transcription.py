@@ -390,7 +390,7 @@ async def test_cancel_collection_marks_pending_transcription_failed_and_keeps_te
     manager = jobs.ResearchJobs(config)
     manager.require_runtime = lambda: None
     monkeypatch.setattr(jobs, "get_session_snapshot", lambda _: {})
-    monkeypatch.setattr(jobs, "ensure_session_snapshot", lambda _: asyncio.sleep(0, result={}))
+    monkeypatch.setattr(jobs, "ensure_session_snapshot", lambda _, **kwargs: asyncio.sleep(0, result={}))
     entered = asyncio.Event()
     async def process(job, payload, credentials=None):
         row = materials.material(source())
@@ -418,3 +418,59 @@ def test_frozen_app_uses_optional_runtime_instead_of_bundle_dependencies(monkeyp
     executable.parent.mkdir(parents=True)
     executable.write_bytes(b"placeholder")
     assert module.asr_python() == str(executable)
+
+
+@pytest.mark.asyncio
+async def test_component_status_missing_runtime_and_broken_runtime(monkeypatch, tmp_path):
+    monkeypatch.setattr(module, "library_data_root", lambda: tmp_path)
+    monkeypatch.setattr(module, "asr_python", lambda: None)
+    assert (await module.asr_component_status())["reason"] == "not_installed"
+    monkeypatch.setattr(module, "asr_python", lambda: str(tmp_path / "broken-python"))
+    status = await module.asr_component_status()
+    assert status["installed"] and not status["usable"] and status["reason"] == "runtime_unavailable"
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("ready", [True, False])
+async def test_component_probe_is_offline_and_sanitized(monkeypatch, tmp_path, ready):
+    worker = tmp_path / "status.py"
+    worker.write_text("import json,sys\np=json.loads(sys.stdin.readline())\nassert p['mode']=='status' and set(p)=={'mode','models','model'}\nprint(json.dumps({'type':'done','engine_version':'1.2.1','model_ready':" + str(ready) + "}))\n")
+    monkeypatch.setattr(module, "library_data_root", lambda: tmp_path)
+    monkeypatch.setattr(module, "asr_python", lambda: sys.executable)
+    monkeypatch.setattr(module, "resource_path", lambda *args: worker)
+    monkeypatch.setenv("HF_TOKEN", "secret")
+    status = await module.asr_component_status()
+    assert status["usable"] == ready and status["model_ready"] == ready
+    assert status["reason"] == ("ready" if ready else "model_not_ready")
+
+def test_asr_runtime_detection_prefers_independent_runtime(monkeypatch, tmp_path):
+    monkeypatch.setattr(module, "library_data_root", lambda: tmp_path)
+    runtime = tmp_path / "research-asr" / "runtime" / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+    runtime.parent.mkdir(parents=True)
+    runtime.touch()
+    assert module.asr_python() == str(runtime)
+    monkeypatch.setattr(module.importlib.util, "find_spec", lambda _: None)
+    runtime.unlink()
+    assert module.asr_python() is None
+
+def test_model_ready_requires_files_and_never_downloads(monkeypatch, tmp_path):
+    import importlib.util
+    from pathlib import Path
+    worker_path = Path(__file__).parents[1] / "scripts" / "research_asr_worker.py"
+    spec = importlib.util.spec_from_file_location("asr_status_worker", worker_path)
+    worker = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(worker)
+    calls = []
+    def cached_model(name, **kwargs):
+        calls.append(kwargs)
+        assert kwargs["local_files_only"] is True
+        return str(tmp_path)
+    monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(__version__="1.2.1"))
+    monkeypatch.setitem(sys.modules, "faster_whisper.utils", SimpleNamespace(download_model=cached_model))
+    monkeypatch.setitem(sys.modules, "av", SimpleNamespace())
+    monkeypatch.setitem(sys.modules, "numpy", SimpleNamespace())
+    payload = {"model": "small", "models": str(tmp_path)}
+    assert not worker.component_status(payload)["model_ready"]
+    for name in ("model.bin", "config.json", "tokenizer.json"):
+        (tmp_path / name).write_bytes(b"test")
+    assert worker.component_status(payload)["model_ready"]
+    assert len(calls) == 2
