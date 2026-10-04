@@ -169,6 +169,7 @@ async def test_provider_http_endpoint_and_authentication(monkeypatch, base):
         assert str(request.url) == base + "/chat/completions"
         assert request.headers["Authorization"] == "Bearer isolated-test-key"
         assert json.loads(request.content)["stream"] is False
+        assert "tools" not in json.loads(request.content) and "tool_choice" not in json.loads(request.content)
         return httpx.Response(200, json=response())
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         assert "choices" in await module.completion(client, payload(base_url=base), [], [])

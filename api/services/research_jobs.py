@@ -85,6 +85,7 @@ class ResearchJobs:
                 values = row[name]
                 summary[name] = {key: values[key] for key in ("state", "reason", "truncated")}
                 summary[name]["count"] = len(values["entries"])
+                summary[name]["collection_truncated"] = bool(values["truncated"])
                 if "sort" in values:
                     summary[name]["sort"] = values["sort"]
                 if name == "subtitles":

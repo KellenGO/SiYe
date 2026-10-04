@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 import httpx
 
-from .research_documents import CHUNK_SIZE, MaterialAccess, RESEARCH_INSTRUCTIONS, RESULT_SCHEMA, SourceReferenceError, ToolActivity, answer_document, public_url, research_context, result_document
+from .research_documents import CHUNK_SIZE, MaterialAccess, ReadLoopGuard, RESEARCH_INSTRUCTIONS, RESULT_SCHEMA, SourceReferenceError, ToolInputError, ToolActivity, answer_document, model_external, public_url, read_material_section, research_context, result_document
 from .research_web import page_text, public_get, search_public
 
 
@@ -19,8 +19,8 @@ async def completion(client, payload, messages, tools):
     try:
         async with client.stream("POST", payload["base_url"].rstrip("/") + "/chat/completions",
                 headers={"Authorization": "Bearer " + os.environ["SIYE_RESEARCH_API_KEY"]},
-                json={"model": payload["model"], "messages": messages, "tools": tools,
-                      "tool_choice": "auto", "stream": False}) as response:
+                json={"model": payload["model"], "messages": messages, "stream": False,
+                      **({"tools": tools, "tool_choice": "auto"} if tools else {})}) as response:
             if response.status_code in {401, 403}:
                 raise ValueError("AI 服务拒绝访问，请检查 API Key 和模型权限")
             if response.status_code == 429:
@@ -48,12 +48,14 @@ async def run_openai(payload, emit):
     external, texts, web_errors = {}, {}, []
     checked, searched, fetched = False, False, False
     activity = ToolActivity(emit)
+    read_guard = ReadLoopGuard()
+    submit_failures = 0
     tools = [function("check_connection", "验证工具调用后再回复 OK")] if probe else [
         function("manifest", "列出选定空间资料及外部来源、分段数、读取情况"),
         function("read_material", "按 section 读取资料的一段；网页仅支持 body，index 从 0 开始",
-                 {"key": {"type": "string"}, "section": {"type": "string", "enum": ["body", "comments", "subtitles"]},
+                 {"key": {"type": "string", "description": "本轮公开标识，如 S1 或 W1"}, "section": {"type": "string", "enum": ["body", "comments", "subtitles"]},
                   "index": {"type": "integer", "minimum": 0}}, ["key", "section", "index"]),
-        {"type": "function", "function": {"name": "submit_result", "description": "完成来源读取后提交研究结论",
+        {"type": "function", "function": {"name": "submit_result", "description": "完成必要读取后提交一次；sources 使用 S1/S3:comments/W1 等公开标识；也可直接普通回复",
                                               "parameters": RESULT_SCHEMA}}]
     if web:
         tools += [function("search_web", "搜索公开网页，只返回搜索摘要",
@@ -130,7 +132,12 @@ async def run_openai(payload, emit):
                     citation_repaired = True
                     messages.append({"role": "user", "content": str(error)})
                     continue
+            if not tools:
+                raise ValueError("AI 仍调用已关闭的工具；重复调用未取得证据，请重试问题")
             activity.commentary(message.get("content"))
+            # Complete evidence reads before submission even if a provider batches them out of order.
+            calls = sorted(calls, key=lambda call: isinstance(call, dict) and isinstance(call.get("function"), dict)
+                           and call["function"].get("name") == "submit_result")
             for call in calls:
                 declaration = call.get("function") if isinstance(call, dict) else None
                 if not isinstance(declaration, dict) or not isinstance(declaration.get("name"), str):
@@ -143,33 +150,25 @@ async def run_openai(payload, emit):
                 tool_name = name if name in allowed else "denied"
                 label, summary = tool_name, "工具执行完成"
                 step = activity.start(tool_name, label)
+                args = {}
                 try:
                     if name not in allowed:
                         raise ValueError("本次研究没有开放此工具")
                     args = json.loads(call["function"]["arguments"])
                     if not isinstance(args, dict):
                         raise ValueError("工具参数无效")
+                    if read_guard.exhausted and name != "submit_result":
+                        raise ToolInputError(read_guard.hint)
                     if name == "check_connection":
                         checked = True
                         result = {"ok": True}
                     elif name == "manifest":
                         summary = f"{len(access.materials)} 条空间资料，{len(external)} 条外部来源"
-                        result = {"space": access.coverage(), "external": list(external.values())}
+                        result = {"space": access.model_coverage(), "external": model_external(external.values())}
                     elif name == "read_material":
-                        key, section, index = args["key"], args["section"], args["index"]
-                        if key in texts:
-                            if section != "body" or type(index) is not int or index < 0 or index * CHUNK_SIZE >= len(texts[key]):
-                                raise ValueError("网页分段不存在")
-                            if index not in external[key]["read_chunks"]:
-                                external[key]["read_chunks"].append(index)
-                            external[key]["level"] = "网页正文（部分已读）" if len(external[key]["read_chunks"]) < external[key]["chunks"] else "网页正文"
-                            text = texts[key][index * CHUNK_SIZE:(index + 1) * CHUNK_SIZE]
-                        else:
-                            text = access.chunk(key, section, index)
-                        title = (external.get(key) or access.materials.get(key) or {}).get("title", "资料")
-                        summary = f"{title[:200]} · {section} 第 {index + 1} 段 · {len(text)} 字符"
-                        citation = external[key]["citation"] if key in external else access.citations[key]
-                        result = {"key": key, "citation": citation, "section": section, "index": index, "text": text}
+                        result = read_material_section(access, external, texts, args["key"], args["section"], args["index"])
+                        summary = (f"{result['title'][:200]} · {result['section']} 第 {result['index'] + 1} 段 · {len(result['text'])} 字符"
+                            if "text" in result else result.get("reason") or result.get("hint") or "没有可读内容")
                     elif name == "search_web":
                         try:
                             rows = await search_public(args["query"])
@@ -178,7 +177,7 @@ async def run_openai(payload, emit):
                                 if key not in external:
                                     external[key] = {"id": key, "citation": f"W{key.split('|')[1]}", "url": row["url"], "title": row["title"], "level": "仅搜索摘要",
                                         "fetched_at": datetime.now(timezone.utc).isoformat(), "chunks": 0, "read_chunks": []}
-                                row["id"] = key
+                                row["id"] = external[key]["citation"]
                                 row["citation"] = external[key]["citation"]
                                 row["level"] = "仅搜索摘要"
                             searched = True
@@ -201,20 +200,30 @@ async def run_openai(payload, emit):
                             texts[key] = text
                             fetched = True
                             summary = f"{title[:200]} · {public_url(url)} · {len(text)} 字符"
-                            result = {**external[key], "text": text[:CHUNK_SIZE]}
+                            result = {**model_external([external[key]])[0], "text": text[:CHUNK_SIZE]}
                         except Exception:
                             web_errors.append("外部网页未能读取")
                             raise ValueError("网页受限、没有正文或内容过大，不要声称已读取") from None
                     elif name == "submit_result":
-                        if len(calls) != 1:
-                            raise ValueError("完成资料读取后，再单独提交结论")
                         output = finish(args)
                         activity.finish(step, tool_name, label, "结果已提交")
                         return output
-                except (ValueError, KeyError, TypeError):
+                except (ValueError, KeyError, TypeError) as error:
                     # Never reflect provider arguments, source text or credentials in logs/errors.
-                    result = {"error": "工具调用未成功，请检查参数、可用来源或读取缺口后重试"}
+                    if name == "submit_result":
+                        submit_failures += 1
+                        reason = str(error) if isinstance(error, (SourceReferenceError, ToolInputError)) else "提交格式无效：sections 含 kind/title/paragraphs；段落含 text/sources，sources 使用公开标识"
+                        if submit_failures >= 2:
+                            tools, allowed = [], set()
+                        result = {"error": reason, "hint": "修正一次；仍失败则直接普通回复，使用标准分区引用", "remaining_submit_attempts": max(0, 2 - submit_failures)}
+                    else:
+                        result = {"error": str(error) if isinstance(error, ToolInputError) else "工具参数无效或未开放；只使用本轮工具与清单"}
                     summary = result["error"]
+                read_guard.observe(name, args, result)
                 activity.finish(step, tool_name, label, summary, isinstance(result, dict) and "error" in result)
                 messages.append({"role": "tool", "tool_call_id": identity, "content": json.dumps(result, ensure_ascii=False)})
+            if read_guard.exhausted or submit_failures >= 2:
+                tools, allowed = [], set()
+                messages.append({"role": "user", "content": read_guard.hint if read_guard.exhausted else
+                    "两次结构化提交未能通过；直接普通回复，基于已读内容说明结论和缺口，使用标准分区引用，不再调用工具"})
     raise ValueError("AI 达到工具调用轮次上限，请缩小研究范围后重试")

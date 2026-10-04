@@ -45,6 +45,9 @@ def main():
             store.add_items(first, [{"platform": "xhs", "content_id": "one", "title": "苏州攻略", "content_type": "note",
                 "url": "https://www.xiaohongshu.com/explore/one", "author": "测试作者", "snippet": "完整简介",
                 "published_at": datetime.now(timezone.utc).isoformat(), "metrics": {}, "rank": 1}])
+            store.add_items(first, [{"platform": "xhs", "content_id": identity, "title": title, "content_type": "video",
+                "url": f"https://www.xiaohongshu.com/explore/{identity}", "snippet": "清单简介", "metrics": {}, "rank": index}
+                for index, (identity, title) in enumerate((("two", "苏州三日游"), ("three", "苏州景点评级")), 2)])
             config = ResearchConfig(Path(temp) / "ai.json", cipher=lambda value, decrypt=False: value)
             config.save("https://example.com", "test-model", "isolated-key")
             manager = jobs_module.ResearchJobs(config)
@@ -52,14 +55,21 @@ def main():
             jobs_module.get_session_snapshot = lambda _: {"a1": "isolated-session"}
             async def process(job, payload, credentials=None):
                 if payload["mode"] == "collect":
-                    job["materials"] = [material(row) for row in payload["items"]]
+                    job["materials"] = sorted((material(row) for row in payload["items"]),
+                        key=lambda row: ("xhs|one", "xhs|two", "xhs|three").index(row["key"]))
                     for row in job["materials"]:
                         row.update(body=component("ok", text="完整正文"), comments=component("failed", reason="测试评论读取失败"))
                         row["subtitles"] = component("ok", entries=[{"start": 0, "end": 522, "text": "视频讲述"}])
                         row["subtitles"]["metadata"] = {"source": "native", "duration": 522}
+                        if row["key"] == "xhs|two":
+                            row.update(body=component("failed", reason="正文获取失败"), comments=component("failed", reason="评论获取失败"), subtitles=component("not_applicable"))
+                        if row["key"] == "xhs|three":
+                            row.update(comments=component("ok", reason="最多取得 50 条评论", entries=[{"id": str(index), "text": "评论样本" * 40} for index in range(50)]),
+                                subtitles=component("failed", reason="平台无字幕且本地转写不可用"))
+                            row["comments"]["truncated"] = True
                     return {}
                 conversation_inputs.append(payload.get("conversation", []))
-                job["activity"] = [{"id": "step-1", "tool": "manifest", "message": "manifest", "status": "completed", "summary": "1 条空间资料"},
+                job["activity"] = [{"id": "step-1", "tool": "manifest", "message": "manifest", "status": "completed", "summary": "3 条空间资料"},
                     {"id": "step-2", "tool": "assistant", "kind": "commentary", "message": "我先查看攻略中的路线和交通信息。", "status": "completed"},
                     {"id": "step-3", "tool": "read_material", "message": "read_material", "status": "running"}]
                 await asyncio.sleep(1.2)
@@ -69,7 +79,9 @@ def main():
                 for row in access.manifest():
                     for index in range(row["sections"]["body"]["chunks"]):
                         access.chunk(row["key"], "body", index)
-                return {"document": answer_document("AI生成的苏州研究结果 [S1]。", job["web_enabled"], job["materials"], [], access.coverage()),
+                for index in range(access.sections["xhs|three"]["comments"]["chunks"]):
+                    access.chunk("S3", "comments", index)
+                return {"document": answer_document("AI生成的苏州研究结果 [S1:body]。当前评论样本 [S3:comments]；S2 正文和 S3 视频评级不可用。", job["web_enabled"], job["materials"], [], access.coverage()),
                         "coverage": access.coverage(), "external_sources": [], "web_errors": []}
             manager.process = process
             tested_models = []
@@ -223,7 +235,7 @@ def main():
                 if panel.locator(".research-material-details").get_attribute("open") is None:
                     panel.locator(".research-material-details > summary").click()
                 expect(panel.get_by_text("测试评论读取失败", exact=False)).to_be_visible()
-                expect(panel.locator(".space-research-tags")).to_contain_text("08:42 · 平台原生")
+                expect(panel.locator(".space-research-tags").first).to_contain_text("08:42 · 平台原生")
                 web.check()
                 expect(last_turn(panel).locator(".research-message-label")).to_contain_text("仅空间资料")
                 panel.get_by_role("button", name="继续分析", exact=True).click()
@@ -233,7 +245,12 @@ def main():
                 expect(last_turn(panel).locator(".space-research-preview a").first).to_have_attribute("href", "https://www.xiaohongshu.com/explore/one")
                 expect(last_turn(panel).locator(".space-research-preview")).to_contain_text("S1 评论：测试评论读取失败")
                 expect(last_turn(panel).locator(".space-research-preview")).to_contain_text("字幕已读 0/1")
-                expect(last_turn(panel).locator(".space-research-tags")).to_contain_text("01:27 · 本地 AI 转写", timeout=10000)
+                expect(last_turn(panel).locator(".space-research-tags").first).to_contain_text("01:27 · 本地 AI 转写", timeout=10000)
+                reading = last_turn(panel).locator(".space-research-materials article")
+                expect(reading.nth(1)).to_contain_text("正文 未取得可读内容")
+                expect(reading.nth(2)).to_contain_text("AI 已读完当前 50 条样本（2/2 段）")
+                expect(reading.nth(2)).to_contain_text("平台未完整获取")
+                expect(last_turn(panel).locator(".space-research-preview a").filter(has_text="[S3:comments]").first).to_have_attribute("href", "https://www.xiaohongshu.com/explore/three")
                 expect(note).not_to_contain_text("AI生成的苏州研究结果")
                 expect(page.locator(".space-note-status")).to_contain_text("已保存到本机")
                 fail_append = True
@@ -339,7 +356,7 @@ def main():
                 assert not errors, errors
                 context.close()
                 browser.close()
-                print("PASS: persistent history on new/select conversation, edge-to-edge fullscreen, fullscreen-to-dock dragging and main/header resizing, provider settings, source review, writing and save recovery, per-turn append, tool steps, session search and fullscreen mobile")
+                print("PASS: three-source collection/reading coverage and section links, persistent history, fullscreen/dock resizing, provider settings, source review, save recovery, per-turn append, tool steps and mobile")
     finally:
         server.shutdown()
 

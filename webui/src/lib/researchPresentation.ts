@@ -4,3 +4,9 @@ export function transcriptDuration(seconds?: number): string {
   const minutes = Math.floor(whole / 60);
   return `${minutes.toString().padStart(2, "0")}:${(whole % 60).toString().padStart(2, "0")}`;
 }
+
+export function sectionReading(section: { chunks: number; read_chunks: number; reading_complete?: boolean; content_limited?: boolean }, comments: boolean): string {
+  if (!section.chunks) return "research.sectionUnavailable";
+  if (comments && !section.content_limited && (section.reading_complete ?? section.read_chunks === section.chunks)) return "research.sampleRead";
+  return "research.sectionRead";
+}

@@ -93,6 +93,48 @@ async def test_failed_media_or_asr_cleans_audio_and_never_caches(monkeypatch, tm
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("stage,error,state,reason", [
+    ("media", PermissionError("secret-token"), "restricted", "CDN"),
+    ("media", TimeoutError(), "failed", "音轨获取超时"),
+    ("media", ValueError("媒体超过 96 MB 转写上限"), "failed", "96 MB"),
+    ("media", RuntimeError("secret-url"), "failed", "媒体地址不可用"),
+    ("asr", TimeoutError(), "failed", "worker 超时"),
+    ("asr", ValueError("音频超过 30 分钟转写上限"), "failed", "30 分钟"),
+    ("asr", ValueError("转写模型准备失败，请检查网络或可选组件"), "failed", "模型准备失败"),
+    ("asr", None, "missing", "未识别到可读语音"),
+])
+async def test_asr_failure_reasons_distinguish_stages_without_sensitive_response(monkeypatch, tmp_path, stage, error, state, reason):
+    monkeypatch.setattr(module, "asr_python", lambda: "python")
+    async def download(url, target, referer):
+        target.write_bytes(b"media")
+        if stage == "media":
+            raise error
+    async def run(*args):
+        if error:
+            raise error
+        return {"entries": []}
+    monkeypatch.setattr(module, "download_media", download)
+    monkeypatch.setattr(module, "run_asr", run)
+    service = module.TranscriptionService(tmp_path)
+    result = await service.transcribe("video", "https://example.com", "https://example.com")
+    assert result["state"] == state and reason in result["reason"] and "secret" not in result["reason"]
+    assert not list(tmp_path.glob("audio-*")) and service.cached("video") is None
+
+
+@pytest.mark.asyncio
+async def test_platform_audio_url_failure_returns_specific_gap(monkeypatch, tmp_path):
+    collector = materials.MaterialCollector(workdir=tmp_path)
+    collector.transcription = module.TranscriptionService(tmp_path)
+    monkeypatch.setattr(materials, "asr_python", lambda: "python")
+    async def fail(*args):
+        raise RuntimeError("secret-cookie-and-url")
+    monkeypatch.setattr(collector, "audio_resource", fail)
+    result = await collector.transcribe_subtitles(None, source()["result"], {}, {})
+    assert result["state"] == "failed" and "媒体资源地址未能取得" in result["reason"]
+    assert "secret" not in result["reason"]
+
+
+@pytest.mark.asyncio
 async def test_cancelled_asr_keeps_cleanup_owned_by_parent(monkeypatch, tmp_path):
     service = module.TranscriptionService(tmp_path / "cache", temporary_root=tmp_path)
     monkeypatch.setattr(module, "asr_python", lambda: "python")

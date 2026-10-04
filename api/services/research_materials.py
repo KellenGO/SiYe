@@ -286,7 +286,10 @@ class MaterialCollector(ResultHydrator):
             return component("missing", reason="平台无可读字幕且本地转写不可用：未安装可选 faster-whisper 组件")
         if not isinstance(detail, dict):
             return component("missing", reason="当前详情未保留稳定音频资源，本地转写不可用")
-        url = await self.audio_resource(client, source, detail)
+        try:
+            url = await self.audio_resource(client, source, detail)
+        except Exception:
+            return component("failed", reason="平台媒体资源地址未能取得，本地转写不可用；保留正文和评论")
         if not url:
             return component("missing", reason="平台详情没有可安全复用的音轨或媒体流，本地转写不可用")
         def progress(message):

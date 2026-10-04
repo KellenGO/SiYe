@@ -5,7 +5,7 @@ import type { Editor } from "@tiptap/react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import * as api from "@/lib/researchApi";
-import { transcriptDuration } from "@/lib/researchPresentation";
+import { sectionReading, transcriptDuration } from "@/lib/researchPresentation";
 import { fetchSpace } from "@/lib/spacesApi";
 import { spaceError, type NoteDocument, type NoteSession } from "@/lib/spaceNotes";
 
@@ -214,13 +214,13 @@ export default function SpaceResearchPanel({ spaceId, spaceName, sourceCount, ed
                     <div className="space-research-tags">{(["body", "comments", "subtitles"] as const).map((name) => <span key={name} className={`space-research-tag is-${item[name].state}`}>
                       {t(`research.component.${name}`)} {item[name].state === "ok" ? "✓" : item[name].state === "not_applicable" ? "·" : "×"} {t(`research.state.${item[name].state}`)}{name === "comments" && ` · ${t("research.commentCount", { count: item[name].count })}`}
                       {name === "subtitles" && item[name].metadata?.source && ` · ${transcriptDuration(item[name].metadata?.duration)} · ${t(`research.subtitleSource.${item[name].metadata?.source}`)}`}
-                      {item[name].truncated && ` · ${t("research.partial")}`}
+                      {(item[name].collection_truncated ?? item[name].truncated) && ` · ${t("research.collectionPartial")}`}
                     </span>)}</div>
                     {(["body", "comments", "subtitles"] as const).map((name) => item[name].reason && <p key={name} className="space-research-hint">{t(`research.component.${name}`)}：{item[name].reason}</p>)}
                     {item.comments.sort && <p className="space-research-hint">{item.comments.sort}</p>}
                     {row.coverage.find((source) => source.key === item.key)?.sections && <p className="space-research-hint">{(["body", "comments", "subtitles"] as const).map((name) => {
                       const section = row.coverage.find((source) => source.key === item.key)!.sections![name];
-                      return `${t(`research.component.${name}`)} ${t("research.sectionRead", { read: section.read_chunks, total: section.chunks })}`;
+                      return `${t(`research.component.${name}`)} ${t(sectionReading(section, name === "comments"), { read: section.read_chunks, total: section.chunks, count: section.count })}`;
                     }).join(" · ")}</p>}
                   </article>)}</div>
                 </details>}

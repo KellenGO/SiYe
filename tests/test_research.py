@@ -222,6 +222,8 @@ async def test_sdk_actual_options_deny_other_tools_and_read_coverage(monkeypatch
     guard = options.hooks["PreToolUse"][0].hooks[0]
     for name in ["WebSearch", "WebFetch", "Bash", "Read", "Write", "PowerShell"]:
         assert (await guard({"tool_name": name}, None, None))["hookSpecificOutput"]["permissionDecision"] == "deny"
+    stopped = await guard({"tool_name": "mcp__research__read_material"}, None, None)
+    assert stopped["continue_"] is False and "停止工具重试" in stopped["stopReason"]
     assert not result["coverage"][0]["complete"]
 
 

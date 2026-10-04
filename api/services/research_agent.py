@@ -6,7 +6,7 @@ import re
 from datetime import datetime, timezone
 
 from .research_config import agent_cli_path
-from .research_documents import CHUNK_SIZE, MaterialAccess, RESEARCH_INSTRUCTIONS, SourceReferenceError, ToolActivity, answer_document, research_context, result_document
+from .research_documents import CHUNK_SIZE, MaterialAccess, ReadLoopGuard, RESEARCH_INSTRUCTIONS, SourceReferenceError, ToolInputError, ToolActivity, answer_document, model_external, read_material_section, research_context, result_document
 from .research_web import page_text, public_get, public_target
 
 async def run_agent(payload, emit):
@@ -24,32 +24,27 @@ async def run_agent(payload, emit):
     search_called, fetch_called, probe_called = False, False, False
     activity = ToolActivity(emit)
     active_tools = {}
+    read_guard = ReadLoopGuard()
 
     def text_result(value):
         return {"content": [{"type": "text", "text": json.dumps(value, ensure_ascii=False)}]}
 
     @tool("manifest", "列出本次空间的来源、分段数和已读取情况", {})
     async def manifest(_):
-        return text_result({"space": access.coverage(), "external": list(external.values())})
+        value = {"space": access.model_coverage(), "external": model_external(external.values())}
+        read_guard.observe("manifest", {}, value)
+        return text_result(value)
 
-    @tool("read_material", "按 section 读取资料的一段：body/comments/subtitles；网页只有 body，index 从 0 开始", {"key": str, "section": str, "index": int})
+    @tool("read_material", "key 使用 S1/W1 等公开标识，按 body/comments/subtitles 读取；网页只有 body，index 从 0 开始，缺口不重试", {"key": str, "section": str, "index": int})
     async def read_material(args):
         try:
-            key, section, index = args["key"], args["section"], args["index"]
-            if key in web_texts:
-                if section != "body" or type(index) is not int or index < 0 or index * CHUNK_SIZE >= len(web_texts[key]):
-                    raise ValueError("网页分段不存在")
-                external[key].setdefault("read_chunks", [])
-                if index not in external[key]["read_chunks"]:
-                    external[key]["read_chunks"].append(index)
-                external[key]["level"] = "网页正文（部分已读）" if len(external[key]["read_chunks"]) < external[key]["chunks"] else "网页正文"
-                return text_result({"key": key, "citation": external[key]["citation"], "section": section, "index": index,
-                    "text": web_texts[key][index * CHUNK_SIZE:(index + 1) * CHUNK_SIZE]})
-            text = access.chunk(key, section, index)
-            citation = access.citations[key]
-            return text_result({"key": key, "citation": citation, "section": section, "index": index, "text": text})
-        except (KeyError, ValueError, TypeError):
-            return {**text_result({"error": "资料分段不可用，请检查 key、section、index 和获取缺口"}), "is_error": True}
+            if read_guard.exhausted:
+                raise ToolInputError(read_guard.hint)
+            value = read_material_section(access, external, web_texts, args["key"], args["section"], args["index"])
+        except (KeyError, ValueError, TypeError) as error:
+            value = {"error": str(error) if isinstance(error, ToolInputError) else "读取参数无效，使用公开 key、有效 section 和整数 index"}
+        read_guard.observe("read_material", args, value)
+        return {**text_result(value), **({"is_error": True} if "error" in value else {})}
 
     @tool("read_webpage", "联网开启时，读取公开网页并返回外部来源 id 与第一段；其余通过 read_material 读取", {"url": str})
     async def read_webpage(args):
@@ -69,10 +64,14 @@ async def run_agent(payload, emit):
             web_texts[identity] = text
             fetch_called = True
             emit({"type": "progress", "phase": "web", "message": "正在读取外部网页"})
-            return text_result({**external[identity], "text": text[:CHUNK_SIZE]})
+            value = {**model_external([external[identity]])[0], "text": text[:CHUNK_SIZE]}
+            read_guard.observe("read_webpage", args, value)
+            return text_result(value)
         except Exception:
             web_errors.append("外部网页未能读取")
-            return {**text_result({"error": "网页无法读取、地址受限或内容过大；不要声称已读取正文"}), "is_error": True}
+            value = {"error": "网页无法读取、地址受限或内容过大；不要声称已读取正文"}
+            read_guard.observe("read_webpage", args, value)
+            return {**text_result(value), "is_error": True}
 
     @tool("check_connection", "连接测试：调用此工具确认 SDK 工具循环可用", {})
     async def check_connection(_):
@@ -90,9 +89,14 @@ async def run_agent(payload, emit):
         allowed.add("WebSearch")
     async def guard(data, _tool_id, _context):
         name = data.get("tool_name", "")
+        if not probe and read_guard.exhausted:
+            return {"continue_": False, "stopReason": read_guard.hint,
+                    "hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+                    "permissionDecisionReason": read_guard.hint}}
         if name not in allowed:
             identity = activity.start("denied", "工具未开放")
             activity.finish(identity, "denied", "工具未开放", "此任务没有该工具的权限", failed=True)
+            read_guard.observe(name, data.get("tool_input", {}), {"error": "此研究任务未开放该工具"})
             return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
                     "permissionDecisionReason": "此研究任务未开放该工具"}}
         active_tools[_tool_id] = activity.start(name, name.removeprefix("mcp__research__"))
@@ -110,7 +114,15 @@ async def run_agent(payload, emit):
         failed = isinstance(response, dict) and bool(response.get("is_error") or response.get("error"))
         identity = active_tools.pop(_tool_id, None)
         if identity:
-            activity.finish(identity, name, name.removeprefix("mcp__research__"), "工具执行失败" if failed else "工具执行完成", failed)
+            summary = "工具执行失败" if failed else "工具执行完成"
+            if name == "mcp__research__read_material" and isinstance(response, dict):
+                try:
+                    value = json.loads(response["content"][0]["text"])
+                    summary = (f"{value['title'][:200]} · {value['section']} 第 {value['index'] + 1} 段 · {len(value['text'])} 字符"
+                        if "text" in value else value.get("error") or value.get("reason") or value.get("hint") or summary)
+                except (KeyError, IndexError, TypeError, ValueError):
+                    pass
+            activity.finish(identity, name, name.removeprefix("mcp__research__"), summary, failed)
         if data.get("tool_name") == "WebSearch":
             response = data.get("tool_response")
             if isinstance(response, dict) and (response.get("is_error") or response.get("error")):
@@ -132,7 +144,9 @@ async def run_agent(payload, emit):
                         "level": "仅搜索摘要", "fetched_at": datetime.now(timezone.utc).isoformat(), "chunks": 0, "read_chunks": []}
         if name == "WebSearch":
             return {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext":
-                json.dumps({"external": list(external.values())}, ensure_ascii=False)}}
+                json.dumps({"external": model_external(external.values())}, ensure_ascii=False)}}
+        if read_guard.exhausted:
+            return {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": read_guard.hint}}
         return {}
 
     options = ClaudeAgentOptions(
@@ -178,6 +192,8 @@ async def run_agent(payload, emit):
                 if not probe_called or (web_enabled and not (search_called and fetch_called)):
                     raise ValueError("SDK 工具或联网测试未通过，不能确认服务兼容")
                 return {"connection_ok": True, "web_ok": web_enabled}
+            if read_guard.exhausted and output is None and not answer.strip():
+                raise ValueError("AI 重复工具调用未取得新证据，任务已停止；请缩小问题后重试")
             coverage = access.coverage()
             for row in external.values():
                 if row["chunks"]:

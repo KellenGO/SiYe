@@ -203,12 +203,14 @@ class TranscriptionService:
         executable = asr_python()
         if not executable:
             return self.missing("平台无可读字幕且本地转写不可用：未安装可选 faster-whisper 组件")
+        stage = "media"
         try:
             self.root.mkdir(parents=True, exist_ok=True)
             with tempfile.TemporaryDirectory(prefix="audio-", dir=self.temporary_root) as directory:
                 media = Path(directory) / "media"
                 progress("正在获取转写所需音轨或媒体流")
                 await download_media(url, media, referer)
+                stage = "asr"
                 output = await run_asr(executable, media, self.root / "models", progress)
             entries, limited = normalize_segments(output.get("entries", []))
             if not entries:
@@ -223,11 +225,13 @@ class TranscriptionService:
                 self.save(identity, result)
             return result
         except PermissionError:
-            return self.missing("媒体资源访问受限，保留正文和评论", "restricted")
-        except (TimeoutError, asyncio.TimeoutError):
-            return self.missing("本地转写超时，保留正文和评论，可重试", "failed")
+            return self.missing("媒体 CDN 拒绝公开访问或要求鉴权，保留正文和评论", "restricted")
+        except (TimeoutError, httpx.TimeoutException):
+            reason = "音轨获取超时（最多 90 秒）" if stage == "media" else "本地转写 worker 超时（模型准备与转写最多 6 分钟）"
+            return self.missing(reason + "，保留正文和评论，可重试", "failed")
         except Exception as error:
-            reason = str(error) if isinstance(error, ValueError) and str(error).startswith(("媒体超过", "音频超过", "转写模型", "本地转写")) else "媒体获取或本地转写失败，保留正文和评论，可重试"
+            reason = str(error) if isinstance(error, ValueError) and str(error).startswith(("媒体超过", "音频超过", "转写模型", "本地转写")) else (
+                "音轨下载失败或媒体地址不可用，保留正文和评论，可重试" if stage == "media" else "本地转写失败，保留正文和评论，可重试")
             return self.missing(reason, "failed")
 
     @staticmethod
