@@ -63,15 +63,16 @@ def test_key_configuration_rejects_credentials_in_url(config):
 
 def test_chunked_source_access_tracks_exact_reads_and_drops_tokens():
     item = material(source(text="研究" * 6000))
+    item["body"] = component("ok", text="研究" * 6000)
     access = MaterialAccess([item])
     assert "private" not in json.dumps(access.manifest())
     assert not access.coverage()[0]["complete"]
     with pytest.raises(ValueError):
-        access.chunk("another-space", 0)
+        access.chunk("another-space", "body", 0)
     with pytest.raises(ValueError):
-        access.chunk(item["key"], -1)
+        access.chunk(item["key"], "body", -1)
     for index in range(access.manifest()[0]["chunks"]):
-        access.chunk(item["key"], index)
+        access.chunk(item["key"], "body", index)
     assert access.coverage()[0]["complete"]
 
 
@@ -90,10 +91,11 @@ def note_result(ref="xhs|one", kind="space"):
 
 def test_result_keeps_sources_distinct_and_rejects_invented_links():
     item = material(source(text="研究" * 6000))
+    item["body"] = component("ok", text="研究" * 6000)
     access = MaterialAccess([item])
     with pytest.raises(ValueError, match="未读取"):
         result_document(note_result(), [item], [], access.coverage(), False)
-    access.chunk(item["key"], 0)
+    access.chunk(item["key"], "body", 0)
     document = result_document(note_result(), [item], [], access.coverage(), False)
     encoded = json.dumps(document, ensure_ascii=False)
     assert "未完整分析" in encoded and "关闭" in encoded and "private" not in encoded
@@ -252,7 +254,7 @@ async def test_sdk_plain_answer_repairs_citations_and_matches_openai_context(mon
             prompts.append(prompt)
         async def receive_response(self):
             if len(prompts) == 2:
-                read = await functions["read_material"]({"key": "xhs|one", "index": 0})
+                read = await functions["read_material"]({"key": "xhs|one", "section": "body", "index": 0})
                 evidence = json.loads(read["content"][0]["text"])
                 assert evidence["citation"] == "S1" and "船班八点出发" in evidence["text"]
             yield sdk.ResultMessage("success", 1, 1, False, 1, "test", result="船班八点出发 [S1]，建议提前到达是我的推断。")
@@ -372,14 +374,16 @@ async def test_enabled_web_tracks_search_and_partial_page_separately(monkeypatch
             guard = self.options.hooks["PreToolUse"][0].hooks[0]
             assert (await guard({"tool_name": "WebSearch"}, None, None))["hookSpecificOutput"]["permissionDecision"] == "allow"
             assert (await guard({"tool_name": "WebFetch"}, None, None))["hookSpecificOutput"]["permissionDecision"] == "deny"
-            await functions["read_material"]({"key": "xhs|one", "index": 0})
+            await functions["read_material"]({"key": "xhs|one", "section": "body", "index": 0})
             post = self.options.hooks["PostToolUse"][0].hooks[0]
             search_context = await post({"tool_name": "WebSearch", "tool_response": {"results": [{"url": "https://example.com/search-only"}]}}, None, None)
             assert json.loads(search_context["hookSpecificOutput"]["additionalContext"])["external"][0]["citation"] == "W1"
             await functions["read_webpage"]({"url": "https://example.com/page"})
             yield sdk.ResultMessage("success", 1, 1, False, 1, "test", structured_output=note_result("web|2", "web"))
     monkeypatch.setattr(sdk, "ClaudeSDKClient", Client)
-    result = await module.run_agent({"mode": "analyze", "web_enabled": True, "materials": [material(source())],
+    item = material(source())
+    item["body"] = component("ok", text="正文")
+    result = await module.run_agent({"mode": "analyze", "web_enabled": True, "materials": [item],
         "workdir": str(tmp_path), "model": "test", "base_url": "https://example.com", "space_name": "攻略", "description": ""}, lambda event: None)
     assert result["coverage"][0]["complete"]
     assert result["external_sources"][0]["level"] == "仅搜索摘要"

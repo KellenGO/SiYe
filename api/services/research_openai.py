@@ -50,8 +50,9 @@ async def run_openai(payload, emit):
     activity = ToolActivity(emit)
     tools = [function("check_connection", "验证工具调用后再回复 OK")] if probe else [
         function("manifest", "列出选定空间资料及外部来源、分段数、读取情况"),
-        function("read_material", "读取选定资料或已获取网页的一个分段",
-                 {"key": {"type": "string"}, "index": {"type": "integer"}}, ["key", "index"]),
+        function("read_material", "按 section 读取资料的一段；网页仅支持 body，index 从 0 开始",
+                 {"key": {"type": "string"}, "section": {"type": "string", "enum": ["body", "comments", "subtitles"]},
+                  "index": {"type": "integer", "minimum": 0}}, ["key", "section", "index"]),
         {"type": "function", "function": {"name": "submit_result", "description": "完成来源读取后提交研究结论",
                                               "parameters": RESULT_SCHEMA}}]
     if web:
@@ -79,6 +80,8 @@ async def run_openai(payload, emit):
 
     async with httpx.AsyncClient(timeout=120, trust_env=False, follow_redirects=False) as client:
         for _ in range(8 if probe else 80):
+            if sum(len(json.dumps(message, ensure_ascii=False)) for message in messages) > 300000:
+                raise ValueError("AI 上下文达到读取上限，请缩小研究范围或问题后重试")
             emit({"type": "progress", "phase": "analyzing", "message": "正在等待模型回复"})
             response = await completion(client, payload, messages, tools)
             reported = response.get("usage") or {}
@@ -153,20 +156,20 @@ async def run_openai(payload, emit):
                         summary = f"{len(access.materials)} 条空间资料，{len(external)} 条外部来源"
                         result = {"space": access.coverage(), "external": list(external.values())}
                     elif name == "read_material":
-                        key, index = args["key"], args["index"]
+                        key, section, index = args["key"], args["section"], args["index"]
                         if key in texts:
-                            if type(index) is not int or index < 0 or index * CHUNK_SIZE >= len(texts[key]):
+                            if section != "body" or type(index) is not int or index < 0 or index * CHUNK_SIZE >= len(texts[key]):
                                 raise ValueError("网页分段不存在")
                             if index not in external[key]["read_chunks"]:
                                 external[key]["read_chunks"].append(index)
                             external[key]["level"] = "网页正文（部分已读）" if len(external[key]["read_chunks"]) < external[key]["chunks"] else "网页正文"
                             text = texts[key][index * CHUNK_SIZE:(index + 1) * CHUNK_SIZE]
                         else:
-                            text = access.chunk(key, index)
+                            text = access.chunk(key, section, index)
                         title = (external.get(key) or access.materials.get(key) or {}).get("title", "资料")
-                        summary = f"{title[:200]} · 第 {index + 1} 段 · {len(text)} 字符"
+                        summary = f"{title[:200]} · {section} 第 {index + 1} 段 · {len(text)} 字符"
                         citation = external[key]["citation"] if key in external else access.citations[key]
-                        result = {"key": key, "citation": citation, "index": index, "text": text}
+                        result = {"key": key, "citation": citation, "section": section, "index": index, "text": text}
                     elif name == "search_web":
                         try:
                             rows = await search_public(args["query"])

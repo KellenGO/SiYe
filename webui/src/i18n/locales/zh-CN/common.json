@@ -314,6 +314,9 @@
     "taskWebOff": "本次任务：联网补充关闭",
     "stale": "空间资料已变化，本会话仍使用首次选定的资料；开新会话可读取更新后的资料。",
     "coverage": "资料读取情况",
+    "commentCount": "{{count}} 条",
+    "sectionRead": "AI 已读 {{read}}/{{total}} 段",
+    "subtitleSource": { "native": "平台原生", "local_asr": "本地 AI 转写" },
     "partial": "仅获取部分内容",
     "reviewHint": "检查缺失内容后，可重试失败项或使用已取得的资料继续。长资料可能需要多次模型调用。",
     "retrySources": "重试失败项",
@@ -342,7 +345,7 @@
       "subtitles": "字幕"
     },
     "state": {
-      "ok": "已读取",
+      "ok": "已取得",
       "missing": "未提供可读内容",
       "restricted": "访问受限",
       "failed": "读取失败",

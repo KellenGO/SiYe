@@ -61,7 +61,7 @@ class Provider(BaseHTTPRequestHandler):
                 type(self).native_metadata = True
             used = {call["function"]["name"] for row in previous for call in row["tool_calls"]}
             chosen = next((name for name in ("check_connection", "manifest", "read_material", "submit_result") if name in names and name not in used and not (getattr(self, "plain", False) and name == "submit_result")), None)
-            args = {"key": "xhs|one", "index": 0} if chosen == "read_material" else {}
+            args = {"key": "xhs|one", "section": "body", "index": 0} if chosen == "read_material" else {}
             if chosen == "submit_result":
                 args = {"sections": [{"kind": "space", "title": "发现", "paragraphs": [{"text": "OpenAI 兼容研究结果", "sources": ["xhs|one"]}]}]}
             final_text = "完整正文来自空间资料 [S1]。" if "read_material" in used else "OK"
@@ -89,7 +89,7 @@ class Provider(BaseHTTPRequestHandler):
                 if isinstance(row, dict) and row.get("type") == "tool_use"}
         chosen = next((name for suffix in ("check_connection", "manifest", "read_material", "StructuredOutput")
                        for name in names if name.endswith(suffix) and name not in used), None)
-        args = {"key": "xhs|one", "index": 0} if chosen and chosen.endswith("read_material") else {}
+        args = {"key": "xhs|one", "section": "body", "index": 0} if chosen and chosen.endswith("read_material") else {}
         if chosen == "StructuredOutput":
             args = {"sections": [{"kind": "space", "title": "发现", "paragraphs": [
                 {"text": "隔离测试研究结果", "sources": ["xhs|one"]}]}]}

@@ -17,12 +17,12 @@ async def run(payload):
     logging.disable(logging.CRITICAL)
     if payload["mode"] == "collect":
         from .research_materials import MaterialCollector
-        collector = MaterialCollector(payload.get("sessions"))
+        collector = MaterialCollector(payload.get("sessions"), emit=emit, workdir=payload.get("workdir"))
         try:
             for item in payload["items"]:
                 previous = payload.get("previous", {}).get(item["key"])
                 result = await collector.collect(item, previous)
-                emit({"type": "material", "material": result})
+                emit({"type": "material", "material": result, "completed": True})
         finally:
             await collector.close()
         return {"collected": True}

@@ -32,24 +32,24 @@ async def run_agent(payload, emit):
     async def manifest(_):
         return text_result({"space": access.coverage(), "external": list(external.values())})
 
-    @tool("read_material", "读取本次任务某条空间资料或已获取网页的一个分段", {"key": str, "index": int})
+    @tool("read_material", "按 section 读取资料的一段：body/comments/subtitles；网页只有 body，index 从 0 开始", {"key": str, "section": str, "index": int})
     async def read_material(args):
-        key, index = args["key"], args["index"]
         try:
+            key, section, index = args["key"], args["section"], args["index"]
             if key in web_texts:
-                if type(index) is not int or index < 0 or index * CHUNK_SIZE >= len(web_texts[key]):
+                if section != "body" or type(index) is not int or index < 0 or index * CHUNK_SIZE >= len(web_texts[key]):
                     raise ValueError("网页分段不存在")
                 external[key].setdefault("read_chunks", [])
                 if index not in external[key]["read_chunks"]:
                     external[key]["read_chunks"].append(index)
                 external[key]["level"] = "网页正文（部分已读）" if len(external[key]["read_chunks"]) < external[key]["chunks"] else "网页正文"
-                return text_result({"key": key, "citation": external[key]["citation"], "index": index,
+                return text_result({"key": key, "citation": external[key]["citation"], "section": section, "index": index,
                     "text": web_texts[key][index * CHUNK_SIZE:(index + 1) * CHUNK_SIZE]})
-            text = access.chunk(key, index)
+            text = access.chunk(key, section, index)
             citation = access.citations[key]
-            return text_result({"key": key, "citation": citation, "index": index, "text": text})
-        except (KeyError, ValueError) as error:
-            return {**text_result({"error": str(error)}), "is_error": True}
+            return text_result({"key": key, "citation": citation, "section": section, "index": index, "text": text})
+        except (KeyError, ValueError, TypeError):
+            return {**text_result({"error": "资料分段不可用，请检查 key、section、index 和获取缺口"}), "is_error": True}
 
     @tool("read_webpage", "联网开启时，读取公开网页并返回外部来源 id 与第一段；其余通过 read_material 读取", {"url": str})
     async def read_webpage(args):

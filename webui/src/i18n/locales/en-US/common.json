@@ -314,6 +314,9 @@
     "taskWebOff": "This task: web supplements disabled",
     "stale": "Sources have changed. This conversation uses its original selection; start a new conversation to read updated sources.",
     "coverage": "Source reading coverage",
+    "commentCount": "{{count}} comments",
+    "sectionRead": "AI read {{read}}/{{total}} chunks",
+    "subtitleSource": { "native": "Platform subtitles", "local_asr": "Local AI transcription" },
     "partial": "Partial content",
     "reviewHint": "Review missing content, then retry failed items or continue with available material. Long sources may require multiple model calls.",
     "retrySources": "Retry failed items",
@@ -342,7 +345,7 @@
       "subtitles": "Subtitles"
     },
     "state": {
-      "ok": "Read",
+      "ok": "Acquired",
       "missing": "No readable content",
       "restricted": "Access restricted",
       "failed": "Read failed",

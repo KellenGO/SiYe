@@ -50,7 +50,7 @@ def test_ordinary_answer_keeps_basic_markdown_and_treats_html_as_text():
 
 @pytest.mark.asyncio
 async def test_native_loop_preserves_provider_metadata_and_source_coverage(monkeypatch):
-    first = response("read_material", {"key": "xhs|one", "index": 0}, reasoning_content="provider-private-thinking")
+    first = response("read_material", {"key": "xhs|one", "section": "body", "index": 0}, reasoning_content="provider-private-thinking")
     first["choices"][0]["message"]["tool_calls"][0]["extra_content"] = {"google": {"thought_signature": "opaque-signature"}}
     replies = [first, response("submit_result", result())]
     captured, events = [], []
@@ -93,7 +93,7 @@ async def test_natural_chat_and_public_commentary_do_not_require_a_report(monkey
 
 @pytest.mark.asyncio
 async def test_invalid_tool_activity_ends_with_failure(monkeypatch):
-    replies = [response("read_material", {"key": "other", "index": 0}), response(content="没有读取成功。")]
+    replies = [response("read_material", {"key": "other", "section": "body", "index": 0}), response(content="没有读取成功。")]
     events = []
     async def completion(*args):
         return replies.pop(0)
@@ -106,8 +106,8 @@ async def test_invalid_tool_activity_ends_with_failure(monkeypatch):
 @pytest.mark.asyncio
 async def test_native_loop_denies_files_network_and_other_spaces(monkeypatch):
     replies = [response("Bash", {"command": "private"}), response("read_webpage", {"url": "http://127.0.0.1"}),
-        response("read_material", {"key": "other-space", "index": 0}), response("read_material", {"key": "xhs|one", "index": False}),
-        response("read_material", {"key": "xhs|one", "index": 0}), response("submit_result", result())]
+        response("read_material", {"key": "other-space", "section": "body", "index": 0}), response("read_material", {"key": "xhs|one", "section": "body", "index": False}),
+        response("read_material", {"key": "xhs|one", "section": "body", "index": 0}), response("submit_result", result())]
     captured = []
     async def completion(client, data, messages, tools):
         captured.append(copy.deepcopy(messages))
@@ -144,7 +144,7 @@ async def test_native_probe_requires_real_tool_and_web_calls(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_native_web_sources_record_search_and_partial_reads(monkeypatch):
-    replies = [response("read_material", {"key": "xhs|one", "index": 0}), response("search_web", {"query": "路线"}),
+    replies = [response("read_material", {"key": "xhs|one", "section": "body", "index": 0}), response("search_web", {"query": "路线"}),
         response("read_webpage", {"url": "https://example.org"}),
         response("submit_result", {"sections": [*result()["sections"], {"kind": "web", "title": "补充", "paragraphs": [{"text": "外部", "sources": ["web|1"]}]}]})]
     async def completion(*args):
@@ -215,12 +215,12 @@ async def test_plain_research_links_to_read_evidence_and_marks_partial_gaps(monk
     row = source()
     row["body"]["text"] = "渡轮八点出发。" + "路线细节" * 4000
     row["comments"] = component("failed", reason="评论访问受限")
-    replies = [response("read_material", {"key": "xhs|one", "index": 0}),
+    replies = [response("read_material", {"key": "xhs|one", "section": "body", "index": 0}),
                response(content="资料记录渡轮八点出发 **[S1]**。据此推断，需要更早到码头；余下细节和评论尚未核实。")]
     async def completion(client, data, messages, tools):
         context = json.loads(messages[1]["content"])
         assert context["manifest"][0]["url"] == row["url"]
-        assert context["manifest"][0]["availability"]["comments"]["state"] == "failed"
+        assert context["manifest"][0]["sections"]["comments"]["state"] == "failed"
         if len(replies) == 1:
             evidence = json.loads(messages[-1]["content"])
             assert evidence["citation"] == "S1" and "渡轮八点出发" in evidence["text"]
@@ -228,7 +228,7 @@ async def test_plain_research_links_to_read_evidence_and_marks_partial_gaps(monk
     monkeypatch.setattr(module, "completion", completion)
     output = await module.run_openai(payload(materials=[row]), lambda _: None)
     encoded = json.dumps(output["document"], ensure_ascii=False)
-    assert "空间资料 · 已读 1/" in encoded and "评论访问受限" in encoded
+    assert "空间资料 · 正文已读 1/" in encoded and "评论访问受限" in encoded
     assert "未覆盖全部分段" in encoded and "href" in encoded and row["url"] in encoded
     from api.services.research_jobs import ResearchJobs
     assert "**" not in ResearchJobs.document_text(output["document"])
@@ -238,7 +238,7 @@ async def test_plain_research_links_to_read_evidence_and_marks_partial_gaps(monk
 @pytest.mark.asyncio
 async def test_plain_citations_repair_unread_followup_once_and_reject_invention(monkeypatch):
     replies = [response(content="前面说八点出发 [S1]。"),
-               response("read_material", {"key": "xhs|one", "index": 0}), response(content="本轮资料内容 [S1]。")]
+               response("read_material", {"key": "xhs|one", "section": "body", "index": 0}), response(content="本轮资料内容 [S1]。")]
     requests = []
     async def completion(client, data, messages, tools):
         requests.append(copy.deepcopy(messages))
@@ -257,7 +257,7 @@ async def test_plain_citations_repair_unread_followup_once_and_reject_invention(
 async def test_plain_web_citations_distinguish_search_partial_and_full_text(monkeypatch):
     replies = [response("search_web", {"query": "时刻表"}), response(content="搜索结果摘要显示班次 [W1]。"),
                response("read_webpage", {"url": "https://example.org"}), response(content="网页第一段 [W1]。"),
-               response("read_webpage", {"url": "https://example.org"}), response("read_material", {"key": "web|1", "index": 1}),
+               response("read_webpage", {"url": "https://example.org"}), response("read_material", {"key": "web|1", "section": "body", "index": 1}),
                response(content="网页完整正文 [W1]。")]
     async def completion(*args):
         return replies.pop(0)

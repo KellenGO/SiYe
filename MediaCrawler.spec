@@ -19,6 +19,8 @@ if not node_exe:
 datas = [
     (str(ROOT / "webui" / "dist"), "webui/dist"),
     (str(ROOT / "webui" / "package.json"), "webui"),
+    (str(ROOT / "scripts" / "research_asr_worker.py"), "scripts"),
+    (str(ROOT / "scripts" / "install_research_asr.ps1"), "scripts"),
     # 托盘运行时加载的品牌图标；EXE 的 ICO 图标在构建时单独使用。
     (str(ROOT / "assets" / "siye-icon.png"), "assets"),
 ]
@@ -74,7 +76,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["tkinter"],
+    excludes=["tkinter", "faster_whisper", "ctranslate2", "av", "onnxruntime"],
     noarchive=False,
 )
 pyz = PYZ(a.pure)

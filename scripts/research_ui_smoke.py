@@ -55,6 +55,8 @@ def main():
                     job["materials"] = [material(row) for row in payload["items"]]
                     for row in job["materials"]:
                         row.update(body=component("ok", text="完整正文"), comments=component("failed", reason="测试评论读取失败"))
+                        row["subtitles"] = component("ok", entries=[{"start": 0, "end": 522, "text": "视频讲述"}])
+                        row["subtitles"]["metadata"] = {"source": "native", "duration": 522}
                     return {}
                 conversation_inputs.append(payload.get("conversation", []))
                 job["activity"] = [{"id": "step-1", "tool": "manifest", "message": "manifest", "status": "completed", "summary": "1 条空间资料"},
@@ -62,10 +64,11 @@ def main():
                     {"id": "step-3", "tool": "read_material", "message": "read_material", "status": "running"}]
                 await asyncio.sleep(1.2)
                 job["activity"][-1].update(status="completed", summary="苏州攻略 · 第 1 段 · 128 字符")
+                job["materials"][0]["subtitles"]["metadata"] = {"source": "local_asr", "duration": 87}
                 access = MaterialAccess(job["materials"])
                 for row in access.manifest():
-                    for index in range(row["chunks"]):
-                        access.chunk(row["key"], index)
+                    for index in range(row["sections"]["body"]["chunks"]):
+                        access.chunk(row["key"], "body", index)
                 return {"document": answer_document("AI生成的苏州研究结果 [S1]。", job["web_enabled"], job["materials"], [], access.coverage()),
                         "coverage": access.coverage(), "external_sources": [], "web_errors": []}
             manager.process = process
@@ -215,9 +218,12 @@ def main():
                 panel.get_by_role("button", name="发送消息", exact=True).click()
                 expect(panel.get_by_text("等待检查资料", exact=True)).to_be_visible()
                 expect(panel.locator(".research-user-message")).to_contain_text("苏州三天旅行怎么安排？")
-                panel.locator(".research-tool-trace > summary").click()
-                panel.locator(".research-material-details > summary").click()
+                if panel.locator(".research-tool-trace").get_attribute("open") is None:
+                    panel.locator(".research-tool-trace > summary").click()
+                if panel.locator(".research-material-details").get_attribute("open") is None:
+                    panel.locator(".research-material-details > summary").click()
                 expect(panel.get_by_text("测试评论读取失败", exact=False)).to_be_visible()
+                expect(panel.locator(".space-research-tags")).to_contain_text("08:42 · 平台原生")
                 web.check()
                 expect(last_turn(panel).locator(".research-message-label")).to_contain_text("仅空间资料")
                 panel.get_by_role("button", name="继续分析", exact=True).click()
@@ -226,6 +232,8 @@ def main():
                 expect(last_turn(panel).get_by_role("button", name="追加到笔记", exact=True)).to_be_visible(timeout=15000)
                 expect(last_turn(panel).locator(".space-research-preview a").first).to_have_attribute("href", "https://www.xiaohongshu.com/explore/one")
                 expect(last_turn(panel).locator(".space-research-preview")).to_contain_text("S1 评论：测试评论读取失败")
+                expect(last_turn(panel).locator(".space-research-preview")).to_contain_text("字幕已读 0/1")
+                expect(last_turn(panel).locator(".space-research-tags")).to_contain_text("01:27 · 本地 AI 转写", timeout=10000)
                 expect(note).not_to_contain_text("AI生成的苏州研究结果")
                 expect(page.locator(".space-note-status")).to_contain_text("已保存到本机")
                 fail_append = True

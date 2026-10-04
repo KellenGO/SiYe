@@ -5,6 +5,7 @@ import type { Editor } from "@tiptap/react";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import * as api from "@/lib/researchApi";
+import { transcriptDuration } from "@/lib/researchPresentation";
 import { fetchSpace } from "@/lib/spacesApi";
 import { spaceError, type NoteDocument, type NoteSession } from "@/lib/spaceNotes";
 
@@ -196,6 +197,7 @@ export default function SpaceResearchPanel({ spaceId, spaceName, sourceCount, ed
             <div className="research-assistant-message">
               <div className="research-message-label"><Sparkles aria-hidden="true" /><span>{t("research.assistantName")}</span><small>{t(row.web_enabled ? "research.webUsed" : "research.spaceUsed")}</small></div>
               {!row.document && <p className="research-chat-status" role="status">{t(`research.status.${row.status}`)}{row.status === "collecting" && ` · ${row.materials.length} / ${row.total_materials}`}</p>}
+              {row.status === "collecting" && row.phase === "transcribing" && <p className="space-research-hint" role="status">{row.message}</p>}
               {row.error && <p role="alert">{row.error}</p>}
               {row.stale_snapshot && <p className="space-research-warning">{t("research.stale")}</p>}
               {!!row.activity?.length && <div className="research-execution" aria-label={t("research.toolProcess")}>
@@ -204,16 +206,22 @@ export default function SpaceResearchPanel({ spaceId, spaceName, sourceCount, ed
                   <div className="research-tool-result"><span>{t(`research.toolState.${event.status === "running" && ["failed", "cancelled"].includes(row.status) ? "cancelled" : event.status || "completed"}`)}</span><p>{event.summary || event.message}</p></div>
                 </details>)}
               </div>}
-              {row.materials.length > 0 && <details className="research-tool-trace">
+              {row.materials.length > 0 && <details className="research-tool-trace" open={row.status === "awaiting_sources"}>
                 <summary><ChevronDown aria-hidden="true" />{t("research.readingRecord")}<span>{row.activity?.length || row.materials.length}</span></summary>
-                {row.materials.length > 0 && <details className="research-material-details"><summary>{t("research.coverage")} · {row.materials.length}</summary>
+                {row.materials.length > 0 && <details className="research-material-details" open={row.status === "awaiting_sources"}><summary>{t("research.coverage")} · {row.materials.length}</summary>
                   <div className="space-research-materials">{row.materials.map((item) => <article key={item.key}>
                     <a href={item.url} target="_blank" rel="noopener noreferrer">{item.title}</a>
                     <div className="space-research-tags">{(["body", "comments", "subtitles"] as const).map((name) => <span key={name} className={`space-research-tag is-${item[name].state}`}>
-                      {t(`research.component.${name}`)} · {t(`research.state.${item[name].state}`)}{name !== "body" && item[name].count > 0 && ` ${item[name].count}`}{item[name].truncated && ` · ${t("research.partial")}`}
+                      {t(`research.component.${name}`)} {item[name].state === "ok" ? "✓" : item[name].state === "not_applicable" ? "·" : "×"} {t(`research.state.${item[name].state}`)}{name === "comments" && ` · ${t("research.commentCount", { count: item[name].count })}`}
+                      {name === "subtitles" && item[name].metadata?.source && ` · ${transcriptDuration(item[name].metadata?.duration)} · ${t(`research.subtitleSource.${item[name].metadata?.source}`)}`}
+                      {item[name].truncated && ` · ${t("research.partial")}`}
                     </span>)}</div>
                     {(["body", "comments", "subtitles"] as const).map((name) => item[name].reason && <p key={name} className="space-research-hint">{t(`research.component.${name}`)}：{item[name].reason}</p>)}
                     {item.comments.sort && <p className="space-research-hint">{item.comments.sort}</p>}
+                    {row.coverage.find((source) => source.key === item.key)?.sections && <p className="space-research-hint">{(["body", "comments", "subtitles"] as const).map((name) => {
+                      const section = row.coverage.find((source) => source.key === item.key)!.sections![name];
+                      return `${t(`research.component.${name}`)} ${t("research.sectionRead", { read: section.read_chunks, total: section.chunks })}`;
+                    }).join(" · ")}</p>}
                   </article>)}</div>
                 </details>}
               </details>}

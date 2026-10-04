@@ -9,7 +9,9 @@ export interface ResearchConfig {
 export interface MaterialComponent {
   state: string; count: number;
   reason: string; truncated: boolean; sort?: string;
+  metadata?: { source?: "native" | "local_asr"; engine?: string; model?: string; language?: string; duration?: number; cached?: boolean };
 }
+export interface SectionCoverage { chunks: number; read_chunks: number; read_indices: number[]; complete: boolean; state: string; reason: string; truncated: boolean; count: number; }
 export interface ResearchMaterial {
   key: string; platform: string; title: string; url: string;
   body: MaterialComponent; comments: MaterialComponent; subtitles: MaterialComponent;
@@ -22,7 +24,7 @@ export interface ResearchJob {
   total_materials: number;
   document: NoteDocument | null; stale_snapshot?: boolean;
   activity?: { id?: string; tool: string; message: string; status?: "running" | "completed" | "failed" | "cancelled"; summary?: string; kind?: "commentary" }[];
-  coverage: { key: string; title: string; chunks: number; read_chunks: number; complete: boolean }[];
+  coverage: { key: string; title: string; chunks: number; read_chunks: number; complete: boolean; sections?: Record<"body" | "comments" | "subtitles", SectionCoverage> }[];
   external_sources: { id: string; title: string; url: string; level: string; fetched_at: string }[];
   web_errors: string[]; usage: Record<string, number> | null; cost_usd: number | null;
 }

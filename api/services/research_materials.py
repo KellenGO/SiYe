@@ -2,13 +2,15 @@
 
 import asyncio
 import html
+import math
 import re
 import time
 from urllib.parse import parse_qs, urlsplit
 
-from .research_documents import public_url
+from .research_documents import MAX_SECTION_CHARS, public_url
 from .research_web import public_get
 from .result_hydration import ResultHydrator
+from .research_transcription import TranscriptionService, asr_python
 
 
 def clean_text(value):
@@ -20,6 +22,27 @@ def clean_text(value):
 
 def component(state="missing", text="", entries=None, reason=""):
     return {"state": state, "text": text, "entries": entries or [], "reason": reason, "truncated": False}
+
+
+def bound_component(value):
+    used = len(value["text"])
+    limited = used > MAX_SECTION_CHARS
+    value["text"] = value["text"][:MAX_SECTION_CHARS]
+    entries = []
+    for row in value["entries"]:
+        text = row.get("text", "")
+        if len(entries) >= 10000 or used + len(text) > MAX_SECTION_CHARS:
+            limited = True
+            remaining = max(0, MAX_SECTION_CHARS - used)
+            if remaining and len(entries) < 10000:
+                entries.append({**row, "text": text[:remaining]})
+            break
+        entries.append(row)
+        used += len(text)
+    value["entries"] = entries
+    if limited:
+        value.update(truncated=True, reason=(value.get("reason") + "；" if value.get("reason") else "") + "内容超过单项上限，保留前部内容")
+    return value
 
 
 def material(item):
@@ -56,6 +79,15 @@ def normalize_comments(rows, platform, parent=None, limit=50):
         author = row.get("user_info") or row.get("user") or row.get("member") or row.get("author") or {}
         output.append({"id": identity, "parent_id": parent_id, "text": text,
                        "author": str(author.get("nickname") or author.get("uname") or author.get("name") or "")})
+        for metric, fields in (("like_count", ("like_count", "digg_count", "like", "vote_count")),
+                               ("reply_count", ("sub_comment_count", "reply_comment_total", "rcount", "child_comment_count"))):
+            for field in fields:
+                if row.get(field) is not None:
+                    try:
+                        output[-1][metric] = max(0, int(row[field]))
+                    except (TypeError, ValueError, OverflowError):
+                        pass
+                    break
         children = row.get("sub_comments") or row.get("reply_comment") or row.get("replies") or row.get("child_comments") or []
         if isinstance(children, list):
             for child in children[:3]:
@@ -71,18 +103,29 @@ def subtitle_entries(data):
         data = data.get("body") or data.get("subtitles") or []
     if not isinstance(data, list):
         return []
-    return [{"text": clean_text(row.get("content") or row.get("text")),
-             "start": row.get("from", row.get("start", 0)), "end": row.get("to", row.get("end", 0))}
-            for row in data if isinstance(row, dict) and clean_text(row.get("content") or row.get("text"))]
+    entries = []
+    for row in data:
+        if not isinstance(row, dict):
+            continue
+        try:
+            text = clean_text(row.get("content") or row.get("text"))
+            start, end = float(row.get("from", row.get("start", 0))), float(row.get("to", row.get("end", 0)))
+            if text and math.isfinite(start) and math.isfinite(end) and 0 <= start <= end:
+                entries.append({"text": text, "start": start, "end": end})
+        except (TypeError, ValueError):
+            continue
+    return entries
 
 
 class MaterialCollector(ResultHydrator):
-    def __init__(self, sessions=None):
+    def __init__(self, sessions=None, emit=lambda _: None, workdir=None):
         super().__init__()
         self.sessions = sessions or {}
         self.last_request = 0.0
         self.playwright = None
         self.douyin_crawler = None
+        self.emit = emit
+        self.transcription = TranscriptionService(temporary_root=workdir)
 
     async def request(self, method, *args, **kwargs):
         await asyncio.sleep(max(0, self.last_request + 1.0 - time.monotonic()))
@@ -197,9 +240,29 @@ class MaterialCollector(ResultHydrator):
                 result["subtitles"] = await self.subtitles(client, source, detail)
             except Exception as error:
                 result["subtitles"] = failure(error)
+            if result["subtitles"]["entries"]:
+                ends = {}
+                for row in result["subtitles"]["entries"]:
+                    part = row.get("part", 1)
+                    ends[part] = max(ends.get(part, 0), row.get("end", 0))
+                result["subtitles"]["metadata"] = {**result["subtitles"].get("metadata", {}), "source": "native", "duration": sum(ends.values())}
+            # Publish acquired body/comments before potentially slow or cancelled ASR.
+            for name in ("body", "comments", "subtitles"):
+                bound_component(result[name])
+            self.emit({"type": "material", "material": result})
+            if not result["subtitles"]["entries"] and not previous_components["subtitles"]["entries"]:
+                native = dict(result["subtitles"])
+                try:
+                    result["subtitles"] = await self.transcribe_subtitles(client, source, detail, result)
+                except Exception as error:
+                    result["subtitles"] = failure(error)
+                if result["subtitles"]["state"] != "ok":
+                    if native["state"] in {"restricted", "failed"} and result["subtitles"]["state"] == "missing":
+                        result["subtitles"]["state"] = native["state"]
+                    result["subtitles"]["reason"] = (native.get("reason") or "未取得平台原生字幕") + "；" + result["subtitles"]["reason"]
         for name, previous_component in previous_components.items():
             current = result[name]
-            if current["state"] in {"failed", "restricted"} and previous_component["entries"]:
+            if current["state"] in {"missing", "failed", "restricted"} and previous_component["entries"]:
                 combined = previous_component["entries"] + current["entries"]
                 seen, merged = set(), []
                 for row in combined:
@@ -208,7 +271,60 @@ class MaterialCollector(ResultHydrator):
                         seen.add(identity)
                         merged.append(row)
                 current.update(entries=merged[:50] if name == "comments" else merged, truncated=True)
+                if name == "subtitles" and "metadata" not in current and previous_component.get("metadata"):
+                    current["metadata"] = previous_component["metadata"]
+        for name in ("body", "comments", "subtitles"):
+            bound_component(result[name])
         return result
+
+    async def transcribe_subtitles(self, client, source, detail, result):
+        identity = f"{source['platform']}|{source['content_id']}|primary"
+        cached = self.transcription.cached(identity)
+        if cached:
+            return self.primary_transcript(cached, source, detail)
+        if not asr_python():
+            return component("missing", reason="平台无可读字幕且本地转写不可用：未安装可选 faster-whisper 组件")
+        if not isinstance(detail, dict):
+            return component("missing", reason="当前详情未保留稳定音频资源，本地转写不可用")
+        url = await self.audio_resource(client, source, detail)
+        if not url:
+            return component("missing", reason="平台详情没有可安全复用的音轨或媒体流，本地转写不可用")
+        def progress(message):
+            result["subtitles"].update(reason=message)
+            self.emit({"type": "material", "material": result})
+            self.emit({"type": "progress", "phase": "transcribing", "key": result["key"], "message": f"{result['title'][:80]} · {message}"})
+        transcript = await self.transcription.transcribe(identity, url, result["url"], progress)
+        return self.primary_transcript(transcript, source, detail)
+
+    @staticmethod
+    def primary_transcript(transcript, source, detail):
+        if transcript["state"] == "ok" and source["platform"] == "bilibili" and (
+                not isinstance(detail, dict) or len(detail.get("pages") or []) > 1):
+            transcript.update(truncated=True, reason="本地转写仅覆盖主分集，其余分集未转写或未能复核")
+        return transcript
+
+    async def audio_resource(self, client, source, detail):
+        """Only known detail fields / the existing Bilibili client; no new crawler."""
+        platform = source["platform"]
+        video = detail.get("video") or {}
+        rows = []
+        if platform == "bilibili" and detail.get("aid") and detail.get("cid"):
+            response = await self.request(client.get, "/x/player/wbi/playurl", {
+                "avid": detail["aid"], "cid": detail["cid"], "fnval": 16, "fnver": 0, "fourk": 0})
+            rows = (response.get("dash") or {}).get("audio") or []
+            rows = sorted((row for row in rows if isinstance(row, dict)), key=lambda row: row.get("bandwidth") or 0)
+        elif platform == "xhs" and isinstance(video, dict):
+            streams = ((video.get("media") or {}).get("stream") or {})
+            rows = streams.get("audio") or streams.get("h264") or []
+            rows = sorted((row for row in rows if isinstance(row, dict)), key=lambda row: row.get("avg_bitrate") or 0)
+        elif platform == "douyin" and isinstance(video, dict):
+            # music.play_url is background music, not the speech track of the post.
+            rows = [video.get("audio") or video.get("play_addr") or {}]
+        for row in rows:
+            url = row.get("baseUrl") or row.get("base_url") or row.get("master_url") or next(iter(row.get("url_list") or []), None)
+            if isinstance(url, str) and url:
+                return "https:" + url if url.startswith("//") else url
+        return None
 
     @staticmethod
     def check_douyin(response):
@@ -311,7 +427,7 @@ class MaterialCollector(ResultHydrator):
                     entries = subtitle_entries(data)
                     if entries:
                         return component("ok", entries=entries)
-            return component("missing", reason="原帖未提供可读取的平台字幕；不执行音视频识别")
+            return component("missing", reason="原帖未提供可读取的平台字幕")
         if not isinstance(detail, dict) or not detail.get("cid"):
             return component("failed", reason="视频详情缺少字幕所需标识")
         entries, incomplete = [], False

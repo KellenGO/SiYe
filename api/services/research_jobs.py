@@ -76,7 +76,7 @@ class ResearchJobs:
 
     def public(self, job_id, store=None):
         job = self.get(job_id)
-        visible = {key: copy.deepcopy(value) for key, value in job.items() if key not in {"snapshot", "elapsed", "workdir", "materials", "history", "research_focus"}}
+        visible = {key: copy.deepcopy(value) for key, value in job.items() if key not in {"snapshot", "elapsed", "workdir", "materials", "history", "research_focus", "transcribing_key"}}
         visible["total_materials"] = len(job["snapshot"]["items"])
         visible["materials"] = []
         for row in job["materials"]:
@@ -87,6 +87,9 @@ class ResearchJobs:
                 summary[name]["count"] = len(values["entries"])
                 if "sort" in values:
                     summary[name]["sort"] = values["sort"]
+                if name == "subtitles":
+                    summary[name]["metadata"] = {key: values.get("metadata", {})[key] for key in
+                        ("source", "engine", "model", "language", "duration", "cached") if key in values.get("metadata", {})}
             visible["materials"].append(summary)
         if store and job.get("space_id"):
             current = store.get_space(job["space_id"])
@@ -225,9 +228,13 @@ class ResearchJobs:
                         if item["key"] not in {row["key"] for row in job["snapshot"]["items"]}:
                             raise ValueError("研究资料范围异常")
                         job["materials"] = [row for row in job["materials"] if row["key"] != item["key"]] + [item]
+                        if event.get("completed") and job.get("transcribing_key") == item["key"]:
+                            job.pop("transcribing_key", None)
                         job["message"] = f"已获取 {len(job['materials'])} / {len(job['snapshot']['items'])} 条资料"
                     elif kind == "progress":
                         job.update(phase=event["phase"], message=event["message"])
+                        if event["phase"] == "transcribing":
+                            job["transcribing_key"] = event.get("key")
                     elif kind == "activity":
                         records = job.setdefault("activity", [])
                         record = {key: event[key] for key in ("id", "tool", "message", "status", "summary", "kind") if key in event}
@@ -277,7 +284,7 @@ class ResearchJobs:
             items = job["snapshot"]["items"]
             if retry:
                 items = [item for item in items if item["key"] not in previous or any(
-                    previous[item["key"]][name]["state"] in {"failed", "restricted"} for name in ("body", "comments", "subtitles"))]
+                    previous[item["key"]][name]["state"] in {"missing", "failed", "restricted"} for name in ("body", "comments", "subtitles"))]
             await self.process(job, {"mode": "collect", "items": items, "sessions": sessions, "previous": previous})
             job.update(status="awaiting_sources", phase="awaiting_sources", message="请检查读取情况后开始分析", error="")
         except asyncio.CancelledError:
@@ -288,6 +295,11 @@ class ResearchJobs:
             job.update(status="failed", phase="failed", error=self.safe_error(error))
             await self.release(identity)
         finally:
+            transcribing = job.pop("transcribing_key", None)
+            if transcribing and job["status"] in {"failed", "cancelled"}:
+                for row in job["materials"]:
+                    if row["key"] == transcribing:
+                        row["subtitles"].update(state="failed", reason="本地转写已中断，正文和评论保留，可重试")
             known = {row["key"] for row in job["materials"]}
             for item in job["snapshot"]["items"]:
                 if item["key"] not in known:
