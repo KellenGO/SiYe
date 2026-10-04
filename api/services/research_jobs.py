@@ -15,6 +15,7 @@ from base.runtime_paths import application_root, library_data_root
 from .accounts import operation_coordinator, get_session_snapshot, ensure_session_snapshot
 from .research_config import research_config, runtime_status
 from .research_materials import material
+from .research_diagnostics import classify
 from .worker_process import terminate_worker
 
 ACTIVE_SECONDS = 600
@@ -273,20 +274,24 @@ class ResearchJobs:
                 raise ValueError("平台正在搜索、同步或处理账号，请稍后重试获取")
             preparation_started = time.monotonic()
             sessions = {}
+            session_errors = {}
             for platform in {item["result"]["platform"] for item in job["snapshot"]["items"]}:
                 sessions[platform] = get_session_snapshot(platform)
-                if not sessions[platform] and platform in {"xhs", "zhihu"}:
+                if platform in {"xhs", "zhihu", "bilibili"} and (
+                        not sessions[platform] or platform == "zhihu" and not sessions[platform].get("d_c0")):
                     try:
-                        sessions[platform] = await asyncio.wait_for(ensure_session_snapshot(platform), timeout=30)
-                    except Exception:
-                        pass
+                        sessions[platform] = await asyncio.wait_for(ensure_session_snapshot(platform, raise_on_error=True), timeout=30)
+                    except Exception as error:
+                        code, status = classify(error, "session")
+                        session_errors[platform] = {"code": code, "http_status": status}
             job["elapsed"] += time.monotonic() - preparation_started
             previous = {row["key"]: row for row in job["materials"]}
             items = job["snapshot"]["items"]
             if retry:
                 items = [item for item in items if item["key"] not in previous or any(
                     previous[item["key"]][name]["state"] in {"missing", "failed", "restricted"} for name in ("body", "comments", "subtitles"))]
-            await self.process(job, {"mode": "collect", "items": items, "sessions": sessions, "previous": previous})
+            await self.process(job, {"mode": "collect", "items": items, "sessions": sessions,
+                                     "session_errors": session_errors, "previous": previous})
             job.update(status="awaiting_sources", phase="awaiting_sources", message="请检查读取情况后开始分析", error="")
         except asyncio.CancelledError:
             job.update(status="cancelled", phase="cancelled", message="研究已取消")

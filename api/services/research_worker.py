@@ -17,7 +17,8 @@ async def run(payload):
     logging.disable(logging.CRITICAL)
     if payload["mode"] == "collect":
         from .research_materials import MaterialCollector
-        collector = MaterialCollector(payload.get("sessions"), emit=emit, workdir=payload.get("workdir"))
+        collector = MaterialCollector(payload.get("sessions"), emit=emit, workdir=payload.get("workdir"),
+                                      session_errors=payload.get("session_errors"))
         try:
             for item in payload["items"]:
                 previous = payload.get("previous", {}).get(item["key"])

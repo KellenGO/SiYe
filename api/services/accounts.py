@@ -29,6 +29,7 @@ import secrets
 import shutil
 import sqlite3
 import time
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -631,7 +632,7 @@ def record_search_outcome(platform: str, status: str, timings: Any = None) -> No
     }
 
 
-async def ensure_session_snapshot(platform: str) -> Optional[Dict[str, str]]:
+async def ensure_session_snapshot(platform: str, *, raise_on_error: bool = False) -> Optional[Dict[str, str]]:
     """Restore an in-memory snapshot from an existing browser profile.
 
     This is intentionally a best-effort session bridge, not account
@@ -643,13 +644,13 @@ async def ensure_session_snapshot(platform: str) -> Optional[Dict[str, str]]:
 
     The shared profile lock makes concurrent hydration candidates re-check
     the snapshot after the first restore, so one job opens the profile at most
-    once.  A missing profile or missing ``a1`` is a normal best-effort miss.
+    once. Missing profiles or signing cookies are normal best-effort misses.
     """
-    if platform != "xhs":
+    if platform not in {"xhs", "zhihu", "bilibili"}:
         return get_session_snapshot(platform)
 
     current = get_session_snapshot(platform)
-    if current is not None:
+    if current is not None and (platform != "zhihu" or current.get("d_c0")):
         return current
 
     if not profile_dir_for(platform).is_dir():
@@ -658,19 +659,34 @@ async def ensure_session_snapshot(platform: str) -> Optional[Dict[str, str]]:
     async with _profile_lock(platform):
         # Another hydration task may have restored it while this task waited.
         current = get_session_snapshot(platform)
-        if current is not None:
+        if current is not None and (platform != "zhihu" or current.get("d_c0")):
             return current
 
         playwright = context = None
         try:
             playwright, context, _ = await _launch_profile_context(platform)
-            cookie_dict = await _ensure_xhs_signing_cookies(context)
+            if platform == "xhs":
+                cookie_dict = await _ensure_xhs_signing_cookies(context)
+            elif platform == "bilibili":
+                cookie_dict = _capture_cookie_dict(await context.cookies(PLATFORM_COOKIE_URLS[platform]))
+            else:
+                cookie_dict = _capture_cookie_dict(await context.cookies(PLATFORM_COOKIE_URLS[platform]))
+                if cookie_dict.get("z_c0") and not cookie_dict.get("d_c0"):
+                    from tools.light_page import install_light_page_routes, light_goto_kwargs
+                    await install_light_page_routes(context)
+                    page = await context.new_page()
+                    await page.goto(PLATFORM_HOME_URLS[platform], **light_goto_kwargs())
+                    cookie_dict = _capture_cookie_dict(await context.cookies(PLATFORM_COOKIE_URLS[platform]))
+                if not cookie_dict.get("z_c0") or not cookie_dict.get("d_c0"):
+                    return None
             if not cookie_dict:
                 return None
 
             await set_session_snapshot(platform, cookie_dict)
             return dict(cookie_dict)
         except Exception:
+            if raise_on_error:
+                raise
             # Hydration is best effort.  Do not turn profile/browser failures
             # into a search failure, and do not log the exception because it
             # may contain browser or request details.
@@ -899,6 +915,47 @@ def _profile_lock(platform: str) -> asyncio.Lock:
         lock = asyncio.Lock()
         _profile_locks[platform] = lock
     return lock
+
+
+@asynccontextmanager
+async def platform_session_context(platform: str, snapshot=None):
+    """Lease the account profile, or a transient context for an in-memory session.
+
+    Callers must hold the operation coordinator's platform lease across use.
+    No new cookie store, login flow or account verification is created here.
+    """
+    if platform not in PLATFORM_PROFILE_DIRS:
+        raise PlatformError("不支持的平台")
+    playwright = context = None
+    async with _profile_lock(platform):
+        try:
+            if profile_dir_for(platform).is_dir():
+                playwright, context, _ = await _launch_profile_context(platform)
+            elif snapshot:
+                from playwright.async_api import async_playwright
+                from tools.browser_launcher import resolve_playwright_browser
+                playwright = await async_playwright().start()
+                executable, channel, _ = resolve_playwright_browser()
+                options = {"headless": True}
+                if executable:
+                    options["executable_path"] = executable
+                elif channel:
+                    options["channel"] = channel
+                browser = await playwright.chromium.launch(**options)
+                context = await browser.new_context()
+            else:
+                raise PermissionError("session required")
+            if snapshot:
+                await context.add_cookies([{"name": name, "value": value,
+                    "url": PLATFORM_HOME_URLS[platform]} for name, value in snapshot.items()])
+            yield context
+        finally:
+            try:
+                if context is not None:
+                    await context.close()
+            finally:
+                if playwright is not None:
+                    await playwright.stop()
 
 
 # ── Operation coordinator ───────────────────────────────────────────────

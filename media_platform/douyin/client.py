@@ -132,13 +132,20 @@ class DouYinClient(ReusableHttpClientMixin, AbstractApiClient):
         response = await self._send(method, url, **kwargs)
         from aggregate_search.pagination import check_search_http_status
         check_search_http_status(response.status_code)
+        if response.status_code != 200 or response.text == "blocked":
+            raise DataFetchError("抖音接口拒绝请求", http_status=response.status_code,
+                platform_code=-20 if response.text == "blocked" else None)
         try:
-            if response.text == "" or response.text == "blocked":
-                utils.logger.error(f"request params incrr, response.text: {response.text}")
-                raise Exception("account blocked")
-            return response.json()
-        except Exception as e:
-            raise DataFetchError(f"{e}, {response.text}")
+            data = response.json()
+        except ValueError:
+            error = DataFetchError("抖音接口返回空响应或异常结构", http_status=response.status_code)
+            error.safe_code = "malformed_response"
+            raise error from None
+        if not isinstance(data, dict):
+            error = DataFetchError("抖音接口返回异常结构", http_status=response.status_code)
+            error.safe_code = "malformed_response"
+            raise error
+        return data
 
     async def get(self, uri: str, params: Optional[Dict] = None, headers: Optional[Dict] = None):
         """
@@ -147,6 +154,13 @@ class DouYinClient(ReusableHttpClientMixin, AbstractApiClient):
         await self.__process_req_params(uri, params, headers)
         headers = headers or self.headers
         return await self.request(method="GET", url=f"{self._host}{uri}", params=params, headers=headers)
+
+    async def prepare_browser_detail(self, params: Dict) -> str:
+        """Sign one detail request for the caller's existing logged-in page."""
+        uri = "/aweme/v1/web/aweme/detail/"
+        params = dict(params)
+        await self.__process_req_params(uri, params)
+        return f"{self._host}{uri}?{urllib.parse.urlencode(params)}"
 
     async def post(self, uri: str, data: dict, headers: Optional[Dict] = None):
         await self.__process_req_params(uri, data, headers, request_method="POST")

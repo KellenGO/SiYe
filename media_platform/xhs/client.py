@@ -126,12 +126,13 @@ class XiaoHongShuClient(ReusableHttpClientMixin, AbstractApiClient):
         self.headers.update(headers)
         return self.headers
 
-    # Round 17.2: 461/471 是平台风控（验证码/访问限制）—— XhsRateLimitError
+    # 461/471 是平台风控（验证码/访问限制）—— XhsRateLimitError
     # 必须被排除在重试之外（只发 1 次请求，不重复触发风控）；NoteNotFoundError
     # 原语义保持不重试。其余网络/临时错误仍按原样重试 3 次。
     @retry(stop=stop_after_attempt(3), wait=wait_fixed(1),
            retry=retry_if_not_exception_type(
-                (NoteNotFoundError, XhsRateLimitError)) & retry_if_exception(allow_client_retry))
+                (NoteNotFoundError, XhsRateLimitError, IPBlockError)) & retry_if_exception(
+                    lambda error: allow_client_retry(error) and getattr(error, "http_status", None) not in {401, 403, 429}))
     async def request(self, method, url, **kwargs) -> Union[str, Any]:
         """
         Wrapper for httpx common request method, processes request response
@@ -158,7 +159,7 @@ class XiaoHongShuClient(ReusableHttpClientMixin, AbstractApiClient):
         self.last_business_msg = None
 
         if response.status_code == 471 or response.status_code == 461:
-            # Round 17.2: 平台风控/验证码挑战 —— 立即抛专用异常，不读取
+            # 平台风控/验证码挑战 —— 立即抛专用异常，不读取
             # Verifyuuid/Verifytype，不记录 response 对象或 body，日志只写
             # 固定文案与状态码。XhsRateLimitError 被重试条件排除 → 只发 1 次。
             utils.logger.error(
@@ -166,9 +167,23 @@ class XiaoHongShuClient(ReusableHttpClientMixin, AbstractApiClient):
                 f"http_status={response.status_code}")
             raise XhsRateLimitError(http_status=response.status_code)
 
+        if response.status_code in {401, 403, 429}:
+            error = DataFetchError("小红书接口拒绝访问")
+            error.http_status = response.status_code
+            error.safe_code = "session_expired" if response.status_code == 401 else "rate_limited" if response.status_code == 429 else "restricted"
+            raise error
+
         if return_response:
             return response.text
-        data: Dict = response.json()
+        try:
+            data: Dict = response.json()
+            if not isinstance(data, dict) or "success" not in data:
+                raise ValueError("response")
+        except ValueError:
+            error = DataFetchError("小红书接口返回异常结构")
+            error.http_status = response.status_code
+            error.safe_code = "malformed_response"
+            raise error from None
         self.last_business_code = data.get("code")
         msg = data.get("msg")
         self.last_business_msg = _safe_debug_message(msg)
@@ -179,8 +194,9 @@ class XiaoHongShuClient(ReusableHttpClientMixin, AbstractApiClient):
         elif data["code"] in (self.NOTE_NOT_FOUND_CODE, self.NOTE_ABNORMAL_CODE):
             raise NoteNotFoundError(f"Note not found or abnormal, code: {data['code']}")
         else:
-            err_msg = data.get("msg", None) or f"{response.text}"
-            raise DataFetchError(err_msg)
+            error = DataFetchError("小红书接口请求失败")
+            error.http_status = response.status_code
+            raise error
 
     @staticmethod
     def _build_query_string(params: Dict) -> str:
