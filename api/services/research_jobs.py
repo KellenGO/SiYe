@@ -76,7 +76,7 @@ class ResearchJobs:
 
     def public(self, job_id, store=None):
         job = self.get(job_id)
-        visible = {key: copy.deepcopy(value) for key, value in job.items() if key not in {"snapshot", "elapsed", "workdir", "materials", "history"}}
+        visible = {key: copy.deepcopy(value) for key, value in job.items() if key not in {"snapshot", "elapsed", "workdir", "materials", "history", "research_focus"}}
         visible["total_materials"] = len(job["snapshot"]["items"])
         visible["materials"] = []
         for row in job["materials"]:
@@ -159,12 +159,16 @@ class ResearchJobs:
         if previous and previous[-1]["status"] != "ready":
             raise ValueError("请先完成当前会话的研究，或新建会话")
         latest = previous[-1] if previous else None
-        history = [{"question": row["question"], "answer": self.document_text(row["document"])[:8000]}
-                   for row in previous if row["status"] == "ready"][-3:]
+        history = []
+        for row in [row for row in previous if row["status"] == "ready"][-3:]:
+            answer = self.document_text(row["document"])
+            history.append({"question": row["question"], "answer": answer if len(answer) <= 3000 else answer[:2000] + "\n…\n" + answer[-1000:],
+                            "answer_truncated": len(answer) > 3000})
         identity = uuid.uuid4().hex
         await self.claim(identity)
         self.jobs[identity] = {"job_id": identity, "space_id": space["id"], "snapshot": copy.deepcopy(latest["snapshot"] if latest else space),
             "conversation_id": conversation_id or identity, "history": history,
+            "research_focus": (latest.get("research_focus") or previous[0]["question"]) if latest else question,
             "question": question, "web_enabled": web_enabled, "status": "collecting", "phase": "collecting",
             "message": "正在获取空间资料", "materials": [], "elapsed": 0.0, "error": "",
             "document": None, "activity": [], "coverage": [], "external_sources": [], "web_errors": [], "usage": None, "cost_usd": None}
@@ -179,8 +183,11 @@ class ResearchJobs:
         if not isinstance(node, dict):
             return ""
         if node.get("type") == "text":
-            return node.get("text", "")
-        return "\n".join(cls.document_text(child) for child in node.get("content", []))
+            text = node.get("text", "")
+            link = next((mark for mark in node.get("marks", []) if mark.get("type") == "link"), None)
+            return f"{text} ({link['attrs']['href']})" if link else text
+        separator = "" if node.get("type") in {"paragraph", "heading"} else "\n"
+        return separator.join(cls.document_text(child) for child in node.get("content", []))
 
     async def process(self, job, payload, credentials=None):
         root = library_data_root() / "research-tmp"
@@ -327,7 +334,8 @@ class ResearchJobs:
         try:
             result = await self.process(job, {"mode": "analyze", "materials": copy.deepcopy(job["materials"]),
                 "space_name": job["snapshot"]["name"], "description": job["snapshot"]["description"],
-                "question": job["question"], "web_enabled": job["web_enabled"], "conversation": job.get("history", [])}, self.config.credentials())
+                "question": job["question"], "research_focus": job.get("research_focus", ""),
+                "web_enabled": job["web_enabled"], "conversation": job.get("history", [])}, self.config.credentials())
             job.update(result)
             job.update(status="ready", phase="ready", message="笔记已生成，请预览后追加")
         except asyncio.CancelledError:

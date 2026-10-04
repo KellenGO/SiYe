@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 import httpx
 
-from .research_documents import CHUNK_SIZE, MaterialAccess, RESULT_SCHEMA, ToolActivity, answer_document, public_url, result_document
+from .research_documents import CHUNK_SIZE, MaterialAccess, RESEARCH_INSTRUCTIONS, RESULT_SCHEMA, SourceReferenceError, ToolActivity, answer_document, public_url, research_context, result_document
 from .research_web import page_text, public_get, search_public
 
 
@@ -60,21 +60,20 @@ async def run_openai(payload, emit):
                   function("read_webpage", "读取公开网页正文，不读取登录网页、音视频或本机文件",
                            {"url": {"type": "string"}}, ["url"])]
     allowed = {row["function"]["name"] for row in tools}
-    question = "调用 check_connection，然后回复 OK。" if probe else json.dumps({
-        "space_name": payload["space_name"], "description": payload["description"],
-        "question": payload.get("question", ""),
-        "conversation": payload.get("conversation", []), "web_enabled": web}, ensure_ascii=False)
+    question = "调用 check_connection，然后回复 OK。" if probe else research_context(payload, access)
     if probe and web:
         question += "先用 search_web 搜索 OpenAI 官方文档，再用 read_webpage 读取 https://example.com。"
-    messages = [{"role": "user", "content": question}]
+    messages = ([] if probe else [{"role": "system", "content": RESEARCH_INSTRUCTIONS}])
+    messages.append({"role": "user", "content": question})
+    citation_repaired = False
     usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
     def finish(output=None, text=None):
         for row in external.values():
-            if row["chunks"] and len(row["read_chunks"]) < row["chunks"]:
-                row["level"] = "网页正文（部分已读）"
+            if row["chunks"]:
+                row["level"] = "网页正文（部分已读）" if len(row["read_chunks"]) < row["chunks"] else "网页正文"
         coverage = access.coverage()
-        document = (answer_document(text, web) if text is not None else
+        document = (answer_document(text, web, list(access.materials.values()), list(external.values()), coverage) if text is not None else
                     result_document(output, list(access.materials.values()), list(external.values()), coverage, web))
         return {"document": document, "coverage": coverage, "external_sources": list(external.values()), "web_errors": web_errors}
 
@@ -119,8 +118,15 @@ async def run_openai(payload, emit):
                         encoded = encoded.split("\n", 1)[1].rsplit("```", 1)[0]
                     output = json.loads(encoded)
                 except (ValueError, AttributeError, IndexError):
-                    return finish(text=text)
-                return finish(output) if isinstance(output, dict) and "sections" in output else finish(text=text)
+                    output = None
+                try:
+                    return finish(output) if isinstance(output, dict) and "sections" in output else finish(text=text)
+                except SourceReferenceError as error:
+                    if citation_repaired:
+                        raise
+                    citation_repaired = True
+                    messages.append({"role": "user", "content": str(error)})
+                    continue
             activity.commentary(message.get("content"))
             for call in calls:
                 declaration = call.get("function") if isinstance(call, dict) else None
@@ -153,21 +159,25 @@ async def run_openai(payload, emit):
                                 raise ValueError("网页分段不存在")
                             if index not in external[key]["read_chunks"]:
                                 external[key]["read_chunks"].append(index)
+                            external[key]["level"] = "网页正文（部分已读）" if len(external[key]["read_chunks"]) < external[key]["chunks"] else "网页正文"
                             text = texts[key][index * CHUNK_SIZE:(index + 1) * CHUNK_SIZE]
                         else:
                             text = access.chunk(key, index)
                         title = (external.get(key) or access.materials.get(key) or {}).get("title", "资料")
                         summary = f"{title[:200]} · 第 {index + 1} 段 · {len(text)} 字符"
-                        result = {"key": key, "index": index, "text": text}
+                        citation = external[key]["citation"] if key in external else access.citations[key]
+                        result = {"key": key, "citation": citation, "index": index, "text": text}
                     elif name == "search_web":
                         try:
                             rows = await search_public(args["query"])
                             for row in rows:
                                 key = next((key for key, value in external.items() if value["url"] == row["url"]), f"web|{len(external) + 1}")
                                 if key not in external:
-                                    external[key] = {"id": key, "url": row["url"], "title": row["title"], "level": "仅搜索摘要",
+                                    external[key] = {"id": key, "citation": f"W{key.split('|')[1]}", "url": row["url"], "title": row["title"], "level": "仅搜索摘要",
                                         "fetched_at": datetime.now(timezone.utc).isoformat(), "chunks": 0, "read_chunks": []}
                                 row["id"] = key
+                                row["citation"] = external[key]["citation"]
+                                row["level"] = "仅搜索摘要"
                             searched = True
                             summary = f"取得 {len(rows)} 条公开搜索结果"
                             result = rows
@@ -181,7 +191,8 @@ async def run_openai(payload, emit):
                             if not text.strip():
                                 raise ValueError("网页没有正文")
                             key = next((key for key, value in external.items() if value["url"] == url), f"web|{len(external) + 1}")
-                            external[key] = {"id": key, "url": url, "title": title[:200], "level": "网页正文",
+                            external[key] = {"id": key, "citation": f"W{key.split('|')[1]}", "url": url, "title": title[:200],
+                                "level": "网页正文（部分已读）" if len(text) > CHUNK_SIZE else "网页正文",
                                 "fetched_at": datetime.now(timezone.utc).isoformat(), "chunks": (len(text) + CHUNK_SIZE - 1) // CHUNK_SIZE,
                                 "read_chunks": [0]}
                             texts[key] = text

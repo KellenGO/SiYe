@@ -61,9 +61,11 @@ async def test_native_loop_preserves_provider_metadata_and_source_coverage(monke
     monkeypatch.setattr(module, "completion", completion)
     output = await module.run_openai(payload(conversation=[{"question": "以前", "answer": "上下文"}]), events.append)
     assert output["coverage"][0]["complete"]
-    assert captured[1][1] == first["choices"][0]["message"]
-    assert json.loads(captured[0][0]["content"])["conversation"][0]["answer"] == "上下文"
-    assert all(row["role"] != "system" for row in captured[0])
+    assert captured[1][2] == first["choices"][0]["message"]
+    context = json.loads(captured[0][1]["content"])
+    assert context["conversation"][0]["answer"] == "上下文"
+    assert context["manifest"][0]["citation"] == "S1" and context["manifest"][0]["read_chunks"] == 0
+    assert captured[0][0] == {"role": "system", "content": module.RESEARCH_INSTRUCTIONS}
     assert "provider-private-thinking" not in json.dumps(events)
     assert "opaque-signature" not in json.dumps(events)
     assert [event for event in events if event["type"] == "usage"][-1]["usage"]["total_tokens"] == 24
@@ -73,18 +75,18 @@ async def test_native_loop_preserves_provider_metadata_and_source_coverage(monke
 
 
 @pytest.mark.asyncio
-async def test_ordinary_reply_and_public_commentary_work_without_a_system_prompt(monkeypatch):
+async def test_natural_chat_and_public_commentary_do_not_require_a_report(monkeypatch):
     replies = [response("manifest", content="先查看你选入的资料。", reasoning_content="private-thinking"),
                response(content="可以，你可以直接告诉我想了解什么。", reasoning_content="private-thinking")]
     events = []
     async def completion(client, data, messages, tools):
-        assert not any(row["role"] == "system" for row in messages)
-        assert "围绕空间主题整理研究笔记" not in messages[0]["content"]
+        assert messages[0]["role"] == "system" and "结构随问题选择" in messages[0]["content"]
         return replies.pop(0)
     monkeypatch.setattr(module, "completion", completion)
     output = await module.run_openai(payload(question="你好"), events.append)
     assert "可以，你可以直接告诉我" in json.dumps(output["document"], ensure_ascii=False)
     assert not output["coverage"][0]["complete"]
+    assert "未经空间资料验证" in json.dumps(output["document"], ensure_ascii=False)
     assert any(event.get("kind") == "commentary" and event["message"] == "先查看你选入的资料。" for event in events)
     assert "private-thinking" not in json.dumps(events)
 
@@ -206,3 +208,74 @@ async def test_public_search_discards_private_and_broken_targets(monkeypatch):
     monkeypatch.setattr(web, "public_get", get)
     monkeypatch.setattr(web, "public_target", target)
     assert await web.search_public("路线") == [{"url": "https://example.org/article", "title": "Public", "snippet": "Search snippet"}]
+
+
+@pytest.mark.asyncio
+async def test_plain_research_links_to_read_evidence_and_marks_partial_gaps(monkeypatch):
+    row = source()
+    row["body"]["text"] = "渡轮八点出发。" + "路线细节" * 4000
+    row["comments"] = component("failed", reason="评论访问受限")
+    replies = [response("read_material", {"key": "xhs|one", "index": 0}),
+               response(content="资料记录渡轮八点出发 **[S1]**。据此推断，需要更早到码头；余下细节和评论尚未核实。")]
+    async def completion(client, data, messages, tools):
+        context = json.loads(messages[1]["content"])
+        assert context["manifest"][0]["url"] == row["url"]
+        assert context["manifest"][0]["availability"]["comments"]["state"] == "failed"
+        if len(replies) == 1:
+            evidence = json.loads(messages[-1]["content"])
+            assert evidence["citation"] == "S1" and "渡轮八点出发" in evidence["text"]
+        return replies.pop(0)
+    monkeypatch.setattr(module, "completion", completion)
+    output = await module.run_openai(payload(materials=[row]), lambda _: None)
+    encoded = json.dumps(output["document"], ensure_ascii=False)
+    assert "空间资料 · 已读 1/" in encoded and "评论访问受限" in encoded
+    assert "未覆盖全部分段" in encoded and "href" in encoded and row["url"] in encoded
+    from api.services.research_jobs import ResearchJobs
+    assert "**" not in ResearchJobs.document_text(output["document"])
+    assert "[S1]" in ResearchJobs.document_text(output["document"])
+
+
+@pytest.mark.asyncio
+async def test_plain_citations_repair_unread_followup_once_and_reject_invention(monkeypatch):
+    replies = [response(content="前面说八点出发 [S1]。"),
+               response("read_material", {"key": "xhs|one", "index": 0}), response(content="本轮资料内容 [S1]。")]
+    requests = []
+    async def completion(client, data, messages, tools):
+        requests.append(copy.deepcopy(messages))
+        return replies.pop(0)
+    monkeypatch.setattr(module, "completion", completion)
+    output = await module.run_openai(payload(conversation=[{"question": "时间", "answer": "八点 [S1]"}]), lambda _: None)
+    assert output["coverage"][0]["complete"]
+    assert "本轮未读取" in requests[1][-1]["content"]
+    replies.extend([response(content="未知来源 [S99]"), response(content="仍是未知来源 [S99]")])
+    with pytest.raises(module.SourceReferenceError):
+        await module.run_openai(payload(), lambda _: None)
+    assert not replies
+
+
+@pytest.mark.asyncio
+async def test_plain_web_citations_distinguish_search_partial_and_full_text(monkeypatch):
+    replies = [response("search_web", {"query": "时刻表"}), response(content="搜索结果摘要显示班次 [W1]。"),
+               response("read_webpage", {"url": "https://example.org"}), response(content="网页第一段 [W1]。"),
+               response("read_webpage", {"url": "https://example.org"}), response("read_material", {"key": "web|1", "index": 1}),
+               response(content="网页完整正文 [W1]。")]
+    async def completion(*args):
+        return replies.pop(0)
+    async def search(*args):
+        return [{"title": "时刻表", "url": "https://example.org", "snippet": "摘要"}]
+    async def read(*args):
+        return "https://example.org", "<title>时刻表</title><body>" + "渡轮" * 5000 + "</body>"
+    monkeypatch.setattr(module, "completion", completion)
+    monkeypatch.setattr(module, "search_public", search)
+    monkeypatch.setattr(module, "public_get", read)
+    for expected in ("仅搜索摘要", "网页正文（部分已读）", "网页正文"):
+        output = await module.run_openai(payload(web_enabled=True), lambda _: None)
+        assert output["external_sources"][0]["level"] == expected
+        assert expected in json.dumps(output["document"], ensure_ascii=False)
+
+
+def test_plain_citations_cannot_use_external_sources_with_web_disabled():
+    from api.services.research_documents import answer_document, SourceReferenceError
+    external = [{"id": "web|1", "citation": "W1", "title": "外部", "url": "https://example.org", "level": "仅搜索摘要"}]
+    with pytest.raises(SourceReferenceError):
+        answer_document("外部结论 [W1]", False, external=external)

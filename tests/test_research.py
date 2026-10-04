@@ -212,13 +212,56 @@ async def test_sdk_actual_options_deny_other_tools_and_read_coverage(monkeypatch
                "model": "test", "base_url": "https://example.com", "space_name": "攻略", "description": "", "conversation": [{"question": "previous", "answer": "context"}]}
     result = await run_agent(payload, lambda event: None)
     options = captured["options"]
-    assert options.system_prompt == "" and options.output_format is None
+    from api.services.research_documents import RESEARCH_INSTRUCTIONS
+    assert options.system_prompt == RESEARCH_INSTRUCTIONS and options.output_format is None
     assert captured["prompt"]["conversation"] == payload["conversation"]
+    assert captured["prompt"]["manifest"][0]["citation"] == "S1"
     assert options.tools == [] and options.setting_sources == [] and options.strict_mcp_config
     guard = options.hooks["PreToolUse"][0].hooks[0]
     for name in ["WebSearch", "WebFetch", "Bash", "Read", "Write", "PowerShell"]:
         assert (await guard({"tool_name": name}, None, None))["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert not result["coverage"][0]["complete"]
+
+
+@pytest.mark.asyncio
+async def test_sdk_plain_answer_repairs_citations_and_matches_openai_context(monkeypatch, tmp_path):
+    import claude_agent_sdk as sdk
+    from api.services import research_agent, research_openai
+    from api.services.research_documents import MaterialAccess, research_context
+    functions, prompts = {}, []
+    def tool(name, description, schema):
+        def wrap(function):
+            functions[name] = function
+            return function
+        return wrap
+    monkeypatch.setattr(sdk, "tool", tool)
+    monkeypatch.setattr(sdk, "create_sdk_mcp_server", lambda *args, **kwargs: {})
+    item = material(source())
+    item["body"] = component("ok", text="船班八点出发")
+    payload = {"mode": "analyze", "web_enabled": False, "materials": [item], "workdir": str(tmp_path),
+        "model": "test", "base_url": "https://example.com", "space_name": "攻略", "description": "交通研究",
+        "question": "几点出发", "research_focus": "路线", "conversation": [{"question": "交通", "answer": "旧回答 [S1]"}]}
+    class Client:
+        def __init__(self, options):
+            assert options.system_prompt == research_openai.RESEARCH_INSTRUCTIONS
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            pass
+        async def query(self, prompt):
+            prompts.append(prompt)
+        async def receive_response(self):
+            if len(prompts) == 2:
+                read = await functions["read_material"]({"key": "xhs|one", "index": 0})
+                evidence = json.loads(read["content"][0]["text"])
+                assert evidence["citation"] == "S1" and "船班八点出发" in evidence["text"]
+            yield sdk.ResultMessage("success", 1, 1, False, 1, "test", result="船班八点出发 [S1]，建议提前到达是我的推断。")
+    monkeypatch.setattr(sdk, "ClaudeSDKClient", Client)
+    output = await research_agent.run_agent(payload, lambda _: None)
+    assert prompts[0] == research_context(payload, MaterialAccess([item]))
+    assert "本轮未读取" in prompts[1]
+    assert output["coverage"][0]["complete"]
+    assert "href" in json.dumps(output["document"])
 
 
 @pytest.mark.asyncio
@@ -331,7 +374,8 @@ async def test_enabled_web_tracks_search_and_partial_page_separately(monkeypatch
             assert (await guard({"tool_name": "WebFetch"}, None, None))["hookSpecificOutput"]["permissionDecision"] == "deny"
             await functions["read_material"]({"key": "xhs|one", "index": 0})
             post = self.options.hooks["PostToolUse"][0].hooks[0]
-            await post({"tool_name": "WebSearch", "tool_response": {"results": [{"url": "https://example.com/search-only"}]}}, None, None)
+            search_context = await post({"tool_name": "WebSearch", "tool_response": {"results": [{"url": "https://example.com/search-only"}]}}, None, None)
+            assert json.loads(search_context["hookSpecificOutput"]["additionalContext"])["external"][0]["citation"] == "W1"
             await functions["read_webpage"]({"url": "https://example.com/page"})
             yield sdk.ResultMessage("success", 1, 1, False, 1, "test", structured_output=note_result("web|2", "web"))
     monkeypatch.setattr(sdk, "ClaudeSDKClient", Client)
@@ -446,9 +490,11 @@ async def test_conversation_followups_reuse_sources_and_limit_context(config, mo
         internal = manager.get(followup["job_id"])
         assert len(internal["snapshot"]["items"]) == 1
         assert 1 <= len(internal["history"]) <= 3
-        assert all(len(row["answer"]) == 8000 for row in internal["history"])
+        assert all(len(row["answer"]) <= 3003 and row["answer_truncated"] for row in internal["history"])
+        assert internal["research_focus"] == "路线"
     assert sum(row["mode"] == "collect" for row in requests) == 1
     assert requests[-1]["conversation"][-1]["question"] == "追问3"
+    assert requests[-1]["research_focus"] == "路线"
     groups = manager.conversations(1)
     assert len(groups) == 1 and groups[0]["turns"] == 6
     with pytest.raises(ValueError, match="不属于"):

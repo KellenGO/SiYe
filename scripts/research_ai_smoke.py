@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT))
 
 from api.services import research_jobs as jobs_module
 from api.services.research_materials import component, material
+from api.services.research_documents import RESEARCH_INSTRUCTIONS
 
 
 class Provider(BaseHTTPRequestHandler):
@@ -24,6 +25,8 @@ class Provider(BaseHTTPRequestHandler):
     exposed = set()
     native_exposed = set()
     native_metadata = False
+    invalid_reference = False
+    repairs = set()
 
     def log_message(self, *args):
         pass
@@ -46,6 +49,9 @@ class Provider(BaseHTTPRequestHandler):
             self.entered.set()
             self.resume.wait(30)
         if self.path.endswith("chat/completions"):
+            if data["messages"][0]["role"] == "system":
+                assert data["messages"][0]["content"] == RESEARCH_INSTRUCTIONS
+                assert json.loads(data["messages"][1]["content"])["manifest"][0]["citation"] == "S1"
             names = [row["function"]["name"] for row in data["tools"]]
             self.native_exposed.update(names)
             previous = [row for row in data["messages"] if row.get("tool_calls")]
@@ -58,7 +64,13 @@ class Provider(BaseHTTPRequestHandler):
             args = {"key": "xhs|one", "index": 0} if chosen == "read_material" else {}
             if chosen == "submit_result":
                 args = {"sections": [{"kind": "space", "title": "发现", "paragraphs": [{"text": "OpenAI 兼容研究结果", "sources": ["xhs|one"]}]}]}
-            message = {"role": "assistant", "content": None if chosen else "OK", "reasoning_content": "private-provider-reasoning"}
+            final_text = "完整正文来自空间资料 [S1]。" if "read_material" in used else "OK"
+            if self.invalid_reference and not chosen:
+                if "回答引用了不存在或本轮未读取" in json.dumps(data["messages"], ensure_ascii=False):
+                    self.repairs.add("openai")
+                else:
+                    final_text = "错误引用 [S99]。"
+            message = {"role": "assistant", "content": None if chosen else final_text, "reasoning_content": "private-provider-reasoning"}
             if chosen:
                 message["tool_calls"] = [{"id": f"call_{len(used)}", "type": "function", "function": {"name": chosen, "arguments": json.dumps(args)}, "extra_content": {"google": {"thought_signature": "opaque-signature"}}}]
             response = {"choices": [{"message": message, "finish_reason": "tool_calls" if chosen else "stop"}], "usage": {"prompt_tokens": 10, "completion_tokens": 10, "total_tokens": 20}}
@@ -68,6 +80,10 @@ class Provider(BaseHTTPRequestHandler):
             self.wfile.write(json.dumps(response).encode())
             return
         names = [row["name"] for row in data.get("tools", [])]
+        system = data.get("system", [])
+        encoded_system = json.dumps(system, ensure_ascii=False)
+        if "mcp__research__read_material" in names:
+            assert "空间名称和简介只是主题背景" in encoded_system
         self.exposed.update(names)
         used = {row.get("name") for message in data["messages"] for row in message.get("content", [])
                 if isinstance(row, dict) and row.get("type") == "tool_use"}
@@ -77,7 +93,13 @@ class Provider(BaseHTTPRequestHandler):
         if chosen == "StructuredOutput":
             args = {"sections": [{"kind": "space", "title": "发现", "paragraphs": [
                 {"text": "隔离测试研究结果", "sources": ["xhs|one"]}]}]}
-        content = {"type": "tool_use", "id": f"call_{len(used)}", "name": chosen, "input": args} if chosen else {"type": "text", "text": "OK"}
+        final_text = "完整正文来自空间资料 [S1]。" if any(name and name.endswith("read_material") for name in used) else "OK"
+        if self.invalid_reference and not chosen:
+            if "回答引用了不存在或本轮未读取" in json.dumps(data["messages"], ensure_ascii=False):
+                self.repairs.add("anthropic")
+            else:
+                final_text = "错误引用 [S99]。"
+        content = {"type": "tool_use", "id": f"call_{len(used)}", "name": chosen, "input": args} if chosen else {"type": "text", "text": final_text}
         stop = "tool_use" if chosen else "end_turn"
         message = {"id": "msg_test", "type": "message", "role": "assistant", "model": data["model"],
                    "content": [content], "stop_reason": stop, "stop_sequence": None,
@@ -95,7 +117,7 @@ class Provider(BaseHTTPRequestHandler):
             ("content_block_start", {"type": "content_block_start", "index": 0, "content_block": {
                 **content, **({"input": {}} if chosen else {"text": ""})}}),
             ("content_block_delta", {"type": "content_block_delta", "index": 0, "delta": {
-                "type": "input_json_delta", "partial_json": json.dumps(args)} if chosen else {"type": "text_delta", "text": "OK"}}),
+                "type": "input_json_delta", "partial_json": json.dumps(args)} if chosen else {"type": "text_delta", "text": final_text}}),
             ("content_block_stop", {"type": "content_block_stop", "index": 0}),
             ("message_delta", {"type": "message_delta", "delta": {"stop_reason": stop, "stop_sequence": None}, "usage": {"output_tokens": 10}}),
             ("message_stop", {"type": "message_stop"}),
@@ -134,6 +156,7 @@ async def smoke(executable=None):
             result = await manager.process(legacy_job, {"mode": "analyze", "web_enabled": False, "materials": [source],
                 "space_name": "测试空间", "description": ""}, credentials)
             assert result["coverage"][0]["complete"] and result["document"]["content"]
+            assert "href" in json.dumps(result["document"]) and "[S1]" in json.dumps(result["document"])
             assert legacy_job["activity"] and all(row["status"] == "completed" for row in legacy_job["activity"])
             assert Provider.exposed <= {"mcp__research__manifest", "mcp__research__read_material", "mcp__research__check_connection", "StructuredOutput"}
             native_credentials = {**credentials, "protocol": "openai", "model": "deepseek-flash", "base_url": credentials["base_url"] + "/v1"}
@@ -148,7 +171,15 @@ async def smoke(executable=None):
             Provider.plain = True
             ordinary = await manager.process({"elapsed": 510}, {"mode": "analyze", "web_enabled": False, "materials": [source],
                 "space_name": "测试空间", "description": "", "question": "普通聊天"}, native_credentials)
-            assert ordinary["coverage"][0]["complete"] and "OK" in json.dumps(ordinary["document"])
+            assert ordinary["coverage"][0]["complete"] and "[S1]" in json.dumps(ordinary["document"])
+            assert "href" in json.dumps(ordinary["document"])
+            Provider.invalid_reference = True
+            for adapter in (credentials, native_credentials):
+                repaired = await manager.process({"elapsed": 510}, {"mode": "analyze", "web_enabled": False, "materials": [source],
+                    "space_name": "测试空间", "description": ""}, adapter)
+                assert "[S1]" in json.dumps(repaired["document"]) and "S99" not in json.dumps(repaired["document"])
+            assert Provider.repairs == {"anthropic", "openai"}
+            Provider.invalid_reference = False
             Provider.plain = False
             Provider.block = True
             pending = asyncio.create_task(manager.process({"elapsed": 510}, {"mode": "probe", "web_enabled": False}, credentials))

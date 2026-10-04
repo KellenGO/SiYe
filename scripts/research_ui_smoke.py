@@ -21,7 +21,7 @@ from api.routers.research import research_router, get_research_config, get_resea
 from api.routers.spaces import spaces_router
 from api.services import research_jobs as jobs_module
 from api.services.research_config import ResearchConfig
-from api.services.research_documents import MaterialAccess, result_document
+from api.services.research_documents import MaterialAccess, answer_document
 from api.services.research_materials import material, component
 from api.services.spaces_store import SpacesStore, get_spaces_store
 
@@ -66,9 +66,7 @@ def main():
                 for row in access.manifest():
                     for index in range(row["chunks"]):
                         access.chunk(row["key"], index)
-                result = {"sections": [{"kind": "space", "title": "空间发现", "paragraphs": [
-                    {"text": "AI生成的苏州研究结果", "sources": ["xhs|one"]}]}]}
-                return {"document": result_document(result, job["materials"], [], access.coverage(), job["web_enabled"]),
+                return {"document": answer_document("AI生成的苏州研究结果 [S1]。", job["web_enabled"], job["materials"], [], access.coverage()),
                         "coverage": access.coverage(), "external_sources": [], "web_errors": []}
             manager.process = process
             tested_models = []
@@ -226,6 +224,8 @@ def main():
                 note.press("Control+End")
                 note.press_sequentially("，生成期间继续写")
                 expect(last_turn(panel).get_by_role("button", name="追加到笔记", exact=True)).to_be_visible(timeout=15000)
+                expect(last_turn(panel).locator(".space-research-preview a").first).to_have_attribute("href", "https://www.xiaohongshu.com/explore/one")
+                expect(last_turn(panel).locator(".space-research-preview")).to_contain_text("S1 评论：测试评论读取失败")
                 expect(note).not_to_contain_text("AI生成的苏州研究结果")
                 expect(page.locator(".space-note-status")).to_contain_text("已保存到本机")
                 fail_append = True
