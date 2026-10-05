@@ -222,7 +222,7 @@ async def smoke(executable=None):
                 assert section["reading_complete"] and section["collection_truncated"] and section["count"] == 50
                 assert section["read_chunks"] == section["chunks"] == 2
                 assert scenario["coverage"][1]["read_chunks"] == 0
-                assert "[S3:comments]" in json.dumps(scenario["document"]) and "已读完当前 50 条样本" in json.dumps(scenario["document"], ensure_ascii=False)
+                assert "[S3:comments]" in json.dumps(scenario["document"]) and "已读完当前 50 条样本" not in json.dumps(scenario["document"], ensure_ascii=False)
                 assert all(row["status"] == "completed" for row in scenario_job["activity"])
                 if adapter["protocol"] == "openai":
                     assert sum(row["tool"] == "submit_result" for row in scenario_job["activity"]) == 1

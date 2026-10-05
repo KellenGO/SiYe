@@ -40,12 +40,22 @@ def test_ordinary_answer_keeps_basic_markdown_and_treats_html_as_text():
     from api.services.space_notes import validate_note
     document = answer_document("## 计划\n- **第一天**\n- 第二天\n2. 出发\n3. 返回\n<script>alert(1)</script>", False)
     validate_note(document)
-    blocks = document["content"][2:]
+    blocks = document["content"]
     assert [row["type"] for row in blocks] == ["heading", "bulletList", "orderedList", "paragraph"]
     assert len(blocks[1]["content"]) == 2 and blocks[2]["attrs"]["start"] == 2
     assert blocks[1]["content"][0]["content"][0]["content"][0]["marks"] == [{"type": "bold"}]
     assert blocks[-1]["content"][0]["text"] == "<script>alert(1)</script>"
     validate_note(answer_document("**\n" + "9" * 5000 + ". 序号", False))
+
+
+@pytest.mark.parametrize("text", ["你好。", "- 第一项\n- 第二项", "1. 出发\n2. 返回"])
+def test_plain_answers_have_no_generated_preface_or_postscript(text):
+    from api.services.research_documents import answer_document
+    from api.services.research_jobs import ResearchJobs
+    document = answer_document(text, False)
+    rendered = ResearchJobs.document_text(document)
+    assert all(label not in rendered for label in ("AI 回答", "生成于", "联网补充", "本轮未读取"))
+    assert document["content"][0]["type"] == ("paragraph" if text == "你好。" else "bulletList" if text.startswith("-") else "orderedList")
 
 
 @pytest.mark.asyncio
@@ -86,7 +96,7 @@ async def test_natural_chat_and_public_commentary_do_not_require_a_report(monkey
     output = await module.run_openai(payload(question="你好"), events.append)
     assert "可以，你可以直接告诉我" in json.dumps(output["document"], ensure_ascii=False)
     assert not output["coverage"][0]["complete"]
-    assert "未经空间资料验证" in json.dumps(output["document"], ensure_ascii=False)
+    assert "未经空间资料验证" not in json.dumps(output["document"], ensure_ascii=False)
     assert any(event.get("kind") == "commentary" and event["message"] == "先查看你选入的资料。" for event in events)
     assert "private-thinking" not in json.dumps(events)
 
@@ -212,7 +222,7 @@ async def test_public_search_discards_private_and_broken_targets(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_plain_research_links_to_read_evidence_and_marks_partial_gaps(monkeypatch):
+async def test_plain_research_links_to_read_evidence_and_keeps_gaps_outside_answer(monkeypatch):
     row = source()
     row["body"]["text"] = "渡轮八点出发。" + "路线细节" * 4000
     row["comments"] = component("failed", reason="评论访问受限")
@@ -229,8 +239,11 @@ async def test_plain_research_links_to_read_evidence_and_marks_partial_gaps(monk
     monkeypatch.setattr(module, "completion", completion)
     output = await module.run_openai(payload(materials=[row]), lambda _: None)
     encoded = json.dumps(output["document"], ensure_ascii=False)
-    assert "空间资料 · 正文已读 1/" in encoded and "评论访问受限" in encoded
-    assert "未覆盖全部分段" in encoded and "href" in encoded and row["url"] in encoded
+    assert "正文已读" not in encoded and "评论访问受限" not in encoded and "未覆盖全部分段" not in encoded
+    assert "href" in encoded and row["url"] in encoded
+    assert output["coverage"][0]["sections"]["body"]["read_chunks"] == 1
+    assert output["coverage"][0]["sections"]["comments"]["reason"] == "评论访问受限"
+    assert not output["coverage"][0]["complete"]
     from api.services.research_jobs import ResearchJobs
     assert "**" not in ResearchJobs.document_text(output["document"])
     assert "[S1]" in ResearchJobs.document_text(output["document"])
@@ -272,7 +285,8 @@ async def test_plain_web_citations_distinguish_search_partial_and_full_text(monk
     for expected in ("仅搜索摘要", "网页正文（部分已读）", "网页正文"):
         output = await module.run_openai(payload(web_enabled=True), lambda _: None)
         assert output["external_sources"][0]["level"] == expected
-        assert expected in json.dumps(output["document"], ensure_ascii=False)
+        assert expected not in json.dumps(output["document"], ensure_ascii=False)
+        assert "href" in json.dumps(output["document"])
 
 
 def test_plain_citations_cannot_use_external_sources_with_web_disabled():

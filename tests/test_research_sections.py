@@ -77,7 +77,11 @@ def test_cited_body_does_not_claim_comments_or_subtitles_were_read():
         {"text": "正文显示证据", "sources": [row["key"]]}]}]}, [row], [], coverage, False)
     for doc in (ordinary, structured):
         encoded = json.dumps(doc, ensure_ascii=False)
-        assert "正文已读 1/1" in encoded and "评论已读 0/" in encoded and "字幕已读 0/" in encoded
+        assert "正文已读" not in encoded and "评论已读" not in encoded and "字幕已读" not in encoded
+        assert "正文显示证据" in encoded and "href" in encoded
+    assert coverage[0]["sections"]["body"]["read_chunks"] == 1
+    assert coverage[0]["sections"]["comments"]["read_chunks"] == 0
+    assert coverage[0]["sections"]["subtitles"]["read_chunks"] == 0
 
 
 def test_oversized_section_is_bounded_and_manifest_reports_truncation():

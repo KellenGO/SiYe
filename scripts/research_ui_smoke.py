@@ -82,7 +82,8 @@ def main():
                 for index in range(access.sections["xhs|three"]["comments"]["chunks"]):
                     access.chunk("S3", "comments", index)
                 return {"document": answer_document("AI生成的苏州研究结果 [S1:body]。当前评论样本 [S3:comments]；S2 正文和 S3 视频评级不可用。", job["web_enabled"], job["materials"], [], access.coverage()),
-                        "coverage": access.coverage(), "external_sources": [], "web_errors": []}
+                        "coverage": access.coverage(), "external_sources": [{"id": "web|1", "title": "外部时刻表", "url": "https://example.org/timetable", "level": "网页正文（部分已读）", "fetched_at": "2026-10-05T00:00:00Z"}] if job["web_enabled"] else [],
+                        "web_errors": ["测试联网失败"] if job["web_enabled"] else []}
             manager.process = process
             tested_models = []
             conversation_inputs = []
@@ -91,6 +92,8 @@ def main():
                 return {"connection_ok": True, "web_ok": web_enabled}
             manager.probe = probe
             fail_append = False
+            fail_generation = False
+            generation_attempts = 0
             app = FastAPI()
             app.include_router(spaces_router)
             app.include_router(research_router)
@@ -99,11 +102,17 @@ def main():
             app.dependency_overrides[get_research_jobs] = lambda: manager
             with TestClient(app, base_url="http://127.0.0.1") as client:
                 def route_request(route):
+                    nonlocal generation_attempts
                     request = route.request
                     path = urlparse(request.url).path
                     if not request.url.startswith(origin + "/"):
                         route.abort()
                     elif path.startswith(("/api/spaces", "/api/research")):
+                        if path.endswith("/generate") and request.method == "POST":
+                            generation_attempts += 1
+                            if fail_generation:
+                                route.fulfill(status=503, json={"detail": "测试回答启动失败"})
+                                return
                         if fail_append and path.endswith("/note") and request.method == "PUT":
                             route.fulfill(status=503, json={"detail": "测试保存失败"})
                             return
@@ -228,23 +237,23 @@ def main():
                 note.fill("生成前的手写笔记")
                 panel.get_by_label("给 AI 发送消息", exact=True).fill("苏州三天旅行怎么安排？")
                 panel.get_by_role("button", name="发送消息", exact=True).click()
-                expect(panel.get_by_text("等待检查资料", exact=True)).to_be_visible()
+                expect(panel.get_by_text("正在分析资料", exact=True)).to_be_visible()
                 expect(panel.locator(".research-user-message")).to_contain_text("苏州三天旅行怎么安排？")
-                if panel.locator(".research-tool-trace").get_attribute("open") is None:
-                    panel.locator(".research-tool-trace > summary").click()
-                if panel.locator(".research-material-details").get_attribute("open") is None:
-                    panel.locator(".research-material-details > summary").click()
-                expect(panel.get_by_text("测试评论读取失败", exact=False)).to_be_visible()
-                expect(panel.locator(".space-research-tags").first).to_contain_text("08:42 · 平台原生")
-                web.check()
-                expect(last_turn(panel).locator(".research-message-label")).to_contain_text("仅空间资料")
-                panel.get_by_role("button", name="继续分析", exact=True).click()
+                expect(last_turn(panel).get_by_text("我先查看攻略中的路线和交通信息。", exact=True)).not_to_be_visible()
                 note.press("Control+End")
                 note.press_sequentially("，生成期间继续写")
-                expect(last_turn(panel).get_by_role("button", name="追加到笔记", exact=True)).to_be_visible(timeout=15000)
+                expect(last_turn(panel).get_by_role("button", name="一键写入笔记", exact=True)).to_be_visible(timeout=15000)
                 expect(last_turn(panel).locator(".space-research-preview a").first).to_have_attribute("href", "https://www.xiaohongshu.com/explore/one")
-                expect(last_turn(panel).locator(".space-research-preview")).to_contain_text("S1 评论：测试评论读取失败")
-                expect(last_turn(panel).locator(".space-research-preview")).to_contain_text("字幕已读 0/1")
+                assert last_turn(panel).locator(".research-tool-trace").get_attribute("open") is None
+                expect(last_turn(panel).locator(".space-research-preview")).not_to_contain_text("测试评论读取失败")
+                expect(last_turn(panel).locator(".space-research-preview")).not_to_contain_text("字幕已读")
+                expect(last_turn(panel).locator(".space-research-preview")).not_to_contain_text("生成于")
+                expect(last_turn(panel).locator(".space-research-materials")).not_to_be_visible()
+                expect(last_turn(panel).get_by_label("工具调用过程", exact=True)).not_to_be_visible()
+                web.check()
+                last_turn(panel).get_by_text("过程与资料详情", exact=True).click()
+                expect(last_turn(panel).locator(".research-tool-trace")).to_contain_text("仅空间资料")
+                expect(last_turn(panel).locator(".space-research-materials")).to_contain_text("测试评论读取失败")
                 expect(last_turn(panel).locator(".space-research-tags").first).to_contain_text("01:27 · 本地 AI 转写", timeout=10000)
                 reading = last_turn(panel).locator(".space-research-materials article")
                 expect(reading.nth(1)).to_contain_text("正文 未取得可读内容")
@@ -254,7 +263,7 @@ def main():
                 expect(note).not_to_contain_text("AI生成的苏州研究结果")
                 expect(page.locator(".space-note-status")).to_contain_text("已保存到本机")
                 fail_append = True
-                last_turn(panel).get_by_role("button", name="追加到笔记", exact=True).click()
+                last_turn(panel).get_by_role("button", name="一键写入笔记", exact=True).click()
                 expect(last_turn(panel).get_by_role("button", name="重试保存笔记", exact=True)).to_be_enabled()
                 expect(panel.get_by_role("alert")).to_contain_text("保存失败")
                 assert "AI生成的苏州研究结果" not in json.dumps(store.get_space(first)["note_document"], ensure_ascii=False)
@@ -264,9 +273,11 @@ def main():
                 assert panel.bounding_box()["width"] >= 670, "Saved sidebar width was lost after reload"
                 note = open_note()
                 expect(note).not_to_contain_text("AI生成的苏州研究结果")
-                last_turn(panel).get_by_role("button", name="追加到笔记", exact=True).click()
+                last_turn(panel).get_by_role("button", name="一键写入笔记", exact=True).click()
                 expect(note).to_contain_text("生成期间继续写")
                 expect(note).to_contain_text("AI生成的苏州研究结果")
+                expect(note).not_to_contain_text("正文已读")
+                expect(note).not_to_contain_text("生成于")
                 expect(page.locator(".space-note-status")).to_contain_text("已保存到本机")
                 first_conversation = list(manager.jobs.values())[-1]["conversation_id"]
                 panel.get_by_label("给 AI 发送消息", exact=True).fill("交通预算是多少？")
@@ -274,21 +285,27 @@ def main():
                 expect(last_turn(panel).get_by_text("正在分析资料", exact=True)).to_be_visible()
                 assert list(manager.jobs.values())[-1]["conversation_id"] == first_conversation
                 expect(panel.get_by_role("button", name="新会话", exact=True)).to_be_disabled()
-                expect(last_turn(panel).get_by_role("button", name="追加到笔记", exact=True)).to_be_visible(timeout=15000)
+                expect(last_turn(panel).get_by_role("button", name="一键写入笔记", exact=True)).to_be_visible(timeout=15000)
                 expect(panel.locator(".research-chat-turn")).to_have_count(2)
                 fail_append = True
-                last_turn(panel).get_by_role("button", name="追加到笔记", exact=True).click()
+                last_turn(panel).get_by_role("button", name="一键写入笔记", exact=True).click()
                 expect(last_turn(panel).get_by_role("button", name="重试保存笔记", exact=True)).to_be_enabled()
                 fail_append = False
                 last_turn(panel).get_by_role("button", name="重试保存笔记", exact=True).click()
-                expect(last_turn(panel).get_by_role("button", name="已追加到笔记", exact=True)).to_be_disabled()
+                expect(last_turn(panel).get_by_role("button", name="已写入笔记", exact=True)).to_be_disabled()
                 assert json.dumps(store.get_space(first)["note_document"], ensure_ascii=False).count("AI生成的苏州研究结果") == 2, "Retry inserted the same result twice"
                 assert conversation_inputs[0] == [] and conversation_inputs[1][0]["answer"], "Follow-up lost prior answers"
                 assert page.locator(".space-note-content").bounding_box()["height"] >= 300
+                expect(last_turn(panel).get_by_label("工具调用过程", exact=True)).not_to_be_visible()
+                last_turn(panel).get_by_text("过程与资料详情", exact=True).click()
                 expect(panel.get_by_label("工具调用过程", exact=True).last).to_be_visible()
+                expect(last_turn(panel).get_by_role("link", name="外部时刻表", exact=True)).to_be_visible()
+                expect(last_turn(panel).locator(".space-research-preview")).not_to_contain_text("网页正文（部分已读）")
                 expect(panel.get_by_text("我先查看攻略中的路线和交通信息。", exact=True).last).to_be_visible()
                 panel.locator(".research-tool-step > summary").last.click()
                 expect(panel.get_by_text("苏州攻略 · 第 1 段 · 128 字符", exact=True).last).to_be_visible()
+                for detail in panel.locator(".research-tool-trace[open] > summary").all():
+                    detail.click()
                 page.screenshot(path=str(ROOT / "build/research-desktop.png"), full_page=True)
                 page.locator(".space-research-dialog").screenshot(path=str(ROOT / "build/research-chat.png"))
                 panel.get_by_role("button", name="展开 AI 工作区", exact=True).click()
@@ -310,25 +327,36 @@ def main():
                 panel.get_by_role("button", name="总结这些资料的关键结论", exact=True).click()
                 expect(panel.get_by_label("给 AI 发送消息", exact=True)).to_have_value("总结这些资料的关键结论")
                 panel.get_by_role("button", name="发送消息", exact=True).click()
-                expect(panel.get_by_text("等待检查资料", exact=True)).to_be_visible()
+                expect(panel.get_by_text("正在分析资料", exact=True)).to_be_visible()
                 panel.get_by_role("button", name="停止回答", exact=True).click()
                 expect(panel.get_by_text("研究已取消", exact=True)).to_be_visible()
                 assert list(manager.jobs.values())[-1]["conversation_id"] != first_conversation
                 panel.get_by_label("给 AI 发送消息", exact=True).fill("重新开始")
                 panel.get_by_role("button", name="发送消息", exact=True).click()
-                expect(panel.get_by_text("等待检查资料", exact=True)).to_be_visible()
+                expect(panel.get_by_text("正在分析资料", exact=True)).to_be_visible()
                 expect(panel.locator(".research-chat-turn")).to_have_count(1)
                 panel.get_by_role("button", name="停止回答", exact=True).click()
                 expect(panel.get_by_text("研究已取消", exact=True)).to_be_visible()
+                fail_generation = True
+                attempts_before = generation_attempts
+                panel.get_by_label("给 AI 发送消息", exact=True).fill("自动回答失败后允许手动重试")
+                panel.get_by_role("button", name="发送消息", exact=True).click()
+                expect(panel.get_by_role("alert")).to_contain_text("测试回答启动失败")
+                page.wait_for_timeout(800)
+                assert generation_attempts == attempts_before + 1, "Automatic generation retried after failure"
+                fail_generation = False
+                panel.get_by_role("button", name="继续分析", exact=True).click()
+                expect(last_turn(panel).get_by_role("button", name="一键写入笔记", exact=True)).to_be_enabled(timeout=15000)
+                assert generation_attempts == attempts_before + 2
                 choose_history(panel, "苏州三天旅行")
                 expect(panel.locator(".research-chat-turn")).to_have_count(2)
                 expect(panel.locator(".research-chat-turn").first).to_contain_text("AI生成的苏州研究结果")
-                expect(last_turn(panel).get_by_role("button", name="已追加到笔记", exact=True)).to_be_disabled()
+                expect(last_turn(panel).get_by_role("button", name="已写入笔记", exact=True)).to_be_disabled()
                 page.reload()
                 panel = open_panel()
                 choose_history(panel, "苏州三天旅行")
                 expect(panel.get_by_label("允许联网补充", exact=True)).to_be_checked()
-                expect(last_turn(panel).get_by_role("button", name="已追加到笔记", exact=True)).to_be_disabled()
+                expect(last_turn(panel).get_by_role("button", name="已写入笔记", exact=True)).to_be_disabled()
                 page.goto(origin + f"/#/spaces/{second}")
                 panel = open_panel()
                 expect(panel.get_by_label("允许联网补充", exact=True)).not_to_be_checked()
@@ -356,7 +384,7 @@ def main():
                 assert not errors, errors
                 context.close()
                 browser.close()
-                print("PASS: three-source collection/reading coverage and section links, persistent history, fullscreen/dock resizing, provider settings, source review, save recovery, per-turn append, tool steps and mobile")
+                print("PASS: automatic answers, collapsed activity/source details, section links, visible note action, save recovery, bounded generation retry, persistent history, fullscreen/dock resizing and mobile")
     finally:
         server.shutdown()
 

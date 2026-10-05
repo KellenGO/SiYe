@@ -98,14 +98,16 @@ def test_result_keeps_sources_distinct_and_rejects_invented_links():
     access.chunk(item["key"], "body", 0)
     document = result_document(note_result(), [item], [], access.coverage(), False)
     encoded = json.dumps(document, ensure_ascii=False)
-    assert "未完整分析" in encoded and "关闭" in encoded and "private" not in encoded
+    assert "未完整分析" not in encoded and "生成于" not in encoded and "private" not in encoded
+    assert "有依据的观点" in encoded and "href" in encoded and not access.coverage()[0]["complete"]
     with pytest.raises(ValueError, match="引用"):
         result_document(note_result("invented"), [item], [], access.coverage(), False)
     external = [{"id": "web|1", "title": "官方", "url": "https://example.com", "level": "仅搜索摘要", "fetched_at": "now"}]
     with pytest.raises(ValueError, match="混淆"):
         result_document(note_result("web|1"), [item], external, access.coverage(), True)
     generated = result_document(note_result("web|1", "web"), [item], external, access.coverage(), True)
-    assert "仅搜索摘要" in json.dumps(generated, ensure_ascii=False)
+    assert "仅搜索摘要" not in json.dumps(generated, ensure_ascii=False)
+    assert "https://example.com" in json.dumps(generated)
 
 
 def test_reference_link_survives_editor_default_attributes():
@@ -390,7 +392,8 @@ async def test_enabled_web_tracks_search_and_partial_page_separately(monkeypatch
     assert result["coverage"][0]["complete"]
     assert result["external_sources"][0]["level"] == "仅搜索摘要"
     assert result["external_sources"][1]["level"] == "网页正文（部分已读）"
-    assert "联网补充" in json.dumps(result["document"], ensure_ascii=False)
+    assert "联网补充" not in json.dumps(result["document"], ensure_ascii=False)
+    assert "href" in json.dumps(result["document"])
 
 
 @pytest.mark.parametrize("host", ["evil.example", "localhost.evil.example", "127.0.0.1.evil.example"])

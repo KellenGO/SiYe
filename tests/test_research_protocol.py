@@ -62,7 +62,7 @@ def test_collection_and_reading_are_independent_and_duplicate_reads_are_bounded(
                                sources(), coverage=access.coverage()),
                 result_document(submission(), sources(), [], access.coverage(), False)):
         encoded = json.dumps(doc, ensure_ascii=False)
-        assert "已读完当前 50 条样本" in encoded and "平台获取不完整" in encoded
+        assert "已读完当前 50 条样本" not in encoded and "平台获取不完整" not in encoded
         assert "href" in encoded and "xhs|" not in encoded
 
 
@@ -95,6 +95,11 @@ def test_public_and_legacy_structured_refs_share_validation_and_render_links():
     invalid_title["sections"][0]["title"] = "评论观点 [S3 评论]"
     with pytest.raises(SourceReferenceError):
         result_document(invalid_title, sources(), [], access.coverage(), False)
+
+
+def test_structured_submission_without_answer_does_not_complete_as_blank_reply():
+    with pytest.raises(ValueError, match="非空回答"):
+        result_document({"sections": [{"kind": "space", "paragraphs": []}]}, [], [], [], False)
 
 
 def test_read_guard_limits_stagnant_calls_and_new_evidence_resets_it():
@@ -195,7 +200,8 @@ async def test_three_source_chat_succeeds_with_public_ids_in_both_adapters(monke
     assert len(gaps) == 3 and all(value["chunks"] == 0 for value in gaps)
     section = result["coverage"][2]["sections"]["comments"]
     assert section["reading_complete"] and section["collection_truncated"] and section["count"] == 50
-    assert "已读完当前 50 条样本" in json.dumps(result["document"], ensure_ascii=False)
+    assert "已读完当前 50 条样本" not in json.dumps(result["document"], ensure_ascii=False)
+    assert ("[S3]" if protocol == "openai" else "[S3:comments]") in json.dumps(result["document"])
     if protocol == "openai":
         submits = [event for event in events if event.get("tool") == "submit_result"]
         assert len(submits) == 2 and submits[-1]["status"] == "completed"
