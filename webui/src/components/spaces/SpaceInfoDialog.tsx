@@ -15,7 +15,7 @@ export function SpaceInfoDialog({ space, initialName = "", onClose }: { space?: 
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     input.current?.focus();
-    return () => { previous?.isConnected && previous.focus(); };
+    return () => { if (previous?.isConnected) previous.focus(); };
   }, []);
   return createPortal(<div className="confirm-overlay" onPointerDown={(event) => { if (event.target === event.currentTarget && !spaces.busy) onClose(); }}>
     <div ref={panel} className="confirm-card space-info-card" role="dialog" aria-modal="true" aria-labelledby={id} onKeyDown={(event) => {
