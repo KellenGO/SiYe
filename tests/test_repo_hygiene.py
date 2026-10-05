@@ -22,6 +22,7 @@ import json
 import re
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -56,7 +57,7 @@ def test_release_output_is_not_tracked():
 def test_generated_artifacts_are_gitignored():
     """生成目录必须写在 .gitignore 里，避免被 git add -A 扫进来。"""
     ignore = (_ROOT / ".gitignore").read_text(encoding="utf-8")
-    for entry in ("/release/", "dist/", "build/", "webui/dist/"):
+    for entry in ("/release/", "dist/", "build/", "webui/dist/", "/.tmp_*", "/webui/.tmp_*/"):
         assert entry in ignore, f".gitignore 缺少 {entry}"
 
 
@@ -185,6 +186,20 @@ def test_product_version_is_declared_consistently():
     """
     versions = _product_versions()
     assert len(set(versions.values())) == 1, f"产品版本号不一致: {versions}"
+
+
+def test_lockfiles_match_product_version():
+    """发布改版本时也更新锁文件中的项目元数据，不改变依赖版本。"""
+    expected = _product_versions()["base/app_version.py"]
+    npm_lock = json.loads((_ROOT / "webui/package-lock.json").read_text(encoding="utf-8"))
+    uv_lock = tomllib.loads((_ROOT / "uv.lock").read_text(encoding="utf-8"))
+    versions = {
+        "webui/package-lock.json": npm_lock["version"],
+        "webui/package-lock.json packages root": npm_lock["packages"][""]["version"],
+        "uv.lock": next(package["version"] for package in uv_lock["package"]
+                        if package["name"] == "mediacrawler"),
+    }
+    assert all(version == expected for version in versions.values()), versions
 
 
 def test_product_version_is_release_shaped():

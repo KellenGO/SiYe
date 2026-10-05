@@ -199,6 +199,8 @@ database/*.db
 /cache/_*.png
 
 # pytest 临时目录（本机沙箱下系统 Temp 不可写，改用项目内目录）
+/.tmp_*
+/webui/.tmp_*/
 .pytest_tmp/
 .tmp_pytest_*/
 .tmp-pytest/

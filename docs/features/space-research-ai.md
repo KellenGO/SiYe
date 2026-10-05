@@ -62,7 +62,7 @@
 - 会话历史、任务、抓取正文和未追加的预览只保留在应用进程内；应用重启或历史任务被淘汰后需重新生成。已保存的笔记和空间联网偏好保留。生成不会提前把空间笔记正文发送给模型。
 - 原有 Windows 当前用户密钥加密仍保留。OpenAI 模式报告累计 token，不估算服务商费用；Anthropic 模式沿用模型报告费用。复制配置到其他账号或机器后需重新填写 Key。模型报告费用可能与代理实际账单不同，显示值供参考。
 - 单次网页最多 2 MB、最多五次跳转；字幕 JSON 同样限制响应大小。研究进程通信有 16 MB 单条消息上限，超大资料集合可能失败，需拆成更小空间；不会静默截去已选来源冒充全量分析。
-- 开发机已安装独立 Python 3.12.14 / faster-whisper 1.2.1，small 模型首次下载与离线重新加载通过，数据在系统用户目录而非 Git 仓库。四平台真人小样本结果见下表；不代表所有账号、帖子或 CDN 永远可用。已验证下载、时间戳转写、缓存命中、字幕分区可读和最终临时目录清理；96 MB、30 分钟、取消及失败保留另有隔离测试。未重建 EXE，冻结安装包的 ASR / DLL 兼容性仍待验收。
+- 开发机已安装独立 Python 3.12.14 / faster-whisper 1.2.1，small 模型首次下载与离线重新加载通过，数据在系统用户目录而非 Git 仓库。四平台真人小样本结果见下表；不代表所有账号、帖子或 CDN 永远可用。已验证下载、时间戳转写、缓存命中、字幕分区可读和最终临时目录清理；96 MB、30 分钟、取消及失败保留另有隔离测试。V1.2 候选 EXE 已重建，并通过 OpenAI／旧 SDK 冻结 worker 的模拟服务验收；可选 ASR 引擎在冻结安装包中的运行环境／DLL 兼容性仍待实装验收。
 - Windows 负载下的取消清理仍需复核：曾有并行 smoke 在临时目录清理检查中失败，串行 smoke 和 16 次隔离取消均通过，尚未稳定复现原因。取消 smoke 会检查任务确实以取消结束，不忽略清理异常。
 
 ## 测试怎么跑
@@ -79,7 +79,7 @@
 - 后端：`.venv/Scripts/python.exe -m pytest tests/test_research.py tests/test_research_openai.py tests/test_research_sections.py tests/test_research_protocol.py tests/test_research_transcription.py tests/test_research_acquisition.py tests/test_spaces.py tests/test_account_coordinator.py tests/test_tray_launcher.py tests/test_docs_wiki.py tests/test_webui_ui_contract.py --basetemp=.tmp_pytest_ai/check`，先创建父目录。所有写入数据测试使用临时目录，不下载真实模型、不访问真人平台。
 - 前端：`webui` 内运行 `npm run test:search` 和 `npm run build`，笔记测试覆盖生成期间修改、重复追加、冲突与超限。
 - SDK：先按项目锁文件安装依赖并运行 `scripts/prepare_agent_runtime.py`，再运行 `.venv/Scripts/python.exe scripts/research_ai_smoke.py`。真实 worker 连接本机模拟 OpenAI / Anthropic 服务，不用真实 Key、不产生服务费用；覆盖共享规则、公开分区引用、普通回答、DeepSeek/Gemini 元数据、结构化提交、工具范围、取消和清理，也模拟三条资料中一条正文失败、一条评论样本完整读取而平台获取截断、视频字幕失败。单元测试另覆盖伪引用、未读分区、批量提交、重复读取与有限重试、网页摘要／正文、联网关闭、追问重读与上下文预算。
-- Windows 包：上述 SDK smoke 加 `--exe build/ai-exe-dist/SiYe/SiYe.exe`，验证冻结后的研究 worker。构建仍由 `scripts/build_exe.ps1` 统一入口准备运行程序。
+- Windows 包：上述 SDK smoke 加 `--exe <发布目录>/SiYe.exe`，验证冻结后的研究 worker。构建仍由 `scripts/build_exe.ps1` 统一入口准备运行程序；当前候选路径及验证情况见 [V1.2 发布检查](../releases/v1.2.0.md)。
 - 界面：构建后运行 `scripts/research_ui_smoke.py` 与 `scripts/spaces_ui_smoke.py`。临时 SQLite 与模拟研究服务，覆盖设置、消息及默认折叠的执行／资料记录、自动回答和启动失败后手动重试、任务联网快照、手写与保存恢复、逐轮追加、独立偏好、拖拽／键盘调宽及刷新记忆、全高停靠与顶栏同步压缩、四边贴齐的全屏及拖回侧栏、新会话／切换历史保留列表与搜索条件、新会话／追问／搜索历史和手机全屏／固定操作栏／Escape；截图在忽略的 `build/`。空间删除测试须隔离 AI 配置和任务管理器，不能只隔离 SQLite。
 
 ## 启用可选本地视频转写

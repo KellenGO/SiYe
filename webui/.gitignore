@@ -35,5 +35,5 @@ yarn-error.log*
 /coverage
 .playwright-mcp/
 
-# Round 12 test compile output (npm run test:search)
+# Test compile output (npm run test:search)
 .test-dist/

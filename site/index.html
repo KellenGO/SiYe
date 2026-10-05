@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>四野 · 一次搜索，看遍小红书 / 抖音 / B站 / 知乎</title>
-<meta name="description" content="四野把小红书、抖音、B站、知乎的搜索结果合并到一个页面：四平台并行搜索、统一排序、跨平台去重，支持筛选、收藏与导出。本机运行，数据不出电脑。Windows 安装器下载。">
+<meta name="description" content="四野把小红书、抖音、B站、知乎的搜索结果合并到一个页面：四平台并行搜索、统一排序、跨平台去重，支持筛选、收藏、研究空间与可选 AI 助手。本机运行，Windows 安装器下载。">
 <meta name="keywords" content="四野,SiYe,聚合搜索,跨平台搜索,小红书搜索,抖音搜索,B站搜索,知乎搜索,中文内容搜索,MediaCrawler">
 <meta name="author" content="KellenGO">
 <meta name="theme-color" content="#6573ff">
@@ -14,7 +14,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="四野">
 <meta property="og:title" content="四野 · 一次搜索，看遍小红书 / 抖音 / B站 / 知乎">
-<meta property="og:description" content="从不同的地方，找到你的答案。四平台并行搜索，一个结果页统一排序、去重、筛选、收藏与导出。本机运行，数据不出电脑。">
+<meta property="og:description" content="从不同的地方，找到你的答案。四平台并行搜索，一个结果页统一排序、去重、筛选、收藏与导出，支持研究空间与可选 AI 助手。本机运行。">
 <meta property="og:url" content="https://kellengo.github.io/SiYe/">
 <meta property="og:image" content="https://kellengo.github.io/SiYe/og.png">
 <meta property="og:image:width" content="1200">
@@ -39,7 +39,7 @@
   "url": "https://kellengo.github.io/SiYe/",
   "downloadUrl": "https://github.com/KellenGO/SiYe/releases/latest/download/SiYe-Setup-Windows-x64.exe",
   "codeRepository": "https://github.com/KellenGO/SiYe",
-  "softwareVersion": "1.0.0",
+  "softwareVersion": "1.2.0",
   "releaseNotes": "https://github.com/KellenGO/SiYe/releases",
   "screenshot": "https://kellengo.github.io/SiYe/og.png",
   "license": "https://github.com/KellenGO/SiYe/blob/master/LICENSE",
@@ -531,7 +531,7 @@ html.js .reveal.in{opacity:1;transform:none}
 <!-- ============ Hero ============ -->
 <section class="hero" id="top">
   <div class="wrap">
-    <span class="pill brand"><span class="dot"></span> 开源 · 本机运行 · 数据不出电脑</span>
+    <span class="pill brand"><span class="dot"></span> 开源 · 本机运行 · 本地优先</span>
 
     <div class="wordmark" aria-hidden="true" style="margin-top:22px">四野<i></i></div>
 
@@ -935,7 +935,7 @@ html.js .reveal.in{opacity:1;transform:none}
           </li>
           <li>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>
-            <span><b>隐私：</b>账号 profile、缓存和运行数据都存在本机目录，不上传</span>
+            <span><b>隐私：</b>账号与收藏存于本机；可选 AI 会向所配置服务发送问题及相关资料</span>
           </li>
         </ul>
         <p class="small-note">运行期间不要删除 EXE 旁边的 <code>_internal</code>、<code>webui</code> 等运行文件。如果 <code>/api/health</code> 显示浏览器不可用，先装好或修复 Chrome / Edge 再重启。</p>
@@ -1025,8 +1025,9 @@ html.js .reveal.in{opacity:1;transform:none}
       <details class="q reveal">
         <summary>我的账号和数据会被上传到服务器吗？</summary>
         <div class="a">
-          <p>不会。后端只监听 <code>127.0.0.1:8080</code>，搜索请求由本机发出；账号 profile、缓存和运行数据都在本机目录里。</p>
+          <p>后端只监听 <code>127.0.0.1:8080</code>，搜索请求由本机发出；账号 profile、缓存和运行数据存于本机目录。使用可选 AI 助手时，问题及相关空间资料会发送给你配置的模型服务，测试和问答可能计费。</p>
           <p>本地收藏和备注存在本机数据库（<code>%LOCALAPPDATA%\SiYe\data\library.db</code>）里，旧版本目录会在启动时无损合并；导出 / 导入 JSON 备份也完全在本机完成，不上传任何内容。</p>
+          <p>每个空间的联网补充默认关闭，开启后会请求外部搜索和网页。AI 使用方法与可选本地转写说明见<a href="guide.html">使用说明</a>。</p>
         </div>
       </details>
 
@@ -1116,7 +1117,7 @@ html.js .reveal.in{opacity:1;transform:none}
       <h4>数据使用与合规</h4>
       <p>
         四野只请求各平台上公开可见的搜索结果，用来替代你手动逐个打开四个平台搜索的动作，结果仅供个人查阅与整理；
-        账号 profile、缓存、收藏和运行数据全部保存在本机目录，不上传服务器。请遵守目标平台的服务条款与所在地法律法规
+        账号 profile、缓存、收藏和运行数据保存在本机目录；使用可选 AI 时，问题及相关空间资料会发送给你配置的模型服务。请遵守目标平台的服务条款与所在地法律法规
         （含个人信息保护、数据安全相关规定），并只同步和使用你本人有权使用的账号。
       </p>
 

@@ -46,3 +46,5 @@
 `scripts/build_exe.ps1` → `scripts/package_exe.py`（校验 + 便携 ZIP）→ `scripts/build_installer.ps1`
 → `scripts/exe_clean_room_smoke.py` / `scripts/installer_clean_room_smoke.py`
 → `.github/workflows/release-package.yml`。落地页与使用说明网页在 `site/`（GitHub Pages 自动部署）。
+
+当前 [V1.2.0 发布检查](releases/v1.2.0.md)记录候选包验证及尚待真人确认的边界。

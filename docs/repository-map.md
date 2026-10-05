@@ -16,9 +16,14 @@
 | `docs/decisions/`、`docs/history/` | 取舍与历史记录，历史记录不代表当前验收状态 |
 | `.workbuddy/memory/` | 可选的本机笔记，不入库也不承担交接 |
 | `build/`、`dist/`、`.tmp_pytest_*/` | 可重建的构建、运行及测试产物；不要提交 |
+| `.tmp_*/`、根目录 `.tmp_*.py`、`webui/.test-dist/` | 临时验证与一次性诊断产物；确认无在用进程、Git worktree、共享依赖链接或真实用户数据后才可清理 |
 | `data/`、`browser_data/`、`.cache/` | 用户收藏、登录资料及缓存；不能当作普通构建垃圾清理 |
 
 源码运行和 EXE 运行的数据目录不同。旧测试包资料保存在根目录 `data/version-backups/`，未自动合并数据库；发布包必须从干净目录构建，不能把日常使用后的 dist 直接上传。
+
+`cache/` 是受跟踪的 Python 缓存实现，`.cache/` 才是本机缓存；`build/tools/` 是本机构建工具，`agent_runtime/` 是固定版本 AI 运行程序，`.venv/` 与 `webui/node_modules/` 是开发依赖。它们不能仅因未进入 Git 就当作垃圾。根目录 `.tmp_*` 的忽略规则已入库，不再依赖某一台机器的 `.git/info/exclude`。
+
+V1.2 发布准备与尚待验收的边界见 [发布检查](releases/v1.2.0.md)。当前 `dist/` 仍是旧版本日常入口，准备候选包时使用独立目录，不覆盖已有运行环境。
 
 其他 worktree 的实际位置和分支用 `git worktree list` 核对，不按旧目录名猜测。接手前检查其状态；若有未提交文件，先确认归属，不清理或覆盖。合并后继续开发从最新 `master` 开始。
 

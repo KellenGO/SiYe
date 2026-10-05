@@ -31,6 +31,7 @@
 - **版本号只有一个真值**：运行时统一读 `base/app_version.py` 的 `APP_VERSION`（`api/main.py` 与
   `api/services/environment_health.py` 都从它取）。`pyproject.toml`（打包与安装器）和
   `webui/package.json`（前后端版本匹配）由 `tests/test_repo_hygiene.py` 盯着对齐。
+  发布时也同步 `uv.lock` 的项目版本及 `webui/package-lock.json` 的根包版本，卫生测试检查两份锁文件；不为版本升级重新解析或更新依赖。
   以前这五处各写一份，发版时改一个漏一个。帮助页「项目与作者」区显示当前版本。
   发版顺序：**先改这三处 → 提交 → 再打 tag**（`scripts/build_exe.ps1` 会校验 tag 与 pyproject 一致）。
 

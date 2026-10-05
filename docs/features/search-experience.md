@@ -181,11 +181,11 @@
 
 ## 测试怎么跑
 
-前端（本机 npm 被拦，用 node 绝对路径）：
+前端（在 `webui/` 内使用 PowerShell）：
 
 ```shell
-node node_modules/typescript/bin/tsc -p tsconfig.test.json
-node run-compiled-tests.mjs
+npm run test:search
+npm run build
 ```
 
 相关用例：`webui/tests/searchExperience.test.ts`、`progressiveDisplay.test.ts`、
