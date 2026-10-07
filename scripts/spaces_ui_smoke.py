@@ -328,18 +328,68 @@ def main():
             popup.close()
             expect(panel.get_by_text("已保存到本机", exact=True)).to_be_visible()
             bounds = right.bounding_box()
-            handle = right.get_by_role("button", name="调整笔记大小", exact=True)
+            handle = right.get_by_role("separator", name="调整笔记宽度", exact=True)
             box = handle.bounding_box()
-            page.mouse.move(box["x"] + 12, box["y"] + 12)
+            page.mouse.move(box["x"] + 4, box["y"] + 100)
             page.mouse.down()
-            page.mouse.move(box["x"] - 120, box["y"] - 90, steps=12)
+            page.mouse.move(box["x"] - 128, box["y"] + 100, steps=12)
             page.mouse.up()
             page.wait_for_timeout(300)
             resized = right.bounding_box()
-            assert resized["width"] > bounds["width"] + 100 and resized["height"] < bounds["height"] - 70
+            assert resized["width"] > bounds["width"] + 100 and resized["height"] == bounds["height"]
+            bottom = right.get_by_role("separator", name="调整笔记高度", exact=True)
+            box = bottom.bounding_box()
+            page.mouse.move(box["x"] + 100, box["y"] + 4)
+            page.mouse.down()
+            page.mouse.move(box["x"] + 100, box["y"] - 96, steps=12)
+            page.mouse.up()
+            page.wait_for_timeout(300)
+            shorter = right.bounding_box()
+            assert shorter["height"] < resized["height"] - 90 and shorter["width"] == resized["width"]
             handle.press("ArrowLeft")
             page.wait_for_timeout(300)
             assert right.bounding_box()["width"] > resized["width"] + 20
+            bottom.press("ArrowDown")
+            page.wait_for_timeout(300)
+            assert right.bounding_box()["height"] > shorter["height"] + 20
+
+            # Fullscreen and restore retain the same editor, selection and undo history.
+            normal = right.bounding_box()
+            note.press("Control+End")
+            note.evaluate("el => { window.spaceNoteElement = el; }")
+            right.get_by_role("button", name="全屏显示笔记", exact=True).click()
+            page.wait_for_timeout(300)
+            assert right.bounding_box() == {"x": 0, "y": 0, "width": 1440, "height": 1000}
+            assert page.evaluate("document.body.classList.contains('has-note-expanded')")
+            assert page.evaluate("document.documentElement.scrollHeight === innerHeight")
+            assert note.evaluate("el => el === window.spaceNoteElement")
+            expect(note).to_contain_text("苏州行程研究")
+            note.press_sequentially("全屏编辑验证")
+            page.screenshot(path=str(ROOT / "build/spaces-note-fullscreen.png"), full_page=True)
+            right.get_by_role("button", name="还原笔记窗口", exact=True).click()
+            page.wait_for_timeout(300)
+            assert right.bounding_box() == normal
+            assert not page.evaluate("document.body.classList.contains('has-note-expanded')")
+            expect(note).to_contain_text("全屏编辑验证")
+            note.press("Control+Z")
+            expect(note).not_to_contain_text("全屏编辑验证")
+            right.get_by_role("button", name="全屏显示笔记", exact=True).click()
+            note.press("Escape")
+            page.wait_for_timeout(300)
+            assert right.bounding_box() == normal
+            expect(note).to_be_visible()
+            handle.press("End")
+            page.wait_for_timeout(300)
+            box = handle.bounding_box()
+            page.mouse.move(box["x"] + 4, box["y"] + 100)
+            page.mouse.down()
+            page.mouse.move(box["x"] + 604, box["y"] + 100, steps=12)
+            page.mouse.up()
+            page.wait_for_timeout(300)
+            assert right.bounding_box()["width"] == 840
+            assert right.bounding_box()["height"] == normal["height"]
+            assert not page.evaluate("document.body.classList.contains('has-note-expanded')")
+            assert note.evaluate("el => el === window.spaceNoteElement")
             handle.press("Home")
             page.wait_for_timeout(300)
             assert abs(right.bounding_box()["width"] - bounds["width"]) < 1
@@ -540,7 +590,7 @@ def main():
             note.press_sequentially("预约博物馆")
             note.locator('input[type="checkbox"]').check()
             expect(panel.get_by_text("已保存到本机", exact=True)).to_be_visible()
-            right.get_by_role("button", name="调整笔记大小", exact=True).press("ArrowLeft")
+            right.get_by_role("separator", name="调整笔记宽度", exact=True).press("ArrowLeft")
             page.wait_for_timeout(300)
             saved_width = right.bounding_box()["width"]
             page.reload()
@@ -552,7 +602,7 @@ def main():
             expect(note.locator('span[style*="font-size: 24px"]')).not_to_have_count(0)
             page.wait_for_timeout(300)
             assert abs(right.bounding_box()["width"] - saved_width) < 1
-            right.get_by_role("button", name="调整笔记大小", exact=True).press("Home")
+            right.get_by_role("separator", name="调整笔记宽度", exact=True).press("Home")
             page.get_by_role("button", name="归档保留", exact=True).click()
             expect(page.get_by_text("已归档 · 只读", exact=True)).to_be_visible()
             expect(note).to_have_attribute("contenteditable", "false")

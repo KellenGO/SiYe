@@ -236,6 +236,23 @@ def main():
                 note = open_note()
                 note.fill("生成前的手写笔记")
                 panel.get_by_label("给 AI 发送消息", exact=True).fill("苏州三天旅行怎么安排？")
+                edge = page.locator(".space-edge-right")
+                note_bounds = edge.bounding_box()
+                ai_bounds = page.locator(".space-research-dialog").bounding_box()
+                note.evaluate("el => { window.fullscreenNoteEditor = el; }")
+                edge.get_by_role("button", name="全屏显示笔记", exact=True).click()
+                page.wait_for_timeout(300)
+                assert edge.bounding_box() == {"x": 0, "y": 0, "width": 1440, "height": 1000}
+                expect(panel).not_to_be_visible()
+                assert note.evaluate("el => el === window.fullscreenNoteEditor")
+                page.screenshot(path=str(ROOT / "build/research-note-fullscreen.png"), full_page=True)
+                edge.get_by_role("button", name="还原笔记窗口", exact=True).click()
+                page.wait_for_timeout(300)
+                assert edge.bounding_box() == note_bounds
+                assert page.locator(".space-research-dialog").bounding_box() == ai_bounds
+                expect(panel).to_be_visible()
+                expect(panel.get_by_label("给 AI 发送消息", exact=True)).to_have_value("苏州三天旅行怎么安排？")
+                expect(note).to_contain_text("生成前的手写笔记")
                 panel.get_by_role("button", name="发送消息", exact=True).click()
                 expect(panel.get_by_text("正在分析资料", exact=True)).to_be_visible()
                 expect(panel.locator(".research-user-message")).to_contain_text("苏州三天旅行怎么安排？")
