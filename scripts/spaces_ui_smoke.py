@@ -22,6 +22,7 @@ from api.routers.library import library_router
 from api.routers.spaces import spaces_router
 from api.services.library_store import LibraryStore, get_library_store
 from api.services.spaces_store import SpacesStore, get_spaces_store
+from api.services import research_config as config_module, research_jobs as jobs_module
 
 
 class QuietHandler(SimpleHTTPRequestHandler):
@@ -49,10 +50,13 @@ def main():
     fail_items = False
     item_deletes = []
     errors = []
+    original_config, original_jobs = config_module.research_config, jobs_module.research_jobs
     (ROOT / "build").mkdir(exist_ok=True)
     try:
         with TemporaryDirectory(prefix="spaces-smoke-", dir=ROOT / "build") as temp, sync_playwright() as playwright:
             store = SpacesStore(Path(temp) / "library.db")
+            config_module.research_config = config_module.ResearchConfig(Path(temp) / "research-ai.json", cipher=lambda value, decrypt=False: value)
+            jobs_module.research_jobs = jobs_module.ResearchJobs(config_module.research_config)
             library = LibraryStore(store.db_path)
             app = FastAPI()
             app.include_router(spaces_router)
@@ -64,7 +68,9 @@ def main():
             def route_request(route):
                 request = route.request
                 path = urlparse(request.url).path
-                if not request.url.startswith(origin + "/"):
+                if request.url == "https://example.com/notes":
+                    route.fulfill(body="Note link opened", content_type="text/html")
+                elif not request.url.startswith(origin + "/"):
                     route.abort()
                 elif path.startswith(("/api/spaces", "/api/library")):
                     if path.endswith("/items") and request.method == "DELETE":
@@ -97,7 +103,7 @@ def main():
                     route.continue_()
 
             browser = playwright.chromium.launch(channel="msedge")
-            context = browser.new_context(viewport={"width": 1440, "height": 1000}, locale="zh-CN")
+            context = browser.new_context(viewport={"width": 1440, "height": 1000}, locale="zh-CN", permissions=["clipboard-read", "clipboard-write"])
             context.add_init_script("localStorage.setItem('mediacrawler_license_accepted', 'true'); localStorage.setItem('siye_onboarding_preference_v1', 'completed'); localStorage.setItem('mediacrawler_language', 'zh-CN')")
             context.route("**/*", route_request)
             page = context.new_page()
@@ -293,6 +299,51 @@ def main():
             assert {mark["type"] for mark in marks} == {"bold", "italic", "underline", "textStyle"}
             assert next(mark["attrs"]["fontSize"] for mark in marks if mark["type"] == "textStyle") == "24px"
 
+            # Copy exposes Markdown and HTML; file export can be shared to iOS Notes.
+            panel.get_by_role("button", name="复制笔记", exact=True).click()
+            expect(panel.get_by_role("status").filter(has_text="已复制")).to_be_visible()
+            clipboard = page.evaluate("""async () => { const item = (await navigator.clipboard.read())[0]; return {text: await (await item.getType('text/plain')).text(), html: await (await item.getType('text/html')).text()}; }""")
+            assert "***苏州行程研究***" in clipboard["text"] and "<strong>" in clipboard["html"]
+            with page.expect_download() as download_info:
+                panel.get_by_role("button", name="导出 Markdown", exact=True).click()
+            download = download_info.value
+            assert download.suggested_filename.endswith(".md")
+            download.save_as(Path(temp) / "note.md")
+            exported = (Path(temp) / "note.md").read_text(encoding="utf-8")
+            assert exported.startswith("# ") and "***苏州行程研究***" in exported
+            note.focus()
+            note.press("Control+A")
+            note.press("Control+C")
+            assert "***苏州行程研究***" in page.evaluate("navigator.clipboard.readText()")
+            note.press("Control+End")
+            note.press("Enter")
+            note.press_sequentially("https://example.com/notes ")
+            link = note.locator('a[href="https://example.com/notes"]')
+            expect(link).to_be_visible()
+            with page.expect_popup() as popup_info:
+                link.click()
+            popup = popup_info.value
+            popup.wait_for_load_state()
+            assert popup.url == "https://example.com/notes"
+            popup.close()
+            expect(panel.get_by_text("已保存到本机", exact=True)).to_be_visible()
+            bounds = right.bounding_box()
+            handle = right.get_by_role("button", name="调整笔记大小", exact=True)
+            box = handle.bounding_box()
+            page.mouse.move(box["x"] + 12, box["y"] + 12)
+            page.mouse.down()
+            page.mouse.move(box["x"] - 120, box["y"] - 90, steps=12)
+            page.mouse.up()
+            page.wait_for_timeout(300)
+            resized = right.bounding_box()
+            assert resized["width"] > bounds["width"] + 100 and resized["height"] < bounds["height"] - 70
+            handle.press("ArrowLeft")
+            page.wait_for_timeout(300)
+            assert right.bounding_box()["width"] > resized["width"] + 20
+            handle.press("Home")
+            page.wait_for_timeout(300)
+            assert abs(right.bounding_box()["width"] - bounds["width"]) < 1
+
             # Editing focus keeps an unpinned panel open; Escape keeps the same DOM/editor.
             note.evaluate("el => { window.spaceNoteElement = el; }")
             right.get_by_role("button", name="取消固定研究笔记", exact=True).click()
@@ -479,6 +530,7 @@ def main():
                 page.wait_for_timeout(250)
                 page.screenshot(path=str(ROOT / f"build/spaces-layout-{width}.png"), full_page=True)
             page.set_viewport_size({"width": 1440, "height": 1000})
+            page.wait_for_timeout(300)
             page.screenshot(path=str(ROOT / "build/spaces-desktop.png"), full_page=True)
             note = page.get_by_role("textbox", name="空间笔记编辑器", exact=True)
             note.press("Control+End")
@@ -488,6 +540,9 @@ def main():
             note.press_sequentially("预约博物馆")
             note.locator('input[type="checkbox"]').check()
             expect(panel.get_by_text("已保存到本机", exact=True)).to_be_visible()
+            right.get_by_role("button", name="调整笔记大小", exact=True).press("ArrowLeft")
+            page.wait_for_timeout(300)
+            saved_width = right.bounding_box()["width"]
             page.reload()
             open_edge(right, "打开笔记")
             right.get_by_role("button", name="固定研究笔记", exact=True).click()
@@ -495,6 +550,9 @@ def main():
             expect(note).to_contain_text("预约博物馆")
             expect(note.locator('input[type="checkbox"]')).to_be_checked()
             expect(note.locator('span[style*="font-size: 24px"]')).not_to_have_count(0)
+            page.wait_for_timeout(300)
+            assert abs(right.bounding_box()["width"] - saved_width) < 1
+            right.get_by_role("button", name="调整笔记大小", exact=True).press("Home")
             page.get_by_role("button", name="归档保留", exact=True).click()
             expect(page.get_by_text("已归档 · 只读", exact=True)).to_be_visible()
             expect(note).to_have_attribute("contenteditable", "false")
@@ -572,6 +630,7 @@ def main():
             browser.close()
             print("PASS: spaces and favorites sidebars, local/remote favorites add/remove and note isolation, cross-page drafts, stable content layout, icon-only toggles, grouped sources, save retry, rich note persistence, detail editor and mobile")
     finally:
+        config_module.research_config, jobs_module.research_jobs = original_config, original_jobs
         server.shutdown()
 
 

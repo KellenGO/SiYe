@@ -120,8 +120,7 @@ async def job_create(payload: TaskInput, store: SpacesStore = Depends(get_spaces
 def latest(space_id: int, store: SpacesStore = Depends(get_spaces_store), manager=Depends(get_research_jobs)):
     try:
         store.get_space(space_id)
-        matches = [identity for identity, job in manager.jobs.items() if job["space_id"] == space_id]
-        return manager.public(matches[-1], store) if matches else None
+        return manager.latest(space_id, store)
     except ValueError as error:
         translate(error)
 
@@ -139,7 +138,7 @@ async def conversations(space_id: int, store: SpacesStore = Depends(get_spaces_s
 async def conversation(space_id: int, conversation_id: str, store: SpacesStore = Depends(get_spaces_store), manager=Depends(get_research_jobs)):
     try:
         store.get_space(space_id)
-        return [manager.public(job["job_id"], store) for job in manager.conversation_jobs(space_id, conversation_id)]
+        return [manager.public(job["job_id"], store, job=job) for job in manager.conversation_jobs(space_id, conversation_id)]
     except ValueError as error:
         translate(error)
 

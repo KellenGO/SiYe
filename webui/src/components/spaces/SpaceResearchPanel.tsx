@@ -57,7 +57,7 @@ export default function SpaceResearchPanel({ spaceId, spaceName, sourceCount, ed
     const version = jobVersion.current;
     const next = await api.latestResearch(spaceId);
     const history = next ? await api.getResearchConversation(spaceId, next.conversation_id) : [];
-    if (version === jobVersion.current) { setJob(next); setTurns(history.slice(-10)); setInitialized(true); }
+    if (version === jobVersion.current) { setJob(next); setTurns(history); setInitialized(true); }
     return next;
   }, enabled: open && !initialized, retry: false, refetchOnWindowFocus: false });
   const preference = useQuery({ queryKey: ["research-web", spaceId], queryFn: () => api.getWebPreference(spaceId), enabled: open, retry: false });
@@ -119,7 +119,7 @@ export default function SpaceResearchPanel({ spaceId, spaceName, sourceCount, ed
     const next = await request();
     if (version !== jobVersion.current) return;
     setJob(next); setInitialized(true);
-    setTurns((previous) => [...previous.filter((row) => row.job_id !== next.job_id && row.conversation_id === next.conversation_id).map((row) => row.job_id === job?.job_id ? job : row).slice(-9), next]);
+    setTurns((previous) => [...previous.filter((row) => row.job_id !== next.job_id && row.conversation_id === next.conversation_id).map((row) => row.job_id === job?.job_id ? job : row), next]);
     void conversations.refetch();
   };
   const start = () => run(async () => {
@@ -135,7 +135,7 @@ export default function SpaceResearchPanel({ spaceId, spaceName, sourceCount, ed
     const version = ++jobVersion.current;
     const history = await api.getResearchConversation(spaceId, id);
     if (version !== jobVersion.current) return;
-    setTurns(history.slice(-10)); setJob(history[history.length - 1] ?? null); setInitialized(true); setQuestion("");
+    setTurns(history); setJob(history[history.length - 1] ?? null); setInitialized(true); setQuestion("");
     if (narrow) setSessionsOpen(false);
   });
   const append = (result: api.ResearchJob) => run(async () => {
@@ -279,5 +279,5 @@ export default function SpaceResearchPanel({ spaceId, spaceName, sourceCount, ed
 }
 
 function wasApplied(identity: string): boolean {
-  try { return sessionStorage.getItem(`siye-research-applied:${identity}`) === "1"; } catch { return false; }
+  try { return localStorage.getItem(`siye-research-applied:${identity}`) === "1"; } catch { return false; }
 }

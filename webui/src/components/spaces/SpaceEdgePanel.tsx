@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Pin, PinOff, X } from "lucide-react";
+import { MoveDiagonal2, Pin, PinOff, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 export function SpaceEdgePanel({ side, label, triggerLabel, icon, open, pinned, disabled = false, hidden = false, closeLabel, onOpenChange, onPinChange, children }: {
@@ -12,6 +12,21 @@ export function SpaceEdgePanel({ side, label, triggerLabel, icon, open, pinned, 
   const trigger = useRef<HTMLButtonElement>(null);
   const surface = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState(0);
+  const [resizing, setResizing] = useState(false);
+  const [size, setSize] = useState<{ width: number; height: number } | null>(() => {
+    try {
+      const value = JSON.parse(localStorage.getItem("siye-note-size") ?? "null");
+      return Number.isFinite(value?.width) && Number.isFinite(value?.height) ? value : null;
+    } catch { return null; }
+  });
+  const drag = useRef<{ pointer: number; x: number; y: number; width: number; height: number } | null>(null);
+  const resize = (width: number, nextHeight: number) => {
+    const right = root.current?.getBoundingClientRect().right ?? window.innerWidth - 8;
+    const top = root.current?.getBoundingClientRect().top ?? 112;
+    const next = { width: Math.max(220, Math.min(width, right - 8)), height: Math.max(300, Math.min(nextHeight, window.innerHeight - top - 24)) };
+    setSize(next);
+    try { localStorage.setItem("siye-note-size", JSON.stringify(next)); } catch { /* Current size still works. */ }
+  };
   const id = useId();
   const close = useCallback(() => {
     onPinChange(false);
@@ -65,7 +80,7 @@ export function SpaceEdgePanel({ side, label, triggerLabel, icon, open, pinned, 
       element.removeEventListener("focusout", leave);
     };
   }, [disabled, hidden, open, pinned, onOpenChange, close]);
-  return createPortal(<section ref={root} hidden={hidden} className={`space-edge space-edge-${side} ${open ? "is-open" : ""}`} style={{ "--space-edge-height": `${height}px` } as CSSProperties}>
+  return createPortal(<section ref={root} hidden={hidden} className={`space-edge space-edge-${side} ${open ? "is-open" : ""} ${resizing ? "is-resizing" : ""}`} style={{ "--space-edge-height": `${height}px`, ...(side === "right" && size ? { "--space-note-width": `${size.width}px`, "--space-note-height": `${size.height}px` } : {}) } as CSSProperties}>
     <button ref={trigger} type="button" className="space-edge-trigger" aria-label={triggerLabel ?? label} aria-controls={id} aria-expanded={open} aria-hidden={open} tabIndex={open ? -1 : 0} disabled={disabled} onClick={() => onOpenChange(true)}>{icon}<span>{label}</span></button>
     <div ref={surface} id={id} className="space-edge-surface" aria-hidden={!open}>
       <div className="space-edge-head"><h2>{label}</h2><div>
@@ -74,5 +89,26 @@ export function SpaceEdgePanel({ side, label, triggerLabel, icon, open, pinned, 
       </div></div>
       {children}
     </div>
+    {side === "right" && open && <button type="button" className="space-note-resize" aria-label={t("spaces.resizeNote")} title={t("spaces.resizeNoteHint")}
+      onPointerDown={(event) => {
+        if (event.button !== 0 || !root.current) return;
+        event.preventDefault(); onPinChange(true); setResizing(true);
+        const rect = root.current.getBoundingClientRect();
+        drag.current = { pointer: event.pointerId, x: event.clientX, y: event.clientY, width: rect.width, height: rect.height };
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }}
+      onPointerMove={(event) => {
+        const start = drag.current;
+        if (start?.pointer === event.pointerId) resize(start.width + start.x - event.clientX, start.height + event.clientY - start.y);
+      }}
+      onPointerUp={(event) => { if (drag.current?.pointer === event.pointerId) { drag.current = null; setResizing(false); event.currentTarget.releasePointerCapture(event.pointerId); } }}
+      onLostPointerCapture={() => { drag.current = null; setResizing(false); }}
+      onKeyDown={(event) => {
+        if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home"].includes(event.key) || !root.current) return;
+        event.preventDefault(); onPinChange(true);
+        if (event.key === "Home") { setSize(null); try { localStorage.removeItem("siye-note-size"); } catch { /* Default size still works. */ } return; }
+        const rect = root.current.getBoundingClientRect();
+        resize(rect.width + (event.key === "ArrowLeft" ? 24 : event.key === "ArrowRight" ? -24 : 0), rect.height + (event.key === "ArrowDown" ? 24 : event.key === "ArrowUp" ? -24 : 0));
+      }}><MoveDiagonal2 aria-hidden="true" /></button>}
   </section>, document.body);
 }

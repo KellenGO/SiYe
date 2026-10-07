@@ -352,6 +352,12 @@ def main():
                 expect(panel.locator(".research-chat-turn")).to_have_count(2)
                 expect(panel.locator(".research-chat-turn").first).to_contain_text("AI生成的苏州研究结果")
                 expect(last_turn(panel).get_by_role("button", name="已写入笔记", exact=True)).to_be_disabled()
+                # Replace the server manager as a real app restart would, retaining only disk data.
+                restored = jobs_module.ResearchJobs(config)
+                restored.require_runtime = manager.require_runtime
+                restored.process = manager.process
+                manager = restored
+                jobs_module.research_jobs = restored
                 page.reload()
                 panel = open_panel()
                 choose_history(panel, "苏州三天旅行")

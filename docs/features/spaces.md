@@ -14,12 +14,15 @@
 | 页面导航与入口 | `webui/src/App.tsx`（`routeFromHash`）、`webui/src/components/layout/Header.tsx` |
 | API 与共享空间状态 | `webui/src/lib/spacesApi.ts`、`webui/src/hooks/useSpaces.tsx`（`SpacesProvider`） |
 | 笔记保存队列 | `webui/src/lib/spaceNotes.ts`（`NoteSession`） |
+| Markdown 复制与导出 | `webui/src/lib/noteExport.ts`（`noteMarkdown`、`safeNoteUrl`）、`webui/src/components/spaces/SpaceNoteController.tsx`（`NotePanel`） |
 | 空间列表、资料与信息编辑 | `webui/src/components/spaces/SpacesPage.tsx`、`webui/src/components/spaces/SpaceInfoDialog.tsx` |
 | 搜索、收藏一键加入与侧栏布局 | `webui/src/components/spaces/SpaceAddButton.tsx`、`webui/src/components/spaces/SpaceWorkspace.tsx`、`webui/src/components/spaces/SpaceEdgePanel.tsx`、`webui/src/components/favorites/FavoritesPage.tsx` |
 | 富文本笔记与详情共用编辑器 | `webui/src/components/spaces/SpaceNoteController.tsx`、`webui/src/components/spaces/WorkspaceContext.tsx`、`webui/src/components/favorites/LocalContentDrawer.tsx` |
 
 ## 关键决定
 
+- 笔记提供「复制笔记」和「导出 Markdown」。复制及选中文字后 Ctrl+C 的纯文本保留 Markdown 标记，富文本剪贴板仍保留编辑器格式；导出包含空间标题、标题层级、列表、勾选状态和来源链接。iOS 26 及以上可将 `.md` 存入「文件」，长按 → 分享 → 备忘录，转换为富文本，依据[苹果导入说明](https://support.apple.com/en-us/102223)；未在真实 iPhone 验收。Markdown 不保存字号和下划线，富文本复制仍保留。编辑中的链接单击即在新标签页打开，仍只允许 HTTP／HTTPS 地址。
+- 桌面右侧研究笔记可拖动左下角调整宽高，也可用方向键调整、Home 恢复默认大小；调整后自动固定，尺寸在当前浏览器保存并跨刷新恢复。窗口缩小或 AI 助手占用右侧空间时限制可见范围；手机继续使用全屏编辑面板，内容详情内的编辑器继续随详情布局。
 - 内容上的空间操作图标（包括空间内移出资料的垃圾桶图标）默认使用与收藏、稍后再看一致的浅色，随深浅主题调整；加入后保留选中颜色，悬停时继续突出操作入口。
 - 用户可以保存多个空间，一次启用一个；新建立即启用，搜索与收藏页均可切换或停止收集。当前目标跟随本机数据库跨刷新和重启恢复，浏览其他空间不会自动启用它。搜索关键词与空间名不绑定，同一个研究可以多次换关键词。
 - 空间资料与收藏分别保存快照。加入空间不自动收藏；取消收藏不影响研究资料；丢弃空间不影响收藏或其他空间。取舍见[空间与收藏独立、笔记使用结构化文档](../decisions/2026-10-01-研究空间与富文本笔记.md)。
@@ -41,13 +44,14 @@
 - 搜索、收藏与空间详情在宽窗口中利用两边空白；窗口放不下侧栏时会覆盖一部分内容边缘，可以收起后查看，中央内容不会为这些面板缩窄或移动。AI 助手是独立右侧栏，桌面展开时压缩左侧内容；窄屏助手与笔记各用独立遮罩面板。
 - 搜索结果、本地及跨平台收藏和对应详情提供加入入口；观看历史没有加入入口。没有逐条资料备注、已看完状态、批量整理、离线下载或独立笔记窗口；查看全文和视频仍需打开原平台。
 - 名称最多 60 字、简介 200 字，每空间最多 500 条资料；总笔记正文最多 50000 字，格式数据最多 2 MB。超限整次拒绝并明确提示，不静默截断或滚动淘汰。资料批次中有非法内容时整批拒绝，不留部分成功的半成品。
-- Markdown／PDF 导出、空间备份导入尚未提供；现有收藏备份只包含收藏，不包含空间。备份整个本机数据库时空间跟随保留。
+- PDF 导出、空间备份导入尚未提供；现有收藏备份只包含收藏，不包含空间。备份整个本机数据库时空间跟随保留，AI 会话另存本机用户数据目录，需一起备份。
 - 未保存草稿只在当前应用会话保留，进程被强制终止或浏览器崩溃前尚未落库的输入不能保证恢复。跨页面的冲突比对以文字显示，不提供完整格式差异。
 - 搜索快照不会追加平台请求。封面和原文链接仍受源站有效性影响，保存空间并不等于下载或缓存源站内容。
 - 现有收藏、历史的删除规则保持原样；空间独立表没有参加旧收藏导入、导出或历史清理。
 
 ## 测试怎么跑
 
+- 笔记导出回归：`webui/tests/noteExport.test.ts` 覆盖嵌套列表、勾选、引用、文字转义和非法链接；界面 smoke 验证下载的 UTF-8 Markdown、复制按钮及 Ctrl+C 的 Markdown／HTML、链接新标签页、拖动与键盘缩放、刷新恢复尺寸。所有 AI 配置与会话数据均使用临时目录。
 - 后端：`tests/test_spaces.py`；收藏独立性回归同时运行 `tests/test_library_store.py`、`tests/test_library_api.py` 和 `tests/test_watch_history_store.py`。使用每次新建的项目内 `--basetemp` 子目录，先创建父目录。
 - 前端：在 `webui` 运行 `npm run test:search`（包含 `webui/tests/spaceNotes.test.ts`、内容浏览偏好测试）和 `npm run build`。
 - 界面：构建后运行 `.venv/Scripts/python.exe scripts/spaces_ui_smoke.py`。模拟搜索和临时 SQLite，不访问真实平台；覆盖同一卡片展开／收起、左侧向右下展开、查看按钮等尺寸与主题色、空间往返及笔记更新同步、面板固定状态恢复、边缘贴齐与小入口隐藏、动画反向及减少动态效果、键盘焦点、左右悬浮与固定、1920／1440／390px 搜索框坐标和内容宽度不变、四平台加入、单条／分组合并再次点击移出、部分版本补齐、网格／列表／详情纯图标、移出失败重试与重复点击保护、格式重启恢复、勾选清单、失败重试、详情旁笔记、窄屏与键盘、归档／恢复、独立空间与丢弃。截图输出到忽略的 `build/`。

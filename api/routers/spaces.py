@@ -58,6 +58,7 @@ async def delete_space(space_id: int, store: SpacesStore = Depends(get_spaces_st
     from ..services.research_config import research_config
     await research_jobs.cancel_space(space_id)
     result = _call(store.delete_space, space_id)
+    research_jobs.remove_space(space_id)
     research_config.remove_preference(space_id)
     return result
 

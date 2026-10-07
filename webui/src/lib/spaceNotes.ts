@@ -90,7 +90,7 @@ export class NoteSession {
         this.revision = saved.note_revision;
         for (const identity of research) {
           this.savedResearch.add(identity);
-          try { sessionStorage.setItem(`siye-research-applied:${identity}`, "1"); } catch { /* Saved state remains available in this session. */ }
+          try { localStorage.setItem(`siye-research-applied:${identity}`, "1"); } catch { /* Saved state remains available in this session. */ }
         }
         if (generation === this.generation) this.dirty = false;
       }

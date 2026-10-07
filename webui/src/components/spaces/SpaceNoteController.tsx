@@ -5,11 +5,12 @@ import StarterKit from "@tiptap/starter-kit";
 import { FontSize, TextStyle } from "@tiptap/extension-text-style";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { Fragment, Slice, type Node as EditorNode } from "@tiptap/pm/model";
-import { Bold, Italic, Underline, Undo2, Redo2, List, ListOrdered, ListChecks, X } from "lucide-react";
+import { Bold, Italic, Underline, Undo2, Redo2, List, ListOrdered, ListChecks, Copy, Download, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useSpaceDetail, useSpaces } from "@/hooks/useSpaces";
 import { EMPTY_NOTE, NOTE_FONT_SIZES, noteText, spaceError, type NoteDocument, type NoteSession } from "@/lib/spaceNotes";
 import { fetchSpace } from "@/lib/spacesApi";
+import { noteMarkdown, noteExportFilename, safeNoteUrl } from "@/lib/noteExport";
 import SpaceResearchPanel from "./SpaceResearchPanel";
 
 function cleanPastedNode(node: EditorNode): EditorNode {
@@ -26,6 +27,7 @@ function NotePanel({ editor, session, name, spaceId, archived, modal, onClose }:
   const [, updateToolbar] = useState(0);
   const [latest, setLatest] = useState<{ document: NoteDocument; revision: number } | null>(null);
   const [latestError, setLatestError] = useState("");
+  const [exportNotice, setExportNotice] = useState("");
   const status = archived ? "spaces.readOnly" : session.saving ? "spaces.saving" : session.error ? "spaces.saveFailed" : session.dirty ? "spaces.unsaved" : "spaces.saved";
   useEffect(() => {
     const update = () => updateToolbar((value) => value + 1);
@@ -35,6 +37,26 @@ function NotePanel({ editor, session, name, spaceId, archived, modal, onClose }:
   const action = (label: string, icon: ReactNode, active: boolean, apply: () => void, disabled = false) => <button type="button" title={t(label)} aria-label={t(label)} aria-pressed={active} disabled={archived || disabled} onMouseDown={(event) => event.preventDefault()} onClick={apply}>{icon}</button>;
   return <aside className="space-note-panel" aria-label={t("spaces.note")} role={modal ? "dialog" : undefined} aria-modal={modal || undefined}>
     <div className="space-note-head"><div><span className="eyebrow">{t("spaces.note")}</span><h2>{name}</h2></div><button type="button" className="btn small" aria-label={t("spaces.closeNote")} onClick={onClose}><X aria-hidden="true" /></button></div>
+    <div className="space-note-export">
+      <button type="button" className="btn small" onClick={async () => {
+        try {
+          const markdown = noteMarkdown(editor.getJSON() as NoteDocument);
+          if (navigator.clipboard.write && typeof ClipboardItem !== "undefined") {
+            await navigator.clipboard.write([new ClipboardItem({ "text/plain": new Blob([markdown], { type: "text/plain" }), "text/html": new Blob([editor.getHTML()], { type: "text/html" }) })]);
+          } else await navigator.clipboard.writeText(markdown);
+          setExportNotice(t("spaces.noteCopied"));
+        } catch { setExportNotice(t("spaces.noteCopyFailed")); }
+      }}><Copy aria-hidden="true" />{t("spaces.copyNote")}</button>
+      <button type="button" className="btn small" title={t("spaces.noteExportHint")} onClick={() => {
+        const document = editor.getJSON() as NoteDocument;
+        const title = noteMarkdown({ type: "heading", attrs: { level: 1 }, content: [{ type: "text", text: name.replace(/\n/g, " ") }] });
+        const url = URL.createObjectURL(new Blob([`${title}\n\n${noteMarkdown(document)}\n`], { type: "text/markdown;charset=utf-8" }));
+        const link = window.document.createElement("a"); link.href = url; link.download = noteExportFilename(name); link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        setExportNotice(t("spaces.noteExportHint"));
+      }}><Download aria-hidden="true" />{t("spaces.exportNote")}</button>
+    </div>
+    {exportNotice && <p className="space-note-export-notice" role="status">{exportNotice}</p>}
     <div className="space-note-toolbar" role="toolbar" aria-label={t("spaces.formatting")}>
       <select aria-label={t("spaces.paragraphStyle")} disabled={archived} value={[1, 2, 3].find((level) => editor.isActive("heading", { level })) ?? 0} onChange={(event) => {
         const level = Number(event.target.value);
@@ -95,6 +117,15 @@ export default function SpaceNoteController({ spaceId, open, onClose, researchOp
     editable: Boolean(session) && !detail.data?.archived,
     editorProps: {
       attributes: { role: "textbox", "aria-label": t("spaces.noteEditor"), "aria-multiline": "true", "data-space-id": String(spaceId) },
+      clipboardTextSerializer: (slice) => noteMarkdown({ type: "doc", content: slice.content.toJSON() as NoteDocument[] }),
+      handleClick: (_view, _pos, event) => {
+        const link = (event.target as HTMLElement).closest<HTMLAnchorElement>("a[href]");
+        if (!link) return false;
+        const href = safeNoteUrl(link.getAttribute("href"));
+        event.preventDefault();
+        if (href) window.open(href, "_blank", "noopener,noreferrer");
+        return true;
+      },
       handlePaste: (_view, event) => { if (event.clipboardData?.files.length) { event.preventDefault(); return true; } return false; },
       handleDrop: (_view, event) => { if (event.dataTransfer?.files.length) { event.preventDefault(); return true; } return false; },
       transformPasted: (slice) => {

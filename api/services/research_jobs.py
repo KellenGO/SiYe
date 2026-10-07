@@ -16,6 +16,7 @@ from .accounts import operation_coordinator, get_session_snapshot, ensure_sessio
 from .research_config import research_config, runtime_status
 from .research_materials import material
 from .research_diagnostics import classify
+from .research_history import ResearchHistory
 from .worker_process import terminate_worker
 
 ACTIVE_SECONDS = 600
@@ -69,14 +70,18 @@ class ResearchJobs:
         self.active = None
         self.lock = asyncio.Lock()
         self.probes = set()
+        self.history_store = ResearchHistory(config.path.parent / "research-history")
 
     def get(self, job_id):
         if job_id not in self.jobs:
-            raise ValueError("研究任务不存在或应用已重启")
+            saved = self.history_store.load(job_id)
+            if not saved:
+                raise ValueError("研究任务不存在")
+            self.jobs[job_id] = saved
         return self.jobs[job_id]
 
-    def public(self, job_id, store=None):
-        job = self.get(job_id)
+    def public(self, job_id, store=None, job=None):
+        job = job if job is not None else self.get(job_id)
         visible = {key: copy.deepcopy(value) for key, value in job.items() if key not in {"snapshot", "elapsed", "workdir", "materials", "history", "research_focus", "transcribing_key"}}
         visible["total_materials"] = len(job["snapshot"]["items"])
         visible["materials"] = []
@@ -136,23 +141,40 @@ class ResearchJobs:
             raise ValueError("AI 运行环境不完整，请使用包含 AI 运行程序的四野安装包")
 
     def conversation_jobs(self, space_id, conversation_id):
-        matches = [job for job in self.jobs.values() if job.get("conversation_id", job["job_id"]) == conversation_id]
+        records = {row["job_id"]: self.history_store.load(row["job_id"]) for row in self.history_store.records()
+                   if row["conversation_id"] == conversation_id}
+        records.update({job["job_id"]: job for job in self.jobs.values()
+                        if job.get("conversation_id", job["job_id"]) == conversation_id})
+        matches = sorted((job for job in records.values() if job), key=lambda job: job.get("created_at", 0))
         if not matches or any(job["space_id"] != space_id for job in matches):
             raise ValueError("会话不存在或不属于此空间，请新建会话")
         return matches
 
     def conversations(self, space_id):
+        records = {row["job_id"]: row for row in self.history_store.records(space_id)}
+        records.update({job["job_id"]: self.history_store.summary(job) for job in self.jobs.values() if job["space_id"] == space_id})
         groups = {}
-        for job in self.jobs.values():
-            if job["space_id"] != space_id:
-                continue
-            identity = job.get("conversation_id", job["job_id"])
+        for job in sorted(records.values(), key=lambda row: row["created_at"]):
+            identity = job["conversation_id"]
             if identity not in groups:
-                groups[identity] = {"id": identity, "title": (job["question"] or job["snapshot"]["name"])[:60], "turns": 0}
+                groups[identity] = {"id": identity, "title": job["title"], "turns": 0}
             groups[identity].update(status=job["status"], latest_job_id=job["job_id"])
             groups[identity]["turns"] += 1
             groups[identity] = groups.pop(identity)
         return list(reversed(list(groups.values())))
+
+    def latest(self, space_id, store=None):
+        groups = self.conversations(space_id)
+        return self.public(groups[0]["latest_job_id"], store) if groups else None
+
+    def persist(self, identity):
+        try:
+            self.history_store.save(self.jobs[identity])
+        except OSError:
+            warning = "会话历史未能保存到本机，请检查磁盘空间或文件权限"
+            errors = self.jobs[identity].setdefault("web_errors", [])
+            if warning not in errors:
+                errors.append(warning)
 
     async def create(self, space, question, web_enabled, conversation_id=None):
         if space["archived"]:
@@ -172,13 +194,14 @@ class ResearchJobs:
         identity = uuid.uuid4().hex
         await self.claim(identity)
         self.jobs[identity] = {"job_id": identity, "space_id": space["id"], "snapshot": copy.deepcopy(latest["snapshot"] if latest else space),
-            "conversation_id": conversation_id or identity, "history": history,
+            "conversation_id": conversation_id or identity, "history": history, "created_at": time.time_ns(),
             "research_focus": (latest.get("research_focus") or previous[0]["question"]) if latest else question,
             "question": question, "web_enabled": web_enabled, "status": "collecting", "phase": "collecting",
             "message": "正在获取空间资料", "materials": [], "elapsed": 0.0, "error": "",
             "document": None, "activity": [], "coverage": [], "external_sources": [], "web_errors": [], "usage": None, "cost_usd": None}
         if latest:
             self.jobs[identity].update(materials=copy.deepcopy(latest["materials"]), status="analyzing", phase="analyzing", message="正在继续分析当前会话资料")
+        self.persist(identity)
         self.tasks[identity] = asyncio.create_task(self.analyze(identity) if latest else self.collect(identity))
         self.tasks[identity].add_done_callback(lambda _: self.prune())
         return self.public(identity)
@@ -233,6 +256,8 @@ class ResearchJobs:
                         if event.get("completed") and job.get("transcribing_key") == item["key"]:
                             job.pop("transcribing_key", None)
                         job["message"] = f"已获取 {len(job['materials'])} / {len(job['snapshot']['items'])} 条资料"
+                        if event.get("completed"):
+                            self.persist(job["job_id"])
                     elif kind == "progress":
                         job.update(phase=event["phase"], message=event["message"])
                         if event["phase"] == "transcribing":
@@ -316,6 +341,7 @@ class ResearchJobs:
                     job["materials"].append(missing)
             if leased:
                 await operation_coordinator.release_exclusive("research")
+            self.persist(identity)
 
     @staticmethod
     def safe_error(error):
@@ -332,6 +358,7 @@ class ResearchJobs:
         if self.active != identity:
             await self.claim(identity)
         job.update(status="collecting", phase="collecting", error="")
+        self.persist(identity)
         self.tasks[identity] = asyncio.create_task(self.collect(identity, retry=True))
         self.tasks[identity].add_done_callback(lambda _: self.prune())
         return self.public(identity)
@@ -343,6 +370,7 @@ class ResearchJobs:
         if self.active != identity:
             await self.claim(identity)
         job.update(status="analyzing", phase="analyzing", error="", message="AI 正在整理研究笔记")
+        self.persist(identity)
         self.tasks[identity] = asyncio.create_task(self.analyze(identity))
         self.tasks[identity].add_done_callback(lambda _: self.prune())
         return self.public(identity)
@@ -366,6 +394,7 @@ class ResearchJobs:
                 if record.get("status") == "running":
                     record.update(status="cancelled" if job["status"] == "cancelled" else "failed", summary="执行已中断")
             await self.release(identity)
+            self.persist(identity)
 
     async def cancel(self, identity):
         job = self.get(identity)
@@ -376,7 +405,15 @@ class ResearchJobs:
         if job["status"] not in {"ready", "failed", "cancelled"}:
             job.update(status="cancelled", phase="cancelled", message="研究已取消")
         await self.release(identity)
+        self.persist(identity)
         return self.public(identity)
+
+    def remove_space(self, space_id):
+        self.history_store.remove_space(space_id)
+        for identity, job in list(self.jobs.items()):
+            if job.get("space_id") == space_id:
+                self.jobs.pop(identity)
+                self.tasks.pop(identity, None)
 
     async def cancel_space(self, space_id):
         for identity, job in list(self.jobs.items()):

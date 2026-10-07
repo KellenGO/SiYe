@@ -386,7 +386,7 @@ async def test_missing_native_falls_back_to_normalized_asr_in_collector(monkeypa
 @pytest.mark.asyncio
 async def test_cancel_collection_marks_pending_transcription_failed_and_keeps_text(monkeypatch, tmp_path):
     from api.services import research_jobs as jobs
-    config = SimpleNamespace()
+    config = SimpleNamespace(path=tmp_path / "research-ai.json")
     manager = jobs.ResearchJobs(config)
     manager.require_runtime = lambda: None
     monkeypatch.setattr(jobs, "get_session_snapshot", lambda _: {})

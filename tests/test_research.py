@@ -468,6 +468,60 @@ def test_finished_jobs_are_bounded_and_active_job_is_preserved(config, monkeypat
 
 
 @pytest.mark.asyncio
+async def test_history_survives_restart_pruning_and_reuses_materials(config, monkeypatch):
+    manager = ResearchJobs(config)
+    monkeypatch.setattr(manager, "require_runtime", lambda: None)
+    config.save("https://example.com", "model", "private-api-key")
+    async def process(job, payload, credentials=None):
+        assert payload["mode"] == "analyze"
+        return {"document": {"type": "doc", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "已完成"}]}]}}
+    monkeypatch.setattr(manager, "process", process)
+    snapshot = {"id": 1, "archived": False, "items": [source()], "name": "攻略", "description": ""}
+    for index in range(12):
+        row = {"job_id": f"turn-{index}", "conversation_id": "saved", "space_id": 1, "created_at": index,
+               "snapshot": snapshot, "question": f"问题{index}", "status": "ready", "phase": "ready",
+               "research_focus": "研究主题", "materials": [material(source())], "elapsed": 0,
+               "web_enabled": False, "document": {"type": "doc", "content": [{"type": "paragraph"}]},
+               "worker_credentials": {"api_key": "private-api-key"}}
+        manager.jobs[row["job_id"]] = row
+        manager.persist(row["job_id"])
+    manager.prune()
+    assert len(manager.jobs) == 10
+    assert len(manager.conversation_jobs(1, "saved")) == 12
+    assert "private-api-key" not in "".join(path.read_text(encoding="utf-8") for path in manager.history_store.root.glob("*.json"))
+    restarted = ResearchJobs(config)
+    monkeypatch.setattr(restarted, "require_runtime", lambda: None)
+    monkeypatch.setattr(restarted, "process", process)
+    assert restarted.conversations(1)[0]["turns"] == 12
+    assert restarted.latest(1)["question"] == "问题11"
+    assert restarted.get("turn-0")["status"] == "ready"
+    with pytest.raises(ValueError, match="不属于"):
+        restarted.conversation_jobs(2, "saved")
+    followup = await restarted.create(snapshot, "继续研究", False, "saved")
+    await restarted.tasks[followup["job_id"]]
+    assert restarted.get(followup["job_id"])["research_focus"] == "研究主题"
+    assert len(restarted.get(followup["job_id"])["history"]) == 3
+    restarted.remove_space(1)
+    assert ResearchJobs(config).conversations(1) == []
+
+
+def test_interrupted_and_corrupt_history_does_not_lock_restart(config):
+    manager = ResearchJobs(config)
+    row = {"job_id": "interrupted", "space_id": 1, "snapshot": {"name": "主题", "items": [], "note_document": "private-note"},
+           "question": "问题", "status": "analyzing", "materials": [], "document": None}
+    manager.history_store.save(row)
+    assert "private-note" not in manager.history_store.path("interrupted").read_text(encoding="utf-8")
+    (manager.history_store.root / "corrupt.json").write_text("{", encoding="utf-8")
+    restarted = ResearchJobs(config)
+    assert restarted.active is None
+    assert len(restarted.conversations(1)) == 1
+    assert restarted.get("interrupted")["status"] == "failed"
+    assert "重启" in restarted.get("interrupted")["error"]
+    with pytest.raises(ValueError):
+        restarted.get("../research-ai")
+
+
+@pytest.mark.asyncio
 async def test_conversation_followups_reuse_sources_and_limit_context(config, monkeypatch):
     from api.services import research_jobs as module
     monkeypatch.setattr(module, "get_session_snapshot", lambda _: {"a1": "private"})

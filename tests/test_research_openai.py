@@ -294,3 +294,57 @@ def test_plain_citations_cannot_use_external_sources_with_web_disabled():
     external = [{"id": "web|1", "citation": "W1", "title": "外部", "url": "https://example.org", "level": "仅搜索摘要"}]
     with pytest.raises(SourceReferenceError):
         answer_document("外部结论 [W1]", False, external=external)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("provider_limit", [False, True])
+async def test_context_compaction_preserves_read_evidence_and_usage(monkeypatch, provider_limit):
+    row = source()
+    row["body"] = component("ok", text="价格 120 元，敏感肌需先试用。" * 600)
+    captured, events = [], []
+    failed_once = False
+    async def completion(client, data, messages, tools):
+        nonlocal failed_once
+        captured.append(copy.deepcopy(messages))
+        if data.get("output_tokens"):
+            assert not tools and "120 元" in messages[-1]["content"]
+            return response(content="价格 120 元，敏感肌需先试用。[S1:body]（部分正文）")
+        if not any(message["role"] == "tool" for message in messages) and not any("evidence_summary" in message.get("content", "") for message in messages):
+            return response("read_material", {"key": "S1", "section": "body", "index": 0}, reasoning_content="private-reasoning")
+        if provider_limit and not failed_once:
+            failed_once = True
+            raise module.ContextLimitError("上下文不足")
+        assert any("evidence_summary" in message.get("content", "") for message in messages)
+        assert not any(message["role"] == "tool" or message.get("tool_calls") for message in messages)
+        assert "private-reasoning" not in json.dumps(messages)
+        return response(content="价格为 120 元，敏感肌先试用。[S1:body]")
+    monkeypatch.setattr(module, "completion", completion)
+    monkeypatch.setattr(module, "CONTEXT_SOFT_LIMIT", 999999 if provider_limit else 6000)
+    output = await module.run_openai(payload(materials=[row]), events.append)
+    assert "120 元" in json.dumps(output["document"], ensure_ascii=False)
+    assert output["coverage"][0]["read_chunks"] == 1
+    assert not output["coverage"][0]["complete"]
+    assert [event for event in events if event["type"] == "usage"][-1]["usage"]["total_tokens"] == 36
+    assert any(event.get("tool") == "context_compaction" and event["status"] == "completed" for event in events)
+
+
+@pytest.mark.asyncio
+async def test_provider_context_error_is_safe_and_summary_output_is_bounded(monkeypatch):
+    monkeypatch.setenv("SIYE_RESEARCH_API_KEY", "isolated-key")
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _: httpx.Response(400,
+            json={"error": {"code": "context_length_exceeded", "message": "private-provider-text"}}))) as client:
+        with pytest.raises(module.ContextLimitError) as error:
+            await module.completion(client, payload(), [], [])
+        assert "private" not in str(error.value)
+    row = source()
+    row["body"] = component("ok", text="证据" * 5000)
+    async def completion(client, data, messages, tools):
+        if data.get("output_tokens"):
+            value = response(content="不完整摘要")
+            value["choices"][0]["finish_reason"] = "length"
+            return value
+        return response("read_material", {"key": "S1", "section": "body", "index": 0})
+    monkeypatch.setattr(module, "completion", completion)
+    monkeypatch.setattr(module, "CONTEXT_SOFT_LIMIT", 6000)
+    with pytest.raises(ValueError, match="完整整理"):
+        await module.run_openai(payload(materials=[row]), lambda _: None)
