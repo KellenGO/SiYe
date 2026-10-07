@@ -84,7 +84,9 @@ def main():
                     response = client.request(request.method, path, content=request.post_data, headers={"content-type": "application/json"})
                     route.fulfill(status=response.status_code, body=response.content, content_type="application/json")
                 elif path.startswith("/api/"):
-                    if path == "/api/search/accounts":
+                    if path.startswith("/api/research/"):
+                        data = None if path.endswith("/latest") else [] if path.endswith("/conversations") else {"has_key": False, "web_enabled": False}
+                    elif path == "/api/search/accounts":
                         data = {"accounts": []}
                     elif path.startswith("/api/search/jobs/"):
                         data = job
@@ -317,7 +319,7 @@ def main():
             assert "***苏州行程研究***" in page.evaluate("navigator.clipboard.readText()")
             note.press("Control+End")
             note.press("Enter")
-            note.press_sequentially("https://example.com/notes ")
+            note.press_sequentially(" https://example.com/notes ")
             link = note.locator('a[href="https://example.com/notes"]')
             expect(link).to_be_visible()
             with page.expect_popup() as popup_info:
@@ -394,6 +396,19 @@ def main():
             page.wait_for_timeout(300)
             assert abs(right.bounding_box()["width"] - bounds["width"]) < 1
 
+            # Search can open AI beside the current editor and restore its prior closed state.
+            before_split = right.bounding_box()
+            right.get_by_role("button", name="并排显示笔记与 AI", exact=True).click()
+            expect(page.locator(".space-research-dialog")).to_be_visible()
+            assert right.bounding_box() == {"x": 0, "y": 0, "width": 720, "height": 1000}
+            assert note.evaluate("el => el === window.spaceNoteElement")
+            assert page.locator(".app-shell").evaluate("el => el.inert")
+            right.get_by_role("button", name="还原布局", exact=True).click()
+            page.wait_for_timeout(300)
+            assert right.bounding_box() == before_split
+            expect(page.locator(".space-research-dialog")).not_to_be_visible()
+            assert not page.locator(".app-shell").evaluate("el => el.inert")
+
             # Editing focus keeps an unpinned panel open; Escape keeps the same DOM/editor.
             note.evaluate("el => { window.spaceNoteElement = el; }")
             right.get_by_role("button", name="取消固定研究笔记", exact=True).click()
@@ -401,6 +416,11 @@ def main():
             page.mouse.move(720, 90)
             page.wait_for_timeout(300)
             expect(note).to_be_visible()
+            right.get_by_role("button", name="并排显示笔记与 AI", exact=True).click()
+            right.get_by_role("button", name="还原布局", exact=True).click()
+            page.wait_for_timeout(300)
+            expect(right.get_by_role("button", name="固定研究笔记", exact=True)).to_be_visible()
+            expect(note).to_be_focused()
             note.press("Escape")
             expect(right.locator(".space-edge-surface")).not_to_be_visible()
             open_edge(right, "打开笔记")
@@ -449,6 +469,15 @@ def main():
             page.screenshot(path=str(ROOT / "build/spaces-favorites-sidebars.png"), full_page=True)
             assert page.evaluate("new Set([...document.querySelectorAll('[id]')].map(el => el.id)).size === document.querySelectorAll('[id]').length")
             favorite_note = page.get_by_role("textbox", name="空间笔记编辑器", exact=True)
+            favorite_note.evaluate("el => { window.favoritesSplitEditor = el; }")
+            right.get_by_role("button", name="并排显示笔记与 AI", exact=True).click()
+            assert right.bounding_box() == {"x": 0, "y": 0, "width": 720, "height": 1000}
+            expect(page.locator(".space-research-dialog")).to_be_visible()
+            assert favorite_note.evaluate("el => el === window.favoritesSplitEditor")
+            right.get_by_role("button", name="还原布局", exact=True).click()
+            page.wait_for_timeout(300)
+            assert favorites.bounding_box() == favorites_bounds
+            expect(page.locator(".space-research-dialog")).not_to_be_visible()
             favorite_note.press("Control+End")
             favorite_note.press("Enter")
             favorite_note.press_sequentially("收藏页补充")
@@ -621,6 +650,8 @@ def main():
             panel.get_by_role("button", name="关闭笔记面板", exact=True).focus()
             page.keyboard.press("Shift+Tab")
             expect(note.locator('input[type="checkbox"]')).to_be_focused()
+            page.keyboard.press("Tab")
+            expect(panel.get_by_role("button", name="关闭笔记面板", exact=True)).to_be_focused()
             note.press("Escape")
             expect(panel).to_have_count(0)
             assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")

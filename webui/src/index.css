@@ -518,6 +518,13 @@ body.has-note-expanded { overflow: hidden; }
 body.has-note-expanded .app-shell { height: 100dvh; min-height: 0; max-height: 100dvh; overflow: hidden; }
 body.has-note-expanded :is(.app-shell, .space-edge-left, .space-ai-trigger, .space-research-dialog) { visibility: hidden; pointer-events: none; }
 body.has-note-expanded .space-edge-left .space-edge-surface { visibility: hidden; pointer-events: none; }
+.space-edge-right.is-open.is-split { inset: 0 auto 0 0; width: var(--space-split-width); height: 100dvh; max-width: none; max-height: none; border: 0; border-radius: 0; box-shadow: none; z-index: 40; transition: none; }
+.space-edge-right.is-open.is-split .space-edge-surface { width: 100%; height: 100%; max-width: none; max-height: none; }
+.space-research-dialog.is-split { box-shadow: none; }
+body.has-research-split { overflow: hidden; }
+body.has-research-split .app-shell { height: 100dvh; min-height: 0; max-height: 100dvh; overflow: hidden; }
+body.has-research-split .app-shell, body.has-research-split .app-shell * { visibility: hidden; pointer-events: none; }
+body.has-research-split :is(.space-edge-left, .space-ai-trigger) { display: none; }
 @media (max-width: 1000px) { .space-note-resize { display: none; } }
 .space-edge.is-open .space-edge-surface { opacity: 1; visibility: visible; pointer-events: auto; transform: none; transition: opacity .16s .06s, transform .24s, visibility 0s; }
 .space-edge-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--siye-line); }

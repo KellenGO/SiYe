@@ -12,6 +12,7 @@ import { EMPTY_NOTE, NOTE_FONT_SIZES, noteText, spaceError, type NoteDocument, t
 import { fetchSpace } from "@/lib/spacesApi";
 import { noteMarkdown, noteExportFilename, safeNoteUrl } from "@/lib/noteExport";
 import SpaceResearchPanel from "./SpaceResearchPanel";
+import type { WorkspaceSplitLayout } from "./WorkspaceContext";
 
 function cleanPastedNode(node: EditorNode): EditorNode {
   const marks = node.marks.filter((mark) => mark.type.name !== "textStyle" || NOTE_FONT_SIZES.some((size) => mark.attrs.fontSize === `${size}px`));
@@ -88,7 +89,7 @@ function NotePanel({ editor, session, name, spaceId, archived, modal, onClose }:
   </aside>;
 }
 
-export default function SpaceNoteController({ spaceId, open, onClose, researchOpen, onCloseResearch, target }: { spaceId: number; open: boolean; onClose: () => void; researchOpen: boolean; onCloseResearch: () => void; target: HTMLDivElement | null }) {
+export default function SpaceNoteController({ spaceId, open, onClose, researchOpen, onCloseResearch, split, target }: { spaceId: number; open: boolean; onClose: () => void; researchOpen: boolean; onCloseResearch: () => void; split: WorkspaceSplitLayout; target: HTMLDivElement | null }) {
   const { t } = useTranslation();
   const spaces = useSpaces();
   const detail = useSpaceDetail(spaceId);
@@ -141,7 +142,8 @@ export default function SpaceNoteController({ spaceId, open, onClose, researchOp
     const previous = document.activeElement as HTMLElement | null;
     const first = () => container.querySelector<HTMLElement>("button:not(:disabled)");
     first()?.focus();
-    const controls = () => [...container.querySelectorAll<HTMLElement>('button:not(:disabled), select:not(:disabled), input:not(:disabled), textarea:not(:disabled), summary, a[href], [contenteditable="true"]')].filter((control) => control.getClientRects().length > 0 && control.tabIndex >= 0);
+    // Links within editable text need an explicit tab stop to receive focus.
+    const controls = () => [...container.querySelectorAll<HTMLElement>('button:not(:disabled), select:not(:disabled), input:not(:disabled), textarea:not(:disabled), summary, a[href], [contenteditable="true"]')].filter((control) => control.getClientRects().length > 0 && control.tabIndex >= 0 && !(control.matches("a[href]") && control.isContentEditable && !control.hasAttribute("tabindex")));
     const keyboard = (event: KeyboardEvent) => {
       if ((event.target as HTMLElement).closest("dialog[open]")) return;
       if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); onClose(); }
@@ -169,6 +171,6 @@ export default function SpaceNoteController({ spaceId, open, onClose, researchOp
   }, [editor, session, detail.data]);
   return editor && session && detail.data ? <>
     {createPortal(<NotePanel key={spaceId} editor={editor} session={session} name={detail.data.name} spaceId={detail.data.id} archived={detail.data.archived} modal={modal} onClose={onClose} />, container)}
-    <SpaceResearchPanel key={spaceId} spaceId={spaceId} spaceName={detail.data.name} sourceCount={detail.data.items.length} editor={editor} session={session} archived={detail.data.archived} open={researchOpen} onClose={onCloseResearch} />
+    <SpaceResearchPanel key={spaceId} spaceId={spaceId} spaceName={detail.data.name} sourceCount={detail.data.items.length} editor={editor} session={session} archived={detail.data.archived} open={researchOpen} onClose={onCloseResearch} split={split} />
   </> : null;
 }
