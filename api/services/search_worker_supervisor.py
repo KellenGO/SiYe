@@ -214,5 +214,3 @@ class _ResidentWorker:
         self.reused: bool = False
         # worker 日志尾部（已脱敏）：平台 0 结果/失败时打出来排障。
         self.log_tail: deque = deque(maxlen=WORKER_LOG_TAIL_LINES)
-
-

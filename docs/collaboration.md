@@ -8,7 +8,6 @@
 
 | 任务 ID | 负责人 / 会话 | worktree / 分支 / 起始 HEAD | 修改范围 | 状态 / 下一步 |
 |---|---|---|---|---|
-| `CODEBASE-CLEANUP-20261008` | Codex 当前会话 | 主工作区 `C:/Users/Kellen/Desktop/MediaCrawler-main` / `refactor/codebase-cleanup` / `c00d40c` | 账号与任务资源边界、研究／平台依赖、搜索与设置模块、旧构建链及相关测试文档 | 结构与资源单元已提交；正在清理旧构建链及全量验证，候选输出 `build/codebase-cleanup/dist/` |
 
 ## 待接手事项
 
