@@ -497,7 +497,7 @@ def main():
                 panel.get_by_role("button", name="并排显示笔记与 AI", exact=True).click()
                 page.set_viewport_size({"width": 390, "height": 844})
                 expect(panel).to_be_visible()
-                assert not page.evaluate("document.body.classList.contains('has-research-split')")
+                page.wait_for_function("!document.body.classList.contains('has-research-split')")
                 expect(panel.get_by_role("button", name="并排显示笔记与 AI", exact=True)).to_have_count(0)
                 page.set_viewport_size({"width": 1440, "height": 1000})
                 assert not page.evaluate("document.body.classList.contains('has-research-split')")
