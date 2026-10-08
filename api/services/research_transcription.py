@@ -17,7 +17,7 @@ import httpx
 
 from base.runtime_paths import library_data_root, resource_path
 from .research_web import public_target
-from .worker_process import terminate_worker
+from .worker_process import terminate_worker, windows_process_job
 
 MODEL = "small"
 MAX_MEDIA_BYTES = 96 * 1024 * 1024
@@ -140,7 +140,6 @@ async def run_asr(executable, media, models, progress):
         proc = await asyncio.create_subprocess_exec(*command, env=worker_environment(),
             stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
             limit=2 * 1024 * 1024, creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
-        from .research_jobs import windows_process_job
         handle = windows_process_job(proc)
         async def discard():
             while await proc.stderr.read(8192):

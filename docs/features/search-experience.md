@@ -7,6 +7,7 @@
 
 ## 代码入口
 
+平台客户端共用 `base/search_context.py` 的请求上下文与重试边界；`aggregate_search/pagination.py` 保留兼容导出。抖音响应分类在 `media_platform/douyin/response.py`，分页无需加载 crawler。
 | 职责 | 位置 |
 |---|---|
 | 搜索状态机（事件 → 状态）、排序、去重、渐进展示 selector | `webui/src/lib/searchExperience.ts`（**1,339 行，全仓最大的前端模块，待拆分**） |

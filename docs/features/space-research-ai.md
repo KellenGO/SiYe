@@ -6,6 +6,7 @@
 
 ## 代码入口
 
+Windows 子进程树生命周期共用 `api/services/worker_process.py` 的 `windows_process_job`，转写模块不再依赖研究任务管理器；任务管理器保留原导出。
 | 职责 | 位置 |
 |---|---|
 | 本机 AI 配置、密钥加密与空间偏好 | `api/services/research_config.py`（`ResearchConfig`） |

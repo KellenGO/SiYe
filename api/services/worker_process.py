@@ -56,6 +56,28 @@ def _creation_flags() -> int:
     return subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
 
 
+def windows_process_job(proc):
+    """Closing this handle kills this worker and every descendant on Windows."""
+    if os.name != "nt":
+        return None
+    import win32api
+    import win32con
+    import win32job
+    handle = win32job.CreateJobObject(None, "")
+    info = win32job.QueryInformationJobObject(handle, win32job.JobObjectExtendedLimitInformation)
+    info["BasicLimitInformation"]["LimitFlags"] = win32job.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+    win32job.SetInformationJobObject(handle, win32job.JobObjectExtendedLimitInformation, info)
+    process = win32api.OpenProcess(win32con.PROCESS_SET_QUOTA | win32con.PROCESS_TERMINATE, False, proc.pid)
+    try:
+        win32job.AssignProcessToJobObject(handle, process)
+    except Exception:
+        handle.Close()
+        raise
+    finally:
+        process.Close()
+    return handle
+
+
 async def spawn_worker(
     *args: str,
     env_extra: Optional[Dict[str, str]] = None,

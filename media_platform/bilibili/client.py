@@ -114,7 +114,7 @@ class BilibiliClient(ReusableHttpClientMixin, AbstractApiClient):
         # HTTP 5xx / transient failures: exactly ONE bounded retry, then a
         # safe "temporarily unavailable" error — never unlimited retries,
         # never fast retry loops that bypass platform limits.
-        from aggregate_search.pagination import allow_client_retry, check_search_http_status
+        from base.search_context import allow_client_retry, check_search_http_status
         if getattr(self, "favorites_sync", False) and response.status_code in (403, 429, 461, 471):
             from base.exceptions import RateLimitError
             raise RateLimitError("bilibili", "B站请求受限，请稍后重试")
@@ -167,7 +167,7 @@ class BilibiliClient(ReusableHttpClientMixin, AbstractApiClient):
         Get the latest img_key and sub_key
         :return:
         """
-        from aggregate_search.pagination import current_pagination
+        from base.search_context import current_pagination
         aggregate_search = current_pagination.get() is not None
         if (aggregate_search and self._search_wbi_keys is not None
                 and time.monotonic() - self._search_wbi_keys_at < 60):

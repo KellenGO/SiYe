@@ -25,7 +25,7 @@ from urllib.parse import urlencode
 from httpx import Response
 from playwright.async_api import BrowserContext, Page
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception
-from aggregate_search.pagination import allow_client_retry, check_search_http_status
+from base.search_context import allow_client_retry, check_search_http_status
 
 import config
 from base.base_crawler import AbstractApiClient

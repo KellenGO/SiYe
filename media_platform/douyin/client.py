@@ -130,7 +130,7 @@ class DouYinClient(ReusableHttpClientMixin, AbstractApiClient):
 
         # 复用 / 独立生命周期由 ReusableHttpClientMixin._send 统一处理。
         response = await self._send(method, url, **kwargs)
-        from aggregate_search.pagination import check_search_http_status
+        from base.search_context import check_search_http_status
         check_search_http_status(response.status_code)
         if response.status_code != 200 or response.text == "blocked":
             raise DataFetchError("抖音接口拒绝请求", http_status=response.status_code,

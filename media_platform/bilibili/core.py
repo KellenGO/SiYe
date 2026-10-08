@@ -199,7 +199,7 @@ class BilibiliCrawler(AbstractCrawler):
         search bilibili video with keywords in normal mode
         :return:
         """
-        from aggregate_search.pagination import current_pagination
+        from base.search_context import current_pagination
         pagination = current_pagination.get()
         if pagination is not None:
             await pagination.run(self.bili_client)

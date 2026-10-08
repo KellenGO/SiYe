@@ -18,7 +18,7 @@ from .research_config import research_config, runtime_status
 from .research_materials import material
 from .research_diagnostics import classify
 from .research_history import ResearchHistory
-from .worker_process import terminate_worker
+from .worker_process import terminate_worker, windows_process_job
 
 ACTIVE_SECONDS = 600
 MAX_FINISHED_JOBS = 10
@@ -39,28 +39,6 @@ def task_environment(workdir, credentials=None):
         else:
             env.update(ANTHROPIC_API_KEY=credentials["api_key"], ANTHROPIC_BASE_URL=credentials["base_url"])
     return env
-
-
-def windows_process_job(proc):
-    """Closing this handle kills this worker and every descendant on Windows."""
-    if os.name != "nt":
-        return None
-    import win32api
-    import win32con
-    import win32job
-    handle = win32job.CreateJobObject(None, "")
-    info = win32job.QueryInformationJobObject(handle, win32job.JobObjectExtendedLimitInformation)
-    info["BasicLimitInformation"]["LimitFlags"] = win32job.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
-    win32job.SetInformationJobObject(handle, win32job.JobObjectExtendedLimitInformation, info)
-    process = win32api.OpenProcess(win32con.PROCESS_SET_QUOTA | win32con.PROCESS_TERMINATE, False, proc.pid)
-    try:
-        win32job.AssignProcessToJobObject(handle, process)
-    except Exception:
-        handle.Close()
-        raise
-    finally:
-        process.Close()
-    return handle
 
 
 class ResearchJobs:

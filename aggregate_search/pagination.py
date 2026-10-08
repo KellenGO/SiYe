@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import asyncio
 import time
-from contextvars import ContextVar
-from typing import Callable, Optional
+from typing import Callable
 
 from pydantic import BaseModel, Field
 
+from base.search_context import current_pagination, allow_client_retry, check_search_http_status
 from .models import UnifiedSearchResult
 
 
@@ -123,7 +123,7 @@ class PaginationRun:
             pages = data.get("numPages")
             exhausted = isinstance(pages, int) and self.state.page >= pages
         elif self.platform == "douyin":
-            from media_platform.douyin.core import _classify_douyin_search_response
+            from media_platform.douyin.response import _classify_douyin_search_response
             _classify_douyin_search_response(data)
             raw = data.get("data", [])
             items = []
@@ -155,19 +155,3 @@ class PaginationRun:
         # A page containing only recommendations is not necessarily the last page.
         empty = not (data.get("data") if self.platform in ("douyin", "zhihu") else items)
         return items, exhausted or empty, offset, search_id
-
-
-current_pagination: ContextVar[Optional[PaginationRun]] = ContextVar("search_pagination", default=None)
-
-
-def allow_client_retry(exc=None):
-    """Pagination owns list-request retries; legacy callers keep their policy."""
-    run = current_pagination.get()
-    return run is None or not run.fetching
-
-
-def check_search_http_status(status):
-    """Classify explicit throttling before parsing an HTML/empty error body."""
-    if not allow_client_retry() and status in (403, 429, 461, 471):
-        from base.exceptions import RateLimitError
-        raise RateLimitError(current_pagination.get().platform, "平台请求受限，请稍后重试")
