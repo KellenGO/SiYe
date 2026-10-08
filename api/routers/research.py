@@ -126,7 +126,7 @@ def latest(space_id: int, store: SpacesStore = Depends(get_spaces_store), manage
 
 
 @research_router.get("/spaces/{space_id}/conversations")
-async def conversations(space_id: int, store: SpacesStore = Depends(get_spaces_store), manager=Depends(get_research_jobs)):
+def conversations(space_id: int, store: SpacesStore = Depends(get_spaces_store), manager=Depends(get_research_jobs)):
     try:
         store.get_space(space_id)
         return manager.conversations(space_id)
@@ -135,7 +135,7 @@ async def conversations(space_id: int, store: SpacesStore = Depends(get_spaces_s
 
 
 @research_router.get("/spaces/{space_id}/conversations/{conversation_id}")
-async def conversation(space_id: int, conversation_id: str, store: SpacesStore = Depends(get_spaces_store), manager=Depends(get_research_jobs)):
+def conversation(space_id: int, conversation_id: str, store: SpacesStore = Depends(get_spaces_store), manager=Depends(get_research_jobs)):
     try:
         store.get_space(space_id)
         return [manager.public(job["job_id"], store, job=job) for job in manager.conversation_jobs(space_id, conversation_id)]

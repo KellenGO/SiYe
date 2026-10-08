@@ -664,3 +664,39 @@ def test_loading_history_obeys_retention_limits(config, monkeypatch, byte_limit)
     assert len(manager.history_store.records()) == 25
     assert manager.get("saved-0")["job_id"] == "saved-0"
     assert "saved-0" in manager.jobs
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("url", ["/api/research/spaces/1/conversations", "/api/research/spaces/1/conversations/saved"])
+async def test_history_reads_do_not_block_other_requests(url):
+    import threading
+    from httpx import ASGITransport, AsyncClient
+
+    entered, release = threading.Event(), threading.Event()
+    class Store:
+        def get_space(self, _):
+            return {"id": 1}
+    class Manager:
+        def read(self, *_):
+            entered.set()
+            release.wait(1)
+            return []
+        conversations = read
+        conversation_jobs = read
+    app = FastAPI()
+    app.include_router(research_router)
+    app.dependency_overrides[get_spaces_store] = Store
+    app.dependency_overrides[get_research_jobs] = Manager
+    @app.get("/ping")
+    async def ping():
+        return {"alive": True}
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://localhost:8080") as client:
+        pending = asyncio.create_task(client.get(url))
+        try:
+            assert await asyncio.to_thread(entered.wait, 2)
+            assert (await client.get("/ping")).json() == {"alive": True}
+            assert not pending.done(), "history I/O blocked the event loop"
+        finally:
+            release.set()
+            response = await pending
+        assert response.status_code == 200 and response.json() == []
