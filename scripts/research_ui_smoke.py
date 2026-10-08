@@ -1,3 +1,8 @@
+# -*- coding: utf-8 -*-
+# Copyright (c) 2025 relakkes@gmail.com
+# This file is part of MediaCrawler project.
+# Licensed under NON-COMMERCIAL LEARNING LICENSE 1.1
+
 """Verify the built research UI with temporary storage and an isolated fake worker."""
 
 import asyncio
