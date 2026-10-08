@@ -11,6 +11,7 @@
 |---|---|
 | 浏览器扩展（MV3） | `browser_extension/`：`service_worker.js`（读 cookie → POST 后端）、`content_script.js`、`sync_protocol.js`（wire 契约，纯函数）、`popup.*` |
 | 后端账号服务（一次性票据、域名白名单、Chrome→Playwright 映射、导入 profile、验证、删除） | `api/services/accounts.py` |
+| 纯 Cookie 导入契约与映射 | `api/services/cookie_import.py` 的 `validate_chrome_v1_cookie_list`；账号服务保留兼容导出 |
 | 搜索、登录与账号操作的共享租约 | `api/services/operation_coordinator.py` 的 `OperationCoordinator`；账号服务保留兼容导出 |
 | 账号 / 登录 HTTP 路由（前缀 `/api/search`） | `api/routers/search.py`：`POST /login`、`GET /login/{job_id}`、`GET /accounts`、`POST /accounts/sync-ticket`、`POST /accounts/{platform}/sync`、`POST /accounts/{platform}/verify`、`DELETE /accounts/{platform}/session` |
 | 扫码登录实现（可见窗口 + 二维码） | `aggregate_search/worker.py` 的 `_run_login`；二维码只走 `tools/crawler_util.py` 的 `show_qrcode`（`aggregate_search/login.py` 只是转发 shim） |
