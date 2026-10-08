@@ -10,13 +10,16 @@
 平台客户端共用 `base/search_context.py` 的请求上下文与重试边界；`aggregate_search/pagination.py` 保留兼容导出。抖音响应分类在 `media_platform/douyin/response.py`，分页无需加载 crawler。
 
 常驻 worker 的启动、复用、请求上限及空闲回收在 `api/services/search_worker_supervisor.py` 的 `PlatformWorkerSupervisor`；搜索任务管理器保留兼容导出并负责业务状态。
+
 | 职责 | 位置 |
 |---|---|
-| 搜索状态机（事件 → 状态）、排序、去重、渐进展示 selector | `webui/src/lib/searchExperience.ts`（**1,339 行，全仓最大的前端模块，待拆分**） |
+| 搜索纯逻辑的兼容入口 | `webui/src/lib/searchExperience.ts`，保留既有导出 |
+| 历史与平台偏好 / 排序 / 去重合并 / 状态机与渐进展示 | `webui/src/lib/search/preferences.ts`、`ranking.ts`、`results.ts`、`state.ts` |
 | 每平台搜索数量（1–40，默认 20，localStorage 持久化） | `webui/src/lib/platformLimits.ts` |
+| 搜索数量设置界面 | `webui/src/components/accounts/SearchSettings.tsx`；持久化 hook 仍由 `AccountsPage` 持有 |
 | 平台列表与 slug 守卫的**唯一来源** | `webui/src/lib/platformMeta.ts` |
 | 搜索冷却 / 新鲜度 / 状态文案 | `webui/src/lib/statusDisplay.ts`、`webui/src/lib/searchPopover.ts` |
-| 结果状态 → UI 文案（含"正在搜索，暂时显示上次结果"） | `webui/src/lib/searchExperience.ts` 的 `summarizeSearchError` / `selectSearchPresentation` |
+| 结果状态 → UI 文案（含"正在搜索，暂时显示上次结果"） | `webui/src/lib/search/state.ts` 的 `safeErrorSummary` / `selectSearchPresentation` |
 | React 接线层 | `webui/src/hooks/useSearchExperience.ts`、`useAggregateSearch.ts` |
 | 内容视图偏好 | `webui/src/lib/contentView.ts` |
 | 两种视图共用封面与指标展示 | `webui/src/components/favorites/LocalContentCard.tsx` 的 `LocalContentCover` / `ContentMetric` |
@@ -160,10 +163,7 @@
   （x=0，正在圆角收缩区）上下两端会被裁掉，看起来是"上下窄、中间正常"的一段弧线。
   改回矩形（`rounded-none`）即恢复正常，input 是透明的，外观没有区别。
   验证方法：聚焦输入框后截图，`caret="initial"`（Playwright 默认会把插入符隐藏掉）。
-- `webui/src/lib/searchExperience.ts` 同时承担状态机、排序、去重、历史、文案五件事，1,339 行。
-  它的 **39 个导出里只有 11 个被生产代码用到**，其余纯粹是"为了测试而导出" ——
-  把内部评分函数（如 `engagementScore`）提升成了公共 API，改算法就得同时改测试。
-  拆分方案见 `docs/plans/2026-09-14-优化与精简方案.md` §4.4（尚未执行）。
+- 搜索纯逻辑已按职责拆分；统一入口继续保留内部评分函数等既有导出，供现有调用方和回归测试使用。不能仅凭生产代码引用数量删除这些入口。
 - i18n 覆盖情况（2026-09-15 更新）：`search.*` 命名空间的键**已在搜索页、搜索框、搜索浮层接线**
   （`webui/src/components/search/SearchPage.tsx`、`SearchBar.tsx`、`SearchPopover.tsx`），切英文能生效。
   **仍未接线的是那些"还没有键"的文案**：首页两个面板的说明文字、探索轮次的全部文案、

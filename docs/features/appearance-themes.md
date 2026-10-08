@@ -11,7 +11,7 @@
 | 深浅与主题色的状态、持久化 | `webui/src/store/themeStore.ts`（`useThemeStore`，`ACCENTS` 列表与色块值） |
 | 深浅的 CSS | `webui/src/index.css` 的 `:root` 与 `.dark` |
 | 每种主题色的 CSS（覆盖品牌色那一组变量） | `webui/src/index.css` 的 `html[data-accent="…"]` 与 `html.dark[data-accent="…"]` |
-| 选择器界面 | `webui/src/components/accounts/AccountsPage.tsx` 的外观与首页区 |
+| 选择器界面 | `webui/src/components/accounts/AppearanceSettings.tsx`；`AccountsPage.tsx` 保留设置导航 |
 | Tailwind 侧的颜色映射 | `webui/tailwind.config.ts` |
 
 ## 关键决定
