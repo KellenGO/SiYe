@@ -24,36 +24,68 @@
 # @Time    : 2024/6/2 10:35
 # @Desc    :
 
-import time
-import unittest
+import asyncio
+import gc
+import weakref
+from unittest.mock import patch
+
+import pytest
 
 from cache.local_cache import ExpiringLocalCache
 
 
-class TestExpiringLocalCache(unittest.TestCase):
-
-    def setUp(self):
-        self.cache = ExpiringLocalCache(cron_interval=10)
-
-    def test_set_and_get(self):
-        self.cache.set('key', 'value', 10)
-        self.assertEqual(self.cache.get('key'), 'value')
-
-    def test_expired_key(self):
-        self.cache.set('key', 'value', 1)
-        time.sleep(2)  # wait for the key to expire
-        self.assertIsNone(self.cache.get('key'))
-
-    def test_clear(self):
-        # Set two key-value pairs with expiration time of 11 seconds
-        self.cache.set('key', 'value', 11)
-        # Sleep for 12 seconds to let the cache class's scheduled task execute once
-        time.sleep(12)
-        self.assertIsNone(self.cache.get('key'))
-
-    def tearDown(self):
-        del self.cache
+def test_set_get_and_expired_key():
+    with patch("cache.local_cache.time.time", return_value=100):
+        cache = ExpiringLocalCache()
+        cache.set("key", "value", 10)
+        assert cache.get("key") == "value"
+    with patch("cache.local_cache.time.time", return_value=111):
+        assert cache.get("key") is None
+    assert "key" not in cache._cache_container
 
 
-if __name__ == '__main__':
-    unittest.main()
+def test_clear_removes_multiple_expired_keys_and_keeps_live_values():
+    with patch("cache.local_cache.time.time", return_value=100):
+        cache = ExpiringLocalCache()
+        cache.set("expired-1", "one", 1)
+        cache.set("expired-2", "two", 2)
+        cache.set("live", "three", 10)
+    with patch("cache.local_cache.time.time", return_value=103):
+        cache._clear()
+    assert cache.keys("*") == ["live"]
+    assert cache.keys("li*") == ["live"]
+
+
+def test_sync_cache_does_not_create_an_idle_event_loop():
+    with patch("asyncio.new_event_loop", side_effect=AssertionError("unexpected loop")):
+        cache = ExpiringLocalCache()
+    assert cache._cron_task is None
+
+
+@pytest.mark.asyncio
+async def test_scheduled_clear_continues_and_close_joins_task():
+    cache = ExpiringLocalCache(cron_interval=0.001)
+    cache.set("expired-1", "one", -1)
+    cache.set("expired-2", "two", -1)
+    task = cache._cron_task
+    try:
+        async with asyncio.timeout(1):
+            while cache._cache_container:
+                await asyncio.sleep(0)
+        assert not task.done()
+    finally:
+        await cache.aclose()
+    assert task.done()
+    await cache.aclose()
+
+
+@pytest.mark.asyncio
+async def test_timer_does_not_keep_discarded_cache_alive():
+    cache = ExpiringLocalCache()
+    task, reference = cache._cron_task, weakref.ref(cache)
+    await asyncio.sleep(0)
+    del cache
+    gc.collect()
+    assert reference() is None
+    await asyncio.gather(task, return_exceptions=True)
+    assert task.done()

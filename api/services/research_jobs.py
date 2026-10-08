@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import threading
 import uuid
 from pathlib import Path
 
@@ -69,16 +70,21 @@ class ResearchJobs:
         self.tasks = {}
         self.active = None
         self.lock = asyncio.Lock()
+        self._cache_lock = threading.RLock()
         self.probes = set()
         self.history_store = ResearchHistory(config.path.parent / "research-history")
 
     def get(self, job_id):
-        if job_id not in self.jobs:
-            saved = self.history_store.load(job_id)
-            if not saved:
-                raise ValueError("研究任务不存在")
-            self.jobs[job_id] = saved
-        return self.jobs[job_id]
+        # Polling runs in FastAPI's thread pool; it may load history while an
+        # async task prunes completed jobs. Keep insertion and pruning atomic.
+        with self._cache_lock:
+            if job_id not in self.jobs:
+                saved = self.history_store.load(job_id)
+                if not saved:
+                    raise ValueError("研究任务不存在")
+                self.jobs[job_id] = saved
+                self.prune()
+            return self.jobs[job_id]
 
     def public(self, job_id, store=None, job=None):
         job = job if job is not None else self.get(job_id)
@@ -104,6 +110,10 @@ class ResearchJobs:
         return visible
 
     def prune(self):
+        with self._cache_lock:
+            self._prune_finished()
+
+    def _prune_finished(self):
         retained, size = 0, 0
         for identity in reversed(list(self.jobs)):
             job = self.jobs[identity]
@@ -143,7 +153,7 @@ class ResearchJobs:
     def conversation_jobs(self, space_id, conversation_id):
         records = {row["job_id"]: self.history_store.load(row["job_id"]) for row in self.history_store.records()
                    if row["conversation_id"] == conversation_id}
-        records.update({job["job_id"]: job for job in self.jobs.values()
+        records.update({job["job_id"]: job for job in list(self.jobs.values())
                         if job.get("conversation_id", job["job_id"]) == conversation_id})
         matches = sorted((job for job in records.values() if job), key=lambda job: job.get("created_at", 0))
         if not matches or any(job["space_id"] != space_id for job in matches):
@@ -152,7 +162,7 @@ class ResearchJobs:
 
     def conversations(self, space_id):
         records = {row["job_id"]: row for row in self.history_store.records(space_id)}
-        records.update({job["job_id"]: self.history_store.summary(job) for job in self.jobs.values() if job["space_id"] == space_id})
+        records.update({job["job_id"]: self.history_store.summary(job) for job in list(self.jobs.values()) if job["space_id"] == space_id})
         groups = {}
         for job in sorted(records.values(), key=lambda row: row["created_at"]):
             identity = job["conversation_id"]

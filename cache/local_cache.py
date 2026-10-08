@@ -26,6 +26,7 @@
 
 import asyncio
 import time
+import weakref
 from typing import Any, Dict, List, Optional, Tuple
 
 from cache.abs_cache import AbstractCache
@@ -50,8 +51,19 @@ class ExpiringLocalCache(AbstractCache):
         Destructor function, cleanup scheduled task
         :return:
         """
+        self.close()
+
+    def close(self) -> None:
+        """Stop scheduled cleanup; safe to call repeatedly."""
+        task = self._cron_task
+        if task is not None and not task.done() and not task.get_loop().is_closed():
+            task.cancel()
+
+    async def aclose(self) -> None:
+        """Stop cleanup and wait for the task to finish."""
+        self.close()
         if self._cron_task is not None:
-            self._cron_task.cancel()
+            await asyncio.gather(self._cron_task, return_exceptions=True)
 
     def get(self, key: str) -> Optional[Any]:
         """
@@ -102,30 +114,36 @@ class ExpiringLocalCache(AbstractCache):
         """
 
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
         except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+            return
 
-        self._cron_task = loop.create_task(self._start_clear_cron())
+        self._cron_task = loop.create_task(
+            self._start_clear_cron(weakref.ref(self), self._cron_interval))
 
     def _clear(self):
         """
         Clean up cache based on expiration time
         :return:
         """
-        for key, (value, expire_time) in self._cache_container.items():
-            if expire_time < time.time():
+        now = time.time()
+        for key, (_, expire_time) in list(self._cache_container.items()):
+            if expire_time < now:
                 del self._cache_container[key]
 
-    async def _start_clear_cron(self):
+    @staticmethod
+    async def _start_clear_cron(cache_ref, interval):
         """
         Start scheduled cleanup task
         :return:
         """
         while True:
-            self._clear()
-            await asyncio.sleep(self._cron_interval)
+            cache = cache_ref()
+            if cache is None:
+                return
+            cache._clear()
+            del cache
+            await asyncio.sleep(interval)
 
 
 if __name__ == '__main__':

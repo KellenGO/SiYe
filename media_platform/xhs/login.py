@@ -130,29 +130,32 @@ class XiaoHongShuLogin(AbstractLogin):
         cache_client = CacheFactory.create_cache(config.CACHE_TYPE_MEMORY)
         max_get_sms_code_time = 60 * 2  # Maximum time to get verification code is 2 minutes
         no_logged_in_session = ""
-        while max_get_sms_code_time > 0:
-            utils.logger.info(f"[XiaoHongShuLogin.login_by_mobile] get sms code from redis remaining time {max_get_sms_code_time}s ...")
-            await asyncio.sleep(1)
-            sms_code_key = f"xhs_{self.login_phone}"
-            sms_code_value = cache_client.get(sms_code_key)
-            if not sms_code_value:
-                max_get_sms_code_time -= 1
-                continue
+        try:
+            while max_get_sms_code_time > 0:
+                utils.logger.info(f"[XiaoHongShuLogin.login_by_mobile] get sms code from redis remaining time {max_get_sms_code_time}s ...")
+                await asyncio.sleep(1)
+                sms_code_key = f"xhs_{self.login_phone}"
+                sms_code_value = cache_client.get(sms_code_key)
+                if not sms_code_value:
+                    max_get_sms_code_time -= 1
+                    continue
 
-            current_cookie = await self.browser_context.cookies()
-            _, cookie_dict = utils.convert_cookies(current_cookie)
-            no_logged_in_session = cookie_dict.get("web_session")
+                current_cookie = await self.browser_context.cookies()
+                _, cookie_dict = utils.convert_cookies(current_cookie)
+                no_logged_in_session = cookie_dict.get("web_session")
 
-            await sms_code_input_ele.fill(value=sms_code_value.decode())  # Enter SMS verification code
-            await asyncio.sleep(0.5)
-            agree_privacy_ele = self.context_page.locator("xpath=//div[@class='agreements']//*[local-name()='svg']")
-            await agree_privacy_ele.click()  # Click to agree to privacy policy
-            await asyncio.sleep(0.5)
+                await sms_code_input_ele.fill(value=sms_code_value.decode())  # Enter SMS verification code
+                await asyncio.sleep(0.5)
+                agree_privacy_ele = self.context_page.locator("xpath=//div[@class='agreements']//*[local-name()='svg']")
+                await agree_privacy_ele.click()  # Click to agree to privacy policy
+                await asyncio.sleep(0.5)
 
-            await submit_btn_ele.click()  # Click login
+                await submit_btn_ele.click()  # Click login
 
-            # TODO: Should also check if the verification code is correct, as it may be incorrect
-            break
+                # TODO: Should also check if the verification code is correct, as it may be incorrect
+                break
+        finally:
+            await cache_client.aclose()
 
         try:
             await self.check_login_state(no_logged_in_session)

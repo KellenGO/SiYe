@@ -36,7 +36,7 @@ search_router = APIRouter(prefix="/api/search", tags=["aggregate-search"])
 
 
 
-# ── Operation coordinator（Phase 4.2：搜索/登录排他，账号操作共享 2 槽）──
+# ── Operation coordinator（搜索/登录排他，账号操作共享 2 槽）──
 
 _operation_coordinator = accounts_service.operation_coordinator
 
@@ -87,8 +87,8 @@ async def _account_operation_gate(
                              f"正在搜索，暂时不能{action}，请等待搜索完成", platform)
         return
 
-    await search_job_manager.stop_platform_worker(platform)
     try:
+        await search_job_manager.stop_platform_worker(platform)
         yield None
     finally:
         # 后台验证仍在跑时槽位不释放（由任务 done 回调释放）；

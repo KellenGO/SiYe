@@ -642,3 +642,25 @@ async def test_cancel_updates_running_tool_records(config, monkeypatch):
     await manager.cancel("job")
     assert manager.jobs["job"]["activity"][0]["status"] == "cancelled"
     assert manager.active is None
+
+
+@pytest.mark.parametrize("byte_limit", [32 * 1024 * 1024, 1])
+def test_loading_history_obeys_retention_limits(config, monkeypatch, byte_limit):
+    from api.services import research_jobs as module
+    monkeypatch.setattr(module, "MAX_RETAINED_BYTES", byte_limit)
+    manager = ResearchJobs(config)
+    manager.jobs["active"] = {"status": "awaiting_sources"}
+    manager.active = "active"
+    for index in range(25):
+        identity = f"saved-{index}"
+        row = {"job_id": identity, "space_id": 1, "created_at": index,
+               "snapshot": {"name": "主题", "items": []}, "question": "问题",
+               "status": "ready", "materials": [], "document": None}
+        manager.history_store.save(row)
+        assert manager.get(identity)["job_id"] == identity
+        expected = module.MAX_FINISHED_JOBS if byte_limit > 1 else 1
+        assert len(manager.jobs) <= expected + 1
+        assert "active" in manager.jobs
+    assert len(manager.history_store.records()) == 25
+    assert manager.get("saved-0")["job_id"] == "saved-0"
+    assert "saved-0" in manager.jobs

@@ -150,22 +150,25 @@ class DouYinLogin(AbstractLogin):
         await self.check_page_display_slider(move_step=10, slider_level="easy")
         cache_client = CacheFactory.create_cache(config.CACHE_TYPE_MEMORY)
         max_get_sms_code_time = 60 * 2  # Maximum time to get verification code is 2 minutes
-        while max_get_sms_code_time > 0:
-            utils.logger.info(f"[DouYinLogin.login_by_mobile] get douyin sms code from redis remaining time {max_get_sms_code_time}s ...")
-            await asyncio.sleep(1)
-            sms_code_key = f"dy_{self.login_phone}"
-            sms_code_value = cache_client.get(sms_code_key)
-            if not sms_code_value:
-                max_get_sms_code_time -= 1
-                continue
+        try:
+            while max_get_sms_code_time > 0:
+                utils.logger.info(f"[DouYinLogin.login_by_mobile] get douyin sms code from redis remaining time {max_get_sms_code_time}s ...")
+                await asyncio.sleep(1)
+                sms_code_key = f"dy_{self.login_phone}"
+                sms_code_value = cache_client.get(sms_code_key)
+                if not sms_code_value:
+                    max_get_sms_code_time -= 1
+                    continue
 
-            sms_code_input_ele = self.context_page.locator("xpath=//input[@placeholder='请输入验证码']")
-            await sms_code_input_ele.fill(value=sms_code_value.decode())
-            await asyncio.sleep(0.5)
-            submit_btn_ele = self.context_page.locator("xpath=//button[@class='web-login-button']")
-            await submit_btn_ele.click()  # Click login
-            # todo ... should also check the correctness of the verification code, it may be incorrect
-            break
+                sms_code_input_ele = self.context_page.locator("xpath=//input[@placeholder='请输入验证码']")
+                await sms_code_input_ele.fill(value=sms_code_value.decode())
+                await asyncio.sleep(0.5)
+                submit_btn_ele = self.context_page.locator("xpath=//button[@class='web-login-button']")
+                await submit_btn_ele.click()  # Click login
+                # todo ... should also check the correctness of the verification code, it may be incorrect
+                break
+        finally:
+            await cache_client.aclose()
 
     async def check_page_display_slider(self, move_step: int = 10, slider_level: str = "easy"):
         """

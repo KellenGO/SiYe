@@ -245,6 +245,7 @@ class TestOperationCoordinator:
     @pytest.mark.asyncio
     async def test_two_different_platforms_overlap(self, coord):
         assert await coord.acquire_account("xhs", "sync") == ""
+
         assert await coord.acquire_account("douyin", "sync") == ""  # 可重叠
 
     @pytest.mark.asyncio
@@ -306,3 +307,38 @@ class TestOperationCoordinator:
         assert coord._account_ops == {}
         assert coord._exclusive is None
         assert await coord.acquire_account("xhs", "sync") == ""
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error", [RuntimeError("worker stop failed"), asyncio.CancelledError()])
+async def test_router_gate_releases_slot_when_worker_stop_fails(monkeypatch, error):
+    from api.routers import search as router
+
+    coord = acc.OperationCoordinator()
+    monkeypatch.setattr(router, "_operation_coordinator", coord)
+    monkeypatch.setattr(router.search_job_manager, "is_search_active", lambda: False)
+    monkeypatch.setattr(acc, "is_verify_active", lambda _: False)
+
+    async def stop(_):
+        raise error
+
+    monkeypatch.setattr(router.search_job_manager, "stop_platform_worker", stop)
+    with pytest.raises(type(error)):
+        async with router._account_operation_gate("xhs", "sync", "同步", "正在验证", skip_release_if_verifying=True):
+            pytest.fail("worker 停止失败时不能开始账号操作")
+    assert await coord.acquire_exclusive("search") is True
+
+
+@pytest.mark.asyncio
+async def test_router_gate_keeps_slot_for_background_verification(monkeypatch):
+    from api.routers import search as router
+
+    coord = acc.OperationCoordinator()
+    monkeypatch.setattr(router, "_operation_coordinator", coord)
+    monkeypatch.setattr(router.search_job_manager, "is_search_active", lambda: False)
+    monkeypatch.setattr(router.search_job_manager, "stop_platform_worker", lambda _: asyncio.sleep(0))
+    monkeypatch.setattr(acc, "is_verify_active", lambda _: True)
+    async with router._account_operation_gate("xhs", "sync", "同步", "正在验证", skip_release_if_verifying=True) as blocked:
+        assert blocked is None
+    assert await coord.acquire_account("xhs", "verify") == "platform"
+    await coord.release_account("xhs")
+    assert await coord.acquire_exclusive("search") is True
