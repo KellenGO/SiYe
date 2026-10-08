@@ -50,7 +50,9 @@ for package in (
     "tools",
     "uvicorn",
 ):
-    hiddenimports.extend(collect_submodules(package))
+    hiddenimports.extend(collect_submodules(package, filter=lambda name: name not in {
+        "tools.file_header_manager", "tools.smoke_cookie_import",
+    }))
 
 hiddenimports.extend([
     "desktop_main",
@@ -76,7 +78,8 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["tkinter", "faster_whisper", "ctranslate2", "av", "onnxruntime"],
+    excludes=["tkinter", "faster_whisper", "ctranslate2", "av", "onnxruntime",
+              "tools.file_header_manager", "tools.smoke_cookie_import"],
     noarchive=False,
 )
 pyz = PYZ(a.pure)

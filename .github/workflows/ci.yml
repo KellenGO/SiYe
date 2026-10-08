@@ -33,8 +33,8 @@ jobs:
           enable-cache: true
       - name: Lock and install project dependencies
         run: |
-          uv lock
-          uv sync
+          uv lock --check
+          uv sync --frozen
       - name: Run local fixture and unit tests
         # Integration tests are marked and skipped by repository-wide defaults.
         run: uv run pytest -q
@@ -66,8 +66,8 @@ jobs:
           enable-cache: true
       - name: Install project dependencies
         run: |
-          uv lock
-          uv sync
+          uv lock --check
+          uv sync --frozen
       - name: Run Redis-backed integration tests
         env:
           REDIS_DB_PWD: ""

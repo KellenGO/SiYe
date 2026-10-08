@@ -4,7 +4,7 @@
 
 | 位置 | 放什么 |
 | --- | --- |
-| `api/`、`aggregate_search/`、`media_platform/` | API、任务编排与平台实现；本轮保持模块位置，避免整理破坏导入 |
+| `api/`、`aggregate_search/`、`media_platform/` | API、任务编排与平台实现；共享机制与平台请求上下文位于 `api/services/`、`base/` |
 | `base/`、`config/`、`tools/` 等 Python 目录 | 公共运行支持与原有依赖；不要仅凭目录名判断无用 |
 | `webui/src/`、`webui/tests/` | 应用前端和测试 |
 | `browser_extension/` | 可选浏览器登录同步扩展 |
@@ -24,6 +24,8 @@
 `cache/` 是受跟踪的 Python 缓存实现，`.cache/` 才是本机缓存；`build/tools/` 是本机构建工具，`agent_runtime/` 是固定版本 AI 运行程序，`.venv/` 与 `webui/node_modules/` 是开发依赖。它们不能仅因未进入 Git 就当作垃圾。根目录 `.tmp_*` 的忽略规则已入库，不再依赖某一台机器的 `.git/info/exclude`。
 
 V1.2 发布准备与尚待验收的边界见 [发布检查](releases/v1.2.0.md)。当前 `dist/` 仍是旧版本日常入口，准备候选包时使用独立目录，不覆盖已有运行环境。
+
+发布构建统一使用 `scripts/build_exe.ps1` → `package_exe.py` → `build_installer.ps1`；旧源码打包与对应 smoke 已退役。`build_exe.ps1 -OutputDir build/<候选名>/dist -PythonPath .venv/Scripts/python.exe` 可构建独立候选，默认输出仍为 `dist/`。开发用的文件头检查与 Cookie smoke 保留源码，只从 EXE 排除；CI 检查现有锁文件并按锁文件安装，不重新选择依赖版本。
 
 其他 worktree 的实际位置和分支用 `git worktree list` 核对，不按旧目录名猜测。接手前检查其状态；若有未提交文件，先确认归属，不清理或覆盖。合并后继续开发从最新 `master` 开始。
 

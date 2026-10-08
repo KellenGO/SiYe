@@ -37,6 +37,7 @@
 
 ## 测试怎么跑
 
+候选构建可加 `scripts/build_exe.ps1` 的 `-OutputDir build/<候选名>/dist`，避免覆盖日常使用目录；便携包与安装器一并输出到该目录。
 - 静态契约：`tests/test_installer_contract.py`、`tests/test_docs_wiki.py`。
 - 构建：`powershell -ExecutionPolicy Bypass -File scripts/build_installer.ps1 -PythonPath .venv/Scripts/python.exe`。
 - 产物：`.venv/Scripts/python.exe scripts/installer_clean_room_smoke.py --installer dist/SiYe-Setup-Windows-x64.exe`，会在临时目录静默安装、跑完整 EXE clean-room、静默卸载。

@@ -17,6 +17,7 @@
 4. 打包清单引用了已删除的文件，或死代码被重新引入。
 """
 
+import ast
 import importlib.util
 import json
 import re
@@ -134,8 +135,7 @@ def _requirements_dependencies() -> dict:
 def test_requirements_match_pyproject():
     """requirements.txt 必须与 pyproject.toml 的运行时依赖一致。
 
-    requirements.txt 仍被 scripts/package_windows.py 打进发布包且没有版本检查，
-    因此这里的奇偶校验是唯一防线（曾漏掉 websockets、opencv 未固定版本）。
+    源码启动的 pip 回退仍使用 requirements.txt；两处依赖声明必须保持一致。
     """
     pyproject = _pyproject_dependencies()
     requirements = _requirements_dependencies()
@@ -226,27 +226,30 @@ def test_tagged_commit_declares_the_tagged_version():
 
 # ── 4. 打包清单与死代码 ─────────────────────────────────────────────────
 
-def _runtime_lists() -> tuple[tuple, tuple]:
-    text = (_ROOT / "scripts" / "package_windows.py").read_text(encoding="utf-8")
-    dirs = re.search(r"RUNTIME_DIRECTORIES\s*=\s*\((.*?)\)", text, re.S).group(1)
-    files = re.search(r"RUNTIME_FILES\s*=\s*\((.*?)\)", text, re.S).group(1)
-    parse = lambda block: tuple(re.findall(r'"([^"]+)"', block))
-    return parse(dirs), parse(files)
+def test_runtime_packaging_modules_exist():
+    """PyInstaller 的本机模块发现清单必须能解析到真实模块。"""
+    tree = ast.parse((_ROOT / "MediaCrawler.spec").read_text(encoding="utf-8"))
+    packages = next(ast.literal_eval(node.iter) for node in tree.body
+                    if isinstance(node, ast.For) and isinstance(node.iter, ast.Tuple)
+                    and "api" in ast.literal_eval(node.iter))
+    assert all(importlib.util.find_spec(name) is not None for name in packages)
 
 
-def test_packaging_lists_exist_on_disk():
-    """打包清单里的每一项都必须真实存在，否则组装发布包会直接抛错。"""
-    directories, files = _runtime_lists()
-    missing_dirs = [d for d in directories if not (_ROOT / d).is_dir()]
-    missing_files = [f for f in files if not (_ROOT / f).is_file()]
-    assert missing_dirs == [], f"打包清单里的目录不存在: {missing_dirs}"
-    assert missing_files == [], f"打包清单里的文件不存在: {missing_files}"
-
-
-def test_packaging_does_not_reference_removed_sms_helper():
-    """recv_sms.py 已删除（产品登录走二维码 + 扩展同步），打包清单不得再提它。"""
-    _, files = _runtime_lists()
-    assert "recv_sms.py" not in files
+def test_packaging_source_inputs_exist():
+    """冻结构建的源码资源必须存在；产物由构建及 EXE smoke 验证。"""
+    tree = ast.parse((_ROOT / "MediaCrawler.spec").read_text(encoding="utf-8"))
+    def relative(node):
+        if isinstance(node, ast.Name) and node.id == "ROOT":
+            return Path()
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div) and isinstance(node.right, ast.Constant):
+            parent = relative(node.left)
+            if parent is not None:
+                return parent / node.right.value
+        return None
+    inputs = {value for node in ast.walk(tree) if (value := relative(node)) is not None and value.parts}
+    source_inputs = [value for value in inputs if value.parts[0] != "agent_runtime" and value.as_posix() != "webui/dist" and not value.as_posix().startswith("webui/dist/")]
+    assert all((_ROOT / value).exists() for value in source_inputs), source_inputs
+    assert "recv_sms" not in (_ROOT / "MediaCrawler.spec").read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize("module", [

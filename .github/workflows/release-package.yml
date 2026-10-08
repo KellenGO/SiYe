@@ -42,7 +42,7 @@ jobs:
       - name: Install backend development environment
         run: |
           uv lock --check
-          uv sync
+          uv sync --frozen
 
       - name: Run backend regression tests
         run: uv run pytest -q

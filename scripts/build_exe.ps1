@@ -2,7 +2,8 @@
 param(
     [switch]$SkipTests,
     [switch]$SkipInstaller,
-    [string]$PythonPath
+    [string]$PythonPath,
+    [string]$OutputDir = "dist"
 )
 
 $ErrorActionPreference = "Stop"
@@ -48,11 +49,15 @@ if (-not $SkipTests) {
 }
 
 Invoke-Checked $pythonCommand ($pythonPrefix + @("scripts/prepare_agent_runtime.py"))
-Invoke-Checked $pythonCommand ($pythonPrefix + @("-m", "PyInstaller", "--clean", "--noconfirm", "MediaCrawler.spec"))
+Invoke-Checked $pythonCommand ($pythonPrefix + @("-m", "PyInstaller", "--clean", "--noconfirm",
+    "--distpath", $OutputDir, "--workpath", (Join-Path $OutputDir ".pyinstaller"), "MediaCrawler.spec"))
 
-$distribution = Join-Path $repoRoot "dist\SiYe"
+$distribution = [IO.Path]::GetFullPath((Join-Path (Join-Path $repoRoot $OutputDir) "SiYe"))
 $extensionTarget = Join-Path $distribution "browser_extension"
 if (Test-Path $extensionTarget) {
+    if (-not ([IO.Path]::GetFullPath($extensionTarget).StartsWith($distribution + [IO.Path]::DirectorySeparatorChar))) {
+        throw "Extension cleanup target is outside the distribution: $extensionTarget"
+    }
     Remove-Item -LiteralPath $extensionTarget -Recurse -Force
 }
 Copy-Item -LiteralPath (Join-Path $repoRoot "browser_extension") -Destination $extensionTarget -Recurse
@@ -71,14 +76,14 @@ if ($env:GITHUB_REF_TYPE -eq "tag" -and $env:GITHUB_REF_NAME) {
 $versionFile = Join-Path $distribution "RELEASE_VERSION"
 Set-Content -LiteralPath $versionFile -Value $releaseVersion -Encoding ascii
 
-Invoke-Checked $pythonCommand ($pythonPrefix + @("scripts/package_exe.py", "--distribution", "dist/SiYe", "--output", "dist"))
+Invoke-Checked $pythonCommand ($pythonPrefix + @("scripts/package_exe.py", "--distribution", $distribution, "--output", $OutputDir))
 if (-not $SkipInstaller) {
     Invoke-Checked powershell.exe @(
         "-NoProfile", "-ExecutionPolicy", "Bypass",
         "-File", "scripts/build_installer.ps1",
-        "-Distribution", "dist/SiYe",
-        "-Output", "dist",
+        "-Distribution", $distribution,
+        "-Output", $OutputDir,
         "-PythonPath", $pythonCommand
     )
 }
-Write-Host "EXE distribution ready: dist/SiYe/SiYe.exe" -ForegroundColor Green
+Write-Host "EXE distribution ready: $distribution/SiYe.exe" -ForegroundColor Green
