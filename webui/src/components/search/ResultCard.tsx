@@ -5,6 +5,7 @@ import type { GroupedSource, UnifiedSearchResult } from "@/types/search";
 import { PLATFORM_COLORS, PLATFORM_LABELS } from "@/types/search";
 import { highlightSegments, orderedMetrics, safeContentUrl as safeUrl } from "@/lib/resultTools";
 import { recordView } from "@/lib/historyApi";
+import { supportsReading } from "@/lib/reading";
 
 interface ResultCardProps {
   result: UnifiedSearchResult;
@@ -51,10 +52,11 @@ export function ResultCard({ result, index = 0, highlightQuery = "", renderBookm
   const bylineRef = useRef<HTMLDivElement>(null);
   const metaRef = useRef<HTMLDivElement>(null);
   const url = safeUrl(result.url);
+  const readsHere = !!onOpenDetails && supportsReading(result);
   // 用户点开结果链接即记一条观看历史；fire-and-forget，失败不阻塞跳转。
   const handleOpen = () => { void recordView(result); };
   const groupedSources = result.grouped_sources && result.grouped_sources.length >= 2 ? result.grouped_sources : null;
-  const title = <><Highlight text={result.title || "无标题内容"} query={highlightQuery} />{url && <ArrowUpRight />}</>;
+  const title = <><Highlight text={result.title || "无标题内容"} query={highlightQuery} />{url && !readsHere && <ArrowUpRight />}</>;
   const metrics = orderedMetrics(result.metrics);
   const platforms = Array.from(new Set((groupedSources || [result]).map((source) => source.platform)));
   const hasDetails = detailsExpanded || contentClipped || !!groupedSources;
@@ -74,10 +76,10 @@ export function ResultCard({ result, index = 0, highlightQuery = "", renderBookm
   return (
     <article className="result-row">
       <span className="result-number">{String(index + 1).padStart(2, "0")}</span>
-      <div className="result-cover"><LocalContentCover result={result} /></div>
+      <div className="result-cover">{readsHere ? <button type="button" className="result-reader-cover" aria-label={`站内阅读：${result.title}`} onClick={onOpenDetails}><LocalContentCover result={result} /></button> : <LocalContentCover result={result} />}</div>
       <div className="result-content">
         <div className={`result-preview ${detailsExpanded ? "is-expanded" : ""}`}>
-          <h2 ref={titleRef}>{url ? <a className="result-title" href={url} target="_blank" rel="noreferrer" onClick={handleOpen}>{title}</a> : <span className="result-title">{title}</span>}</h2>
+          <h2 ref={titleRef}>{readsHere ? <button type="button" className="result-title result-reader-title" onClick={onOpenDetails}>{title}</button> : url ? <a className="result-title" href={url} target="_blank" rel="noreferrer" onClick={handleOpen}>{title}</a> : <span className="result-title">{title}</span>}</h2>
           {result.snippet && <p ref={descriptionRef} className="result-description"><Highlight text={result.snippet} query={highlightQuery} /></p>}
           <div className="content-card-platform result-platform" title={platforms.map((platform) => PLATFORM_LABELS[platform]).join(" / ")}>
             {platforms.map((platform) => <i key={platform} className="pd" style={{ backgroundColor: PLATFORM_COLORS[platform] }} aria-hidden="true" />)}

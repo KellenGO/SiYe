@@ -16,6 +16,7 @@
 | 前端状态 hook | `webui/src/hooks/useHistory.ts` |
 | 前端历史页 | `webui/src/components/history/HistoryPage.tsx` |
 | 记录触发点（点击结果链接） | `webui/src/components/search/ResultTabs.tsx`、`webui/src/components/favorites/LocalContentDrawer.tsx` |
+| 知乎正文成功展示后记录 | `webui/src/components/reading/ReadingBody.tsx` |
 | 导航与路由 | `webui/src/components/layout/Header.tsx`、`webui/src/App.tsx` |
 
 ## 关键决定
@@ -39,7 +40,7 @@
 
 ## 已知坑 / 边界
 
-- 打开详情不记录观看；点击卡片原文或详情中的原平台链接才记录。聚合结果详情按实际打开的来源记录。
+- 普通内容打开信息详情不记录观看；点击原文才记录。支持[站内阅读](content-reading.md)的知乎回答／文章在取得可展示正文后，按当前来源记录一次；刷新不重复，正文加载失败、空的受限正文与关闭未完成请求不记录。图片的后续 CDN 加载失败不会撤销记录。聚合结果不会因打开其它来源而自动将所有来源记为看过。
 - 历史页的删除/清空走 react-query 刷新；删除单条只在「历史」页出现，搜索结果与收藏页不展示删除入口。
 - 后端 `record_view` 对 platform/content_id/title/url 有白名单校验（url 必须是 http/https），非法内容直接拒绝，不会写库。
 

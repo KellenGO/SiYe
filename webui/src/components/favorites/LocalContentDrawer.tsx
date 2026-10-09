@@ -9,6 +9,8 @@ import { orderedMetrics, resultKey, resultSources, safeContentUrl } from "@/lib/
 import { recordView } from "@/lib/historyApi";
 import { LocalContentCover, localContentType } from "./LocalContentCard";
 import { useResearchWorkspace } from "@/components/spaces/WorkspaceContext";
+import { ReadingBody } from "@/components/reading/ReadingBody";
+import { supportsReading } from "@/lib/reading";
 
 export function LocalContentDrawer({ result, library, onClose, fallbackFocus, savedView = false, fetchedAt = {}, onDelete, renderExtraActions }: {
   result: UnifiedSearchResult;
@@ -34,6 +36,7 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
   const [membershipKeys, setMembershipKeys] = useState<string[] | null>(null);
   const closeMembership = useCallback(() => setMembershipKeys(null), []);
   const keys = resultSources(result).map(resultKey);
+  const hasReader = resultSources(result).some(supportsReading);
   const items = keys.map((key) => library?.items.find((item) => item.key === key)).filter((item) => item !== undefined);
   const requestClose = () => {
     if (saving) return;
@@ -98,7 +101,7 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
       if (event.target === event.currentTarget && pointerStartedOutside.current) requestClose();
       pointerStartedOutside.current = false;
     }}>
-    <div className={`local-content-drawer ${workspace?.hasNote ? "with-research-note" : ""}`} ref={panel} role="dialog" aria-modal="true" aria-labelledby={id}
+    <div className={`local-content-drawer ${hasReader ? "with-reader" : ""} ${workspace?.hasNote ? "with-research-note" : ""}`} ref={panel} role="dialog" aria-modal="true" aria-labelledby={id}
       onKeyDown={(event) => {
         const confirmation = panel.current?.querySelector<HTMLElement>('.confirm-card, .membership-card[role="dialog"]');
         if (event.key === "Escape") {
@@ -118,7 +121,7 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
         if (event.shiftKey && (document.activeElement === first || !scope?.contains(document.activeElement))) { event.preventDefault(); last.focus(); }
         else if (!event.shiftKey && (document.activeElement === last || !scope?.contains(document.activeElement))) { event.preventDefault(); first.focus(); }
       }}>
-      <div className="local-content-drawer-head"><h2 id={id}>内容信息</h2><button ref={closeButton} type="button" className="btn small" aria-label="关闭内容详情" disabled={saving} onClick={requestClose}><X aria-hidden="true" />关闭</button></div>
+      <div className="local-content-drawer-head"><h2 id={id}>{hasReader ? "内容阅读" : "内容信息"}</h2><button ref={closeButton} type="button" className="btn small" aria-label="关闭内容详情" disabled={saving} onClick={requestClose}><X aria-hidden="true" />关闭</button></div>
       <div className={workspace?.hasNote ? "local-content-research-layout" : undefined}><div className="local-content-drawer-body">
         {resultSources(result).map((snapshot) => {
           const item = items.find((item) => item.key === resultKey(snapshot));
@@ -127,12 +130,13 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
           const published = source.published_at ? new Date(source.published_at) : null;
           const metrics = orderedMetrics(source.metrics);
           return <section className="local-content-detail" key={resultKey(source)} aria-label={`${PLATFORM_LABELS[source.platform]}内容详情`}>
-            <LocalContentCover result={source} />
+            {!supportsReading(source) && <LocalContentCover result={source} />}
             <p className="local-content-detail-source">{PLATFORM_LABELS[source.platform]} · {localContentType(source.content_type)}</p>
             <h3>{source.title || "无标题内容"}</h3>
             <p className="local-content-detail-meta">{source.author || "作者未提供"}{published && Number.isFinite(published.getTime()) ? ` · 发布于 ${published.toLocaleDateString("zh-CN")}` : ""}</p>
             {url && <a className="btn small local-content-original" href={url} target="_blank" rel="noreferrer" onClick={() => { void recordView(source); }}>在原平台打开<ArrowUpRight aria-hidden="true" /></a>}
-            <h4>简介</h4><p className="local-content-snippet">{source.snippet || "暂无简介"}</p>
+            {supportsReading(source) ? <ReadingBody key={`${source.content_type}:${source.content_id}:${source.url}`} source={source} />
+              : <><h4>简介</h4><p className="local-content-snippet">{source.snippet || "暂无简介"}</p></>}
             {metrics.length ? <dl className="local-content-metrics">{metrics.map(({ key, label }) => <div key={key}><dt>{label}</dt><dd>{source.metrics_approximate?.includes(key) ? "约 " : ""}{source.metrics[key].toLocaleString("zh-CN")}</dd></div>)}</dl>
               : <p className="local-content-detail-meta">暂无互动数据</p>}
             {library && <div className="local-content-actions"><span><BookmarkControl result={source} library={library} fetchedAt={fetchedAt}
