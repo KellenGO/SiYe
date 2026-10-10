@@ -14,6 +14,7 @@ from .reading_content import MAX_TEXT_CHARS
 from .reading_media import media_url
 from .research_diagnostics import AcquisitionError, classify
 from .research_materials import MaterialCollector
+from .reading_browser import douyin_page_detail
 
 
 def platform_reference(platform, kind, identity, url):
@@ -157,6 +158,8 @@ async def xhs_browser_detail(collector, client, identity, query):
 
 async def fetch_platform_reading(platform, kind, identity, url):
     snapshot = await ensure_session_snapshot(platform, raise_on_error=True) or {}
+    if platform == "douyin":
+        return await douyin_page_detail(snapshot, identity, kind, url)
     collector = MaterialCollector({platform: snapshot})
     try:
         client = await collector.client(platform)
@@ -174,19 +177,6 @@ async def fetch_platform_reading(platform, kind, identity, url):
                 if classify(error)[0] not in {"restricted", "malformed_response"}:
                     raise
                 detail = await collector.request(xhs_browser_detail, collector, client, identity, query)
-        elif platform == "douyin":
-            params = {"aweme_id": identity}
-            try:
-                response = await collector.request(client.get, "/aweme/v1/web/aweme/detail/", dict(params))
-                collector.check_douyin(response)
-                if not isinstance(response.get("aweme_detail"), dict):
-                    raise AcquisitionError("malformed_response")
-            except Exception as error:
-                if classify(error)[0] not in {"restricted", "malformed_response"}:
-                    raise
-                response = await collector.request(collector.browser_provider.douyin_detail, client, params)
-                collector.check_douyin(response)
-            detail = response.get("aweme_detail")
         else:
             response = await collector.request(client.get_video_info, bvid=identity if identity.startswith("BV") else None,
                                                aid=int(identity) if identity.isdigit() else None)

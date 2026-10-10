@@ -8,6 +8,7 @@
 import asyncio
 import json
 from types import SimpleNamespace
+from contextlib import asynccontextmanager
 
 import pytest
 from fastapi import FastAPI
@@ -28,6 +29,10 @@ def isolated_preparation(monkeypatch):
     async def prepare(*args):
         pass
     monkeypatch.setattr(reading, "prepare_reading", prepare)
+    @asynccontextmanager
+    async def browser_page(*args):
+        yield FakePage(evaluate_result="Mozilla/5.0 (Windows NT 10.0) Chrome/140.0")
+    monkeypatch.setattr(reading, "reading_page", browser_page)
 
 
 def test_body_order_and_inert_content():
@@ -166,9 +171,10 @@ async def test_fetch_reuses_client_and_closes_on_success_and_permission_failure(
     async def session(*args, **kwargs):
         return {"d_c0": "private-sign", "z_c0": "private-login"}
     monkeypatch.setattr(reading, "ensure_session_snapshot", session)
-    client = SimpleNamespace()
+    client = SimpleNamespace(default_headers={"user-agent": "Mozilla/5.0"})
     async def get(path, params):
         assert path == "/api/v4/answers/42"
+        assert "Chrome/" in client.default_headers["user-agent"]
         return {"id": "42", "content": "<p>正文</p>", "cookie": "private-secret"}
     client.get = get
     async def get_client(self, snapshot):
@@ -195,20 +201,24 @@ async def test_browser_fallback_uses_canonical_page_and_always_closes(monkeypatc
     async def get(*args):
         raise AcquisitionError("restricted", 403)
     async def get_client(*args):
-        return SimpleNamespace(get=get)
+        return SimpleNamespace(get=get, default_headers={})
     async def close(*args):
         closed.append("client")
-    page = FakePage()
+    page = FakePage(evaluate_result="Browser UA")
+    page.url = "https://zhuanlan.zhihu.com/p/42"
     async def content():
         return '<script id="js-initialData">' + json.dumps({"initialState": {"entities": {"articles": {"42": {"id": 42, "content": "<p>页面正文</p>"}}}}}) + '</script>'
     page.content = content
-    async def provider_page(self, platform, client):
-        self.stack.callback(closed.append, "browser")
-        return page
+    @asynccontextmanager
+    async def provider_page(platform, snapshot):
+        try:
+            yield page
+        finally:
+            closed.append("browser")
     monkeypatch.setattr(reading, "ensure_session_snapshot", session)
     monkeypatch.setattr(reading.ResultHydrator, "_get_zhihu", get_client)
     monkeypatch.setattr(reading.ResultHydrator, "close", close)
-    monkeypatch.setattr(reading.ResearchBrowserProvider, "page", provider_page)
+    monkeypatch.setattr(reading, "reading_page", provider_page)
     result = await reading.fetch_reading("article", "42", "https://zhuanlan.zhihu.com/p/42")
     assert result["blocks"][0]["text"] == "页面正文"
     assert page.goto_urls == ["https://zhuanlan.zhihu.com/p/42"] and closed == ["browser", "client"]

@@ -14,11 +14,20 @@ from fastapi import HTTPException
 from api.services import reading, reading_media, reading_platforms
 from api.services.operation_coordinator import OperationCoordinator
 from api.services.reading_platforms import platform_detail, platform_reference
+from api.services.reading_media import media_url
 from api.services.research_diagnostics import AcquisitionError
 from tests.fixtures.browser import FakePage
 
 NOTE = "abcdef0123456789abcdef01"
 BV = "BV1234567890"
+
+
+def test_douyin_official_play_entry_is_exact_and_not_arbitrary_page_proxy():
+    assert media_url("douyin", "https://www.douyin.com/aweme/v1/play/?video_id=42")
+    assert media_url("douyin", "https://v26-web.douyinvod.com/video.mp4")
+    for url in ("https://www.douyin.com/video/42", "https://www.douyin.com/aweme/v1/play/other",
+                "https://other.douyin.com/aweme/v1/play/", "https://www.douyin.com.evil.test/aweme/v1/play/"):
+        assert media_url("douyin", url) is None
 
 
 @pytest.mark.parametrize("platform,kind,identity,url", [
@@ -124,24 +133,21 @@ async def test_xhs_token_is_used_without_exporting_credentials_and_client_is_clo
 
 
 @pytest.mark.asyncio
-async def test_douyin_only_one_browser_fallback_and_rate_limit_is_final(collector, monkeypatch):
+async def test_douyin_reads_official_page_without_initializing_signed_client(collector, monkeypatch):
     client, calls, closed = collector
-    async def get(*args):
-        raise AcquisitionError("restricted", 403)
-    async def browser(*args):
-        calls.append("fallback")
-        return {"status_code": 0, "aweme_detail": {"aweme_id": "123", "desc": "浏览器正文"}}
-    client.get = get
-    from api.services.research_platforms import ResearchBrowserProvider
-    monkeypatch.setattr(ResearchBrowserProvider, "douyin_detail", browser)
+    async def browser(snapshot, identity, kind, url):
+        calls.append("page")
+        assert (identity, kind, url) == ("123", "video", "https://www.douyin.com/video/123")
+        return platform_detail("douyin", kind, identity, {"aweme_id": identity, "desc": "浏览器正文"})
+    monkeypatch.setattr(reading_platforms, "douyin_page_detail", browser)
     value = await reading_platforms.fetch_platform_reading("douyin", "video", "123", "https://www.douyin.com/video/123")
-    assert value["blocks"][0]["text"] == "浏览器正文" and calls.count("fallback") == 1
+    assert value["blocks"][0]["text"] == "浏览器正文" and calls == ["page"] and not closed
     async def rate(*args):
         raise AcquisitionError("rate_limited", 429)
-    client.get = rate
+    monkeypatch.setattr(reading_platforms, "douyin_page_detail", rate)
     with pytest.raises(AcquisitionError):
         await reading_platforms.fetch_platform_reading("douyin", "video", "123", "https://www.douyin.com/video/123")
-    assert calls.count("fallback") == 1 and closed == [True, True]
+    assert calls == ["page"] and not closed
 
 
 @pytest.mark.asyncio

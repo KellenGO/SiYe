@@ -8,14 +8,13 @@
 import asyncio
 import time
 from collections import OrderedDict
-from contextlib import AsyncExitStack
 
 from .accounts import ensure_session_snapshot, get_account_generation, operation_coordinator
-from .reading_content import detail_from_page, reading_detail, reading_reference
+from .reading_content import reading_detail, reading_reference
+from .reading_browser import reading_page, zhihu_page_detail, logger
 from .reading_media import reading_media
 from .reading_platforms import fetch_platform_reading, platform_reference
-from .research_diagnostics import AcquisitionError, classify
-from .research_platforms import ResearchBrowserProvider
+from .research_diagnostics import classify
 from .result_hydration import ResultHydrator
 
 MESSAGES = {
@@ -51,29 +50,24 @@ async def fetch_reading(kind, identity, url, platform="zhihu"):
         raise ReadingError("login_required")
     hydrator = ResultHydrator()
     try:
-        client = await hydrator._get_zhihu(snapshot)
-        path = f"/api/v4/{'answers' if kind == 'answer' else 'articles'}/{identity}"
-        params = {"include": "content"} if kind == "answer" else None
-        try:
-            detail = await asyncio.wait_for(client.get(path, params), timeout=12)
-            return await asyncio.to_thread(reading_detail, detail, kind, identity)
-        except PermissionError:
-            # An explicit content permission refusal is final for this read.
-            raise ReadingError("restricted") from None
-        except Exception as error:
-            code, _ = classify(error)
-            if code not in {"restricted", "malformed_response"}:
-                raise
-        async with AsyncExitStack() as stack:
-            provider = ResearchBrowserProvider(stack, {"zhihu": snapshot})
-            page = await provider.page("zhihu", client)
-            response = await page.goto(url, wait_until="domcontentloaded", timeout=20000)
-            if response is not None and response.status != 200:
-                raise AcquisitionError("session_expired" if response.status == 401 else
-                    "rate_limited" if response.status in {412, 429} else "restricted", response.status)
-            detail = await asyncio.to_thread(detail_from_page, await page.content(), kind, identity)
+        async with reading_page("zhihu", snapshot) as page:
+            client = await hydrator._get_zhihu(snapshot)
+            client.default_headers["user-agent"] = await page.evaluate("() => navigator.userAgent")
+            path = f"/api/v4/{'answers' if kind == 'answer' else 'articles'}/{identity}"
+            params = {"include": "content"} if kind == "answer" else None
             try:
+                detail = await asyncio.wait_for(client.get(path, params), timeout=12)
+                logger.info("reader platform=zhihu stage=detail_api outcome=ok")
                 return await asyncio.to_thread(reading_detail, detail, kind, identity)
+            except PermissionError:
+                raise ReadingError("restricted") from None
+            except Exception as error:
+                code, status = classify(error)
+                logger.info("reader platform=zhihu stage=detail_api outcome=%s http_status=%s", code, status)
+                if code not in {"restricted", "malformed_response"}:
+                    raise
+            try:
+                return await zhihu_page_detail(page, kind, identity, url)
             except PermissionError:
                 raise ReadingError("restricted") from None
     finally:
@@ -126,6 +120,7 @@ class ReadingService:
             raise
         except Exception as error:
             code, _ = classify(error)
+            logger.info("reader platform=%s stage=read outcome=%s", platform, code)
             raise ReadingError(code) from None
         finally:
             if task is not None:
