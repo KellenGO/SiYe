@@ -5,6 +5,7 @@ import hashlib
 import json
 import stat
 import zipfile
+from pathlib import Path
 
 import httpx
 import pytest
@@ -256,3 +257,41 @@ async def test_failed_uninstall_stays_visible_and_disabled_for_retry(tmp_path, m
         await manager.uninstall(stopped)
     assert manager.status()["installed"] and not manager.status()["enabled"]
     assert manager.installed_root().exists()
+
+
+@pytest.mark.asyncio
+async def test_install_retries_transient_directory_lock(tmp_path, monkeypatch):
+    from api.services import extensions as module
+    manager = Extensions(tmp_path / "extensions")
+    rename = Path.rename
+    attempts = []
+    def locked(source, target):
+        if source.name == "staged":
+            attempts.append(True)
+            if len(attempts) < 3:
+                raise PermissionError("temporary file lock")
+        return rename(source, target)
+    monkeypatch.setattr(Path, "rename", locked)
+    monkeypatch.setattr(module.time, "sleep", lambda _: None)
+    await manager.activate(package(tmp_path / "staged"), manifest(), stopped)
+    assert len(attempts) == 3 and manager.status()["installed"]
+
+
+@pytest.mark.asyncio
+async def test_permanent_directory_lock_restores_existing_version(tmp_path, monkeypatch):
+    from api.services import extensions as module
+    manager = Extensions(tmp_path / "extensions")
+    await manager.activate(package(tmp_path / "first"), manifest(), stopped)
+    await manager.set_enabled(True, stopped)
+    rename = Path.rename
+    def locked(source, target):
+        if source.name == "staged":
+            raise PermissionError("permanent file lock")
+        return rename(source, target)
+    monkeypatch.setattr(Path, "rename", locked)
+    monkeypatch.setattr(module.time, "sleep", lambda _: None)
+    with pytest.raises(PermissionError):
+        await manager.activate(package(tmp_path / "staged"), manifest(), stopped)
+    assert manager.status()["enabled"]
+    assert manager.installed_root().exists()
+    assert not manager.installed_root().with_name("0.1.0.previous").exists()

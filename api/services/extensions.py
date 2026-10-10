@@ -8,6 +8,7 @@ import re
 import shutil
 import stat
 import tempfile
+import time
 import zipfile
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlsplit
@@ -81,6 +82,16 @@ def extract_archive(archive, target, digest):
                 with bundle.open(item) as source, destination.open("wb") as out:
                     shutil.copyfileobj(source, out)
     return read_manifest(target)
+
+
+def move_directory(source, target):
+    for delay in (0.1, 0.2, 0.4, None):
+        try:
+            return source.rename(target)
+        except PermissionError:
+            if delay is None:
+                raise
+            time.sleep(delay)
 
 
 class Extensions:
@@ -244,15 +255,15 @@ class Extensions:
             shutil.rmtree(backup)
         existed = target.exists()
         if existed:
-            target.rename(backup)
+            move_directory(target, backup)
         try:
-            package.rename(target)
+            move_directory(package, target)
             self.save({"version": manifest["version"], "enabled": bool(old.get("enabled"))})
         except Exception:
             if target.exists():
                 shutil.rmtree(target)
             if existed:
-                backup.rename(target)
+                move_directory(backup, target)
             raise
         if backup.exists():
             shutil.rmtree(backup)
