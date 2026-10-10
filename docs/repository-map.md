@@ -23,13 +23,13 @@
 
 `cache/` 是受跟踪的 Python 缓存实现，`.cache/` 才是本机缓存；`build/tools/` 是本机构建工具，AI 运行程序由独立 SiYe-AI 扩展仓库构建，`.venv/` 与 `webui/node_modules/` 是开发依赖。它们不能仅因未进入 Git 就当作垃圾。根目录 `.tmp_*` 的忽略规则已入库，不再依赖某一台机器的 `.git/info/exclude`。
 
-V1.2 发布准备与尚待验收的边界见 [发布检查](releases/v1.2.0.md)。当前 `dist/` 仍是旧版本日常入口，准备候选包时使用独立目录，不覆盖已有运行环境。
+V1.2 发布状态与尚待验收的边界见 [发布检查](releases/v1.2.0.md)。当前 `dist/` 仍是旧版本日常入口，准备候选包时使用独立目录，不覆盖已有运行环境。
 
 ## 本地瘦身
 
 使用 `.venv/Scripts/python.exe scripts/cleanup_workspace.py` 预览；加 `--apply` 才删除白名单内的已退役构建、旧安装器副本、pytest 临时目录和源码编译缓存。加 `--include-browser-caches` 才纳入四个平台 profile 的下载及渲染缓存。不要用 `git clean -fdx` 替代此入口。
 
-脚本保留开发依赖、`build/tools/`、常用 `dist/SiYe/`、全部用户数据和版本备份，以及 `build/ai-extension/dist/SiYe-Windows-x64.zip` 与校验文件。旧的内置 AI 运行程序 `agent_runtime/` 已退役，当前 AI 程序由独立扩展提供。未来新建的未知构建目录只报告，不自动删除；白名单中的旧候选路径不要重复用于新构建。
+脚本保留开发依赖、`build/tools/`、常用 `dist/SiYe/`、全部用户数据和版本备份，以及最新发布 ZIP 与校验文件（当前构建及核对在 `build/v1.2-release/`，发布状态见上方发布检查）。旧的内置 AI 运行程序 `agent_runtime/` 已退役，当前 AI 程序由独立扩展提供。未来新建的未知构建目录只报告，不自动删除；白名单中的旧候选路径不要重复用于新构建。
 
 清理前检查 Git 跟踪文件、已登记 worktree、嵌套 Git 仓库、个人数据库和进程引用。无法读取或确认进程状态时跳过；不要为腾空间修改目录权限或关闭用户浏览器。pytest 目录只允许清理由 `test_*` 子目录明确标识的测试数据库。目录联接只删除链接本身，不遍历目标；登录 Cookie、配置、Local Storage、IndexedDB 和 Service Worker 存储保留。
 

@@ -104,8 +104,13 @@ jobs:
             "dist/SiYe-Windows-x64.zip",
             "dist/SiYe-Windows-x64.zip.sha256",
             "--verify-tag",
-            "--title", "四野 $env:GITHUB_REF_NAME",
-            "--generate-notes"
+            "--title", "四野 $env:GITHUB_REF_NAME"
           )
+          $notesFile = Join-Path "docs/releases" "$($env:GITHUB_REF_NAME)-notes.md"
+          if (Test-Path -LiteralPath $notesFile -PathType Leaf) {
+            $arguments += @("--notes-file", $notesFile)
+          } else {
+            $arguments += "--generate-notes"
+          }
           & gh @arguments
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
