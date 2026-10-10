@@ -75,16 +75,16 @@ export function ReadingBody({ source, header, actions }: { source: UnifiedSearch
 
   return <div className={`reading-layout ${commentsOpen ? "comments-open" : ""}`}>
     <div className="reader-control-bar" role="group" aria-label="阅读工具">
-      <button type="button" className="btn small reader-comment-toggle" aria-expanded={commentsOpen} aria-controls={commentsId}
-        onClick={() => { setCommentsOpen(value => !value); setCommentsRequested(true); }}>
-        <MessageSquare aria-hidden="true" />{commentsOpen ? "收起评论" : "展开评论"}{commentsOpen ? <ChevronLeft aria-hidden="true" /> : <ChevronRight aria-hidden="true" />}
-      </button>
       <div className="reader-tools">
         <button type="button" className="btn small" aria-label="减小正文字号" disabled={fontSize <= 16} onClick={() => setFontSize((value) => value - 1)}><Minus aria-hidden="true" /></button>
         <span aria-label={`正文字号 ${fontSize}`}>{fontSize}</span>
         <button type="button" className="btn small" aria-label="增大正文字号" disabled={fontSize >= 24} onClick={() => setFontSize((value) => value + 1)}><Plus aria-hidden="true" /></button>
         <button type="button" className="btn small" disabled={loading} onClick={() => setRevision((value) => value + 1)} aria-label="重新读取内容"><RotateCw aria-hidden="true" /></button>
       </div>
+      <button type="button" className="btn small reader-comment-toggle" aria-expanded={commentsOpen} aria-controls={commentsId}
+        onClick={() => { setCommentsOpen(value => !value); setCommentsRequested(true); }}>
+        <MessageSquare aria-hidden="true" />{commentsOpen ? "收起评论" : "展开评论"}{commentsOpen ? <ChevronLeft aria-hidden="true" /> : <ChevronRight aria-hidden="true" />}
+      </button>
     </div>
     <div className="reading-content-column">{header}
     <section className="reader" aria-label={`${platformLabel}内容`} aria-busy={loading} style={{ "--reader-font-size": `${fontSize}px` } as CSSProperties}>
