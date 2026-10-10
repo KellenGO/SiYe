@@ -55,6 +55,7 @@ V1.2 发布准备与尚待验收的边界见 [发布检查](releases/v1.2.0.md)�
 - **Bash 工具的双引号里不要出现反引号**：bash 会当命令替换执行、静默吃掉内容。
   复杂脚本一律用 Write 落盘再跑。
 - Python 用 `.venv/Scripts/python.exe`（该 venv 由 uv 建，原本没有 pip）。
+- Windows 临时 worktree 不用目录联接（junction）共享主工作区的 `.venv/` 或 `webui/node_modules/`：归档／清理可能删除链接目标。各 worktree 使用独立开发依赖；已有共享链接须先分离并确认目标完整，再归档。
 - **前端 `src/lib` 之间的 import 必须带 `.js` 后缀**（编译产物是原生 ESM）：
   `tsc` 不会报错，只有 `run-compiled-tests.mjs` 会以 `ERR_MODULE_NOT_FOUND` 暴露。
 - **`git pull/push` 需要本机代理 `127.0.0.1:7890` 在跑**（git 里配了 `http.proxy`）；

@@ -11,7 +11,7 @@
 
 ## 待接手事项
 
-- `AI-EXTENSION-20261010`：已集成 master（`2899604`，共享资料拆分与扩展行为分提交），独立仓库在 `C:/Users/Kellen/Desktop/SiYe-AI`（`68dc6a9`）；修改范围已释放。最终基础 ZIP 在 `build/ai-extension/dist/`，插件 ZIP 在独立仓库 `dist/`，均已本地验收、未正式发布；旧 `build/v1.2.0/dist/` 是拆分前候选，后续发布须使用新构建。用户尚未确认远程仓库可见性，下一步由发布者创建独立仓库并发布兼容资产，正式下载才能使用。全量测试、两协议模拟服务、助手界面和真实 ZIP 管理流程通过；真实付费模型未新增验收。阅读的 30ms 超时测试曾在并行构建时失败，串行全量通过，未改阅读行为。
+- `AI-EXTENSION-20261010` / `AI-EXTENSION-PUBLISH-20261010`：已集成 master；独立插件 [SiYe-AI v0.1.0](https://github.com/KellenGO/SiYe-AI/releases/tag/v0.1.0) 已公开发布，正式包匿名下载、摘要校验、安装／开关／卸载、界面及两协议模拟服务通过。`6132eac` 增加匿名 API 限流时的官方清单兼容，最终四野基础候选在 `build/ai-extension/dist/`，主程序 v1.2.0 尚未正式发布，旧 `build/v1.2.0/dist/` 仍是拆分前候选；后续主程序发布者需使用新构建。共用 Python 环境已按锁文件恢复、全量测试通过，插件前端依赖已独立；后续 worktree 不用共享 junction，见仓库地图。npm audit 报现有 Axios／Vite 两项 high，独立仓库 README 与 `build/ai-extension/published/npm-audit.json` 已记录，影响评估及升级待依赖维护者接手。修改范围已释放。
 
 - `READER-ACCESS-20261010`：实现提交按任务 ID 定位；抖音单条真实 MP4 播放及拖动通过，知乎旧收藏回答在四野 profile 中仍为 403，用户日常浏览器可看但尚未提供同一链接。下一步由阅读功能接手者取得该链接，对照正常浏览器与四野会话；不能把 UA／延迟正文修正当作知乎已恢复。修改范围已释放，现有 EXE 未重建。
 
