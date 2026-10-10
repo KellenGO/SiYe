@@ -29,11 +29,11 @@ V1.2 发布状态与尚待验收的边界见 [发布检查](releases/v1.2.0.md)�
 
 使用 `.venv/Scripts/python.exe scripts/cleanup_workspace.py` 预览；加 `--apply` 才删除白名单内的已退役构建、旧安装器副本、pytest 临时目录和源码编译缓存。加 `--include-browser-caches` 才纳入四个平台 profile 的下载及渲染缓存。不要用 `git clean -fdx` 替代此入口。
 
-脚本保留开发依赖、`build/tools/`、常用 `dist/SiYe/`、全部用户数据和版本备份，以及最新发布 ZIP 与校验文件（当前构建及核对在 `build/v1.2-release/`，发布状态见上方发布检查）。旧的内置 AI 运行程序 `agent_runtime/` 已退役，当前 AI 程序由独立扩展提供。未来新建的未知构建目录只报告，不自动删除；白名单中的旧候选路径不要重复用于新构建。
+脚本保留开发依赖、`build/tools/`、常用 `dist/SiYe/`、全部用户数据和版本备份，以及最新发布 ZIP 与校验文件（正式 V1.2.0 ZIP 与 SHA256 在 `build/ai-extension/dist/`，验收日志在 `build/v1.2-release/`）。旧的内置 AI 运行程序 `agent_runtime/` 已退役，当前 AI 程序由独立扩展提供。未来新建的未知构建目录只报告，不自动删除；白名单中的旧候选路径不要重复用于新构建。
 
 清理前检查 Git 跟踪文件、已登记 worktree、嵌套 Git 仓库、个人数据库和进程引用。无法读取或确认进程状态时跳过；不要为腾空间修改目录权限或关闭用户浏览器。pytest 目录只允许清理由 `test_*` 子目录明确标识的测试数据库。目录联接只删除链接本身，不遍历目标；登录 Cookie、配置、Local Storage、IndexedDB 和 Service Worker 存储保留。
 
-清理后的最新候选只保留 ZIP，验收时解压到新的临时目录；旧构建环境和重复解包目录需要时按锁文件重建。关键验收日志、清单和未解决的依赖 audit 记录继续保留。日常 EXE 仍为旧版本，瘦身不更新程序版本。清理脚本的隔离测试在 `tests/test_cleanup_workspace.py`。
+当前已发布 V1.2.0；本机只保留正式 ZIP 与 SHA256，验收时解压到新的临时目录；旧构建环境和重复解包目录需要时按锁文件重建。关键验收日志、清单和未解决的依赖 audit 记录继续保留。日常 `dist/SiYe/` 仍为 V1.0.0，没有被发布构建覆盖。清理脚本的隔离测试在 `tests/test_cleanup_workspace.py`。
 
 发布构建统一使用 `scripts/build_exe.ps1` → `package_exe.py` → `build_installer.ps1`；旧源码打包与对应 smoke 已退役。`build_exe.ps1 -OutputDir build/<候选名>/dist -PythonPath .venv/Scripts/python.exe` 可构建独立候选，默认输出仍为 `dist/`。开发用的文件头检查与 Cookie smoke 保留源码，只从 EXE 排除；CI 检查现有锁文件并按锁文件安装，不重新选择依赖版本。
 

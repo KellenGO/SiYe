@@ -124,7 +124,6 @@ async def test_cache_refresh_generation_ttl_and_capacity(service, monkeypatch):
     monkeypatch.setattr(reading, "get_account_generation", lambda _: 2)
     await service.read("answer", "42", url)
     assert len(calls) == 3
-    key = ("zhihu", 2, "answer", "42")
     now += 121
     await service.read("answer", "42", url)
     assert len(calls) == 4
