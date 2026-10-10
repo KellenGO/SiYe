@@ -86,3 +86,22 @@ export function readingError(error: unknown): string {
   const code = (error as { response?: { data?: { detail?: { code?: unknown } } } })?.response?.data?.detail?.code;
   return typeof code === "string" && messages[code] ? messages[code] : "暂时无法读取正文，请重试或打开原文。";
 }
+
+export interface ReadingComments {
+  entries: { id: string; parent_id: string | null; author: string; text: string; like_count?: number }[];
+  limited: boolean;
+  sort: string;
+  notice: string;
+}
+
+export function decodeReadingComments(raw: unknown, source: Pick<UnifiedSearchResult, "platform" | "content_id" | "content_type">): ReadingComments {
+  const row = raw as Partial<ReadingComments> & Partial<UnifiedSearchResult> | null;
+  if (!row || row.platform !== source.platform || row.content_id !== source.content_id || row.content_type !== source.content_type || !Array.isArray(row.entries)) throw new Error("评论响应无效");
+  return { entries: row.entries.slice(0, 50).flatMap((entry) => {
+    if (!entry || typeof entry.id !== "string" || typeof entry.text !== "string") return [];
+    return [{ id: entry.id, parent_id: typeof entry.parent_id === "string" ? entry.parent_id : null,
+      text: entry.text.slice(0, 12000), author: typeof entry.author === "string" ? entry.author.slice(0, 200) : "",
+      like_count: typeof entry.like_count === "number" && Number.isFinite(entry.like_count) ? Math.max(0, entry.like_count) : undefined }];
+  }), limited: row.limited === true, sort: typeof row.sort === "string" ? row.sort.slice(0, 30) : "平台默认",
+    notice: typeof row.notice === "string" ? row.notice.slice(0, 500) : "" };
+}

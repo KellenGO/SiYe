@@ -21,7 +21,7 @@ from .public_network import public_target
 
 CDN_HOSTS = {
     "xhs": ("xhscdn.com", "xiaohongshu.com"),
-    "douyin": ("douyincdn.com", "douyinpic.com", "byteimg.com", "ibytedtos.com", "pstatp.com", "snssdk.com", "amemv.com"),
+    "douyin": ("douyincdn.com", "douyinvod.com", "douyinpic.com", "byteimg.com", "ibytedtos.com", "pstatp.com", "snssdk.com", "amemv.com"),
     "bilibili": ("bilivideo.com", "bilivideo.cn", "hdslb.com", "biliapi.net"),
 }
 REFERERS = {"xhs": "https://www.xiaohongshu.com/", "douyin": "https://www.douyin.com/", "bilibili": "https://www.bilibili.com/"}
@@ -38,7 +38,8 @@ def media_url(platform, raw):
         host = (parsed.hostname or "").lower()
         if parsed.scheme not in {"http", "https"} or parsed.username or parsed.password or parsed.port not in {None, 80, 443}:
             return None
-        if not any(host == suffix or host.endswith("." + suffix) for suffix in CDN_HOSTS.get(platform, ())):
+        official_play = (platform == "douyin" and host == "www.douyin.com" and parsed.path == "/aweme/v1/play/")
+        if not official_play and not any(host == suffix or host.endswith("." + suffix) for suffix in CDN_HOSTS.get(platform, ())):
             return None
         return urlunsplit(("https", host, parsed.path or "/", parsed.query, ""))
     except ValueError:

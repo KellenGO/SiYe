@@ -49,6 +49,9 @@ class FakePage:
     async def evaluate(self, script: Any, *args: Any) -> Any:
         return self.evaluate_result
 
+    async def add_init_script(self, *args: Any, **kwargs: Any) -> None:
+        return None
+
     async def is_visible(self, *args: Any, **kwargs: Any) -> bool:
         return self.visible
 

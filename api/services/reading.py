@@ -8,14 +8,13 @@
 import asyncio
 import time
 from collections import OrderedDict
-from contextlib import AsyncExitStack
 
 from .accounts import ensure_session_snapshot, get_account_generation, operation_coordinator
-from .reading_content import detail_from_page, reading_detail, reading_reference
+from .reading_content import reading_detail, reading_reference
+from .reading_browser import reading_page, zhihu_page_detail, logger
 from .reading_media import reading_media
 from .reading_platforms import fetch_platform_reading, platform_reference
-from .acquisition_diagnostics import AcquisitionError, classify
-from .platform_browser import ResearchBrowserProvider
+from .acquisition_diagnostics import classify
 from .result_hydration import ResultHydrator
 
 MESSAGES = {
@@ -51,33 +50,52 @@ async def fetch_reading(kind, identity, url, platform="zhihu"):
         raise ReadingError("login_required")
     hydrator = ResultHydrator()
     try:
-        client = await hydrator._get_zhihu(snapshot)
-        path = f"/api/v4/{'answers' if kind == 'answer' else 'articles'}/{identity}"
-        params = {"include": "content"} if kind == "answer" else None
-        try:
-            detail = await asyncio.wait_for(client.get(path, params), timeout=12)
-            return await asyncio.to_thread(reading_detail, detail, kind, identity)
-        except PermissionError:
-            # An explicit content permission refusal is final for this read.
-            raise ReadingError("restricted") from None
-        except Exception as error:
-            code, _ = classify(error)
-            if code not in {"restricted", "malformed_response"}:
-                raise
-        async with AsyncExitStack() as stack:
-            provider = ResearchBrowserProvider(stack, {"zhihu": snapshot})
-            page = await provider.page("zhihu", client)
-            response = await page.goto(url, wait_until="domcontentloaded", timeout=20000)
-            if response is not None and response.status != 200:
-                raise AcquisitionError("session_expired" if response.status == 401 else
-                    "rate_limited" if response.status in {412, 429} else "restricted", response.status)
-            detail = await asyncio.to_thread(detail_from_page, await page.content(), kind, identity)
+        async with reading_page("zhihu", snapshot) as page:
+            client = await hydrator._get_zhihu(snapshot)
+            client.default_headers["user-agent"] = await page.evaluate("() => navigator.userAgent")
+            path = f"/api/v4/{'answers' if kind == 'answer' else 'articles'}/{identity}"
+            params = {"include": "content"} if kind == "answer" else None
             try:
+                detail = await asyncio.wait_for(client.get(path, params), timeout=12)
+                logger.info("reader platform=zhihu stage=detail_api outcome=ok")
                 return await asyncio.to_thread(reading_detail, detail, kind, identity)
+            except PermissionError:
+                raise ReadingError("restricted") from None
+            except Exception as error:
+                code, status = classify(error)
+                logger.info("reader platform=zhihu stage=detail_api outcome=%s http_status=%s", code, status)
+                if code not in {"restricted", "malformed_response"}:
+                    raise
+            try:
+                return await zhihu_page_detail(page, kind, identity, url)
             except PermissionError:
                 raise ReadingError("restricted") from None
     finally:
         await hydrator.close()
+
+
+async def fetch_comments(kind, identity, url, platform):
+    from .platform_materials import MaterialCollector
+    await prepare_reading(platform)
+    snapshot = await ensure_session_snapshot(platform, raise_on_error=True) or {}
+    collector = MaterialCollector({platform: snapshot})
+    try:
+        client = await collector.client(platform)
+        detail = None
+        if platform == "bilibili":
+            response = await collector.request(client.get_video_info,
+                bvid=identity if identity.startswith("BV") else None,
+                aid=int(identity) if identity.isdigit() else None)
+            detail = response.get("View", response)
+            if (identity.startswith("BV") and detail.get("bvid") != identity) or (identity.isdigit() and str(detail.get("aid")) != identity):
+                raise ValueError("video identity mismatch")
+        result = await collector.comments(client, {"platform": platform, "content_id": identity,
+            "content_type": kind, "url": url}, detail)
+        return {"platform": platform, "content_id": identity, "content_type": kind,
+                "entries": result.get("entries", []), "limited": result.get("truncated", False),
+                "sort": result.get("sort", "平台默认"), "notice": result.get("reason", "")}
+    finally:
+        await collector.close()
 
 
 class ReadingService:
@@ -126,6 +144,7 @@ class ReadingService:
             raise
         except Exception as error:
             code, _ = classify(error)
+            logger.info("reader platform=%s stage=read outcome=%s", platform, code)
             raise ReadingError(code) from None
         finally:
             if task is not None:
@@ -139,6 +158,25 @@ class ReadingService:
         await asyncio.gather(*tasks, return_exceptions=True)
         self.cache.clear()
         reading_media.clear()
+
+    async def comments(self, kind, identity, url, platform="zhihu"):
+        canonical = reading_reference(kind, identity, url) if platform == "zhihu" else platform_reference(platform, kind, identity, url)
+        if not await operation_coordinator.acquire_exclusive("reading"):
+            raise ReadingError("busy")
+        task = None
+        try:
+            task = asyncio.create_task(fetch_comments(kind, identity, canonical, platform))
+            self.tasks.add(task)
+            return await asyncio.wait_for(task, timeout=75)
+        except ReadingError:
+            raise
+        except Exception as error:
+            code, _ = classify(error)
+            raise ReadingError(code) from None
+        finally:
+            if task is not None:
+                self.tasks.discard(task)
+            await operation_coordinator.release_exclusive("reading")
 
 
 reading_service = ReadingService()

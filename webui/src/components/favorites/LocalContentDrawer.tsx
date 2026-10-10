@@ -141,14 +141,14 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
           const url = safeContentUrl(source.url);
           const published = source.published_at ? new Date(source.published_at) : null;
           const metrics = orderedMetrics(source.metrics);
-          return <section className="local-content-detail" key={resultKey(source)} aria-label={`${PLATFORM_LABELS[source.platform]}内容详情`}>
+          const header = <>
             {!supportsReading(source) && <LocalContentCover result={source} />}
             <p className="local-content-detail-source">{PLATFORM_LABELS[source.platform]} · {localContentType(source.content_type)}</p>
             <h3>{source.title || "无标题内容"}</h3>
             <p className="local-content-detail-meta">{source.author || "作者未提供"}{published && Number.isFinite(published.getTime()) ? ` · 发布于 ${published.toLocaleDateString("zh-CN")}` : ""}</p>
             {url && <a className="btn small local-content-original" href={url} target="_blank" rel="noreferrer" onClick={() => { void recordView(source); }}>在原平台打开<ArrowUpRight aria-hidden="true" /></a>}
-            {supportsReading(source) ? <ReadingBody key={`${source.platform}:${source.content_type}:${source.content_id}:${source.url}`} source={source} />
-              : <><h4>简介</h4><p className="local-content-snippet">{source.snippet || "暂无简介"}</p></>}
+          </>;
+          const actions = <>
             {metrics.length ? <dl className="local-content-metrics">{metrics.map(({ key, label }) => <div key={key}><dt>{label}</dt><dd>{source.metrics_approximate?.includes(key) ? "约 " : ""}{source.metrics[key].toLocaleString("zh-CN")}</dd></div>)}</dl>
               : <p className="local-content-detail-meta">暂无互动数据</p>}
             {(library || renderExtraActions) && <div className="local-content-actions">
@@ -176,6 +176,10 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
               } finally { setSaving(false); }
             }} />
             </>}
+          </>;
+          return <section className="local-content-detail" key={resultKey(source)} aria-label={`${PLATFORM_LABELS[source.platform]}内容详情`}>
+            {supportsReading(source) ? <ReadingBody key={`${source.platform}:${source.content_type}:${source.content_id}:${source.url}`} source={source} header={header} actions={actions} />
+              : <>{header}<h4>简介</h4><p className="local-content-snippet">{source.snippet || "暂无简介"}</p>{actions}</>}
           </section>;
         })}
         {membershipKeys && library && membershipKeys.some((key) => library.items.some((item) => item.key === key)) && <MembershipEditor

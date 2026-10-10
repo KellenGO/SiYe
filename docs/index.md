@@ -5,7 +5,7 @@
 
 | 功能 | 文档 | 主要代码入口 |
 |---|---|---|
-| 站内阅读与视频播放（小红书／抖音／B站／知乎，统一主题） | [features/content-reading.md](features/content-reading.md) | `api/services/reading.py`、`webui/src/components/reading/ReadingBody.tsx` |
+| 站内阅读、视频播放与评论（小红书／抖音／B站／知乎，统一主题） | [features/content-reading.md](features/content-reading.md) | `api/services/reading.py`、`webui/src/components/reading/ReadingBody.tsx` |
 | 研究空间（跨平台资料收集 + 富文本总笔记 + 笔记／AI 并排） | [features/spaces.md](features/spaces.md) | `api/services/spaces_store.py`、`webui/src/components/spaces/SpacesPage.tsx`、`webui/src/components/spaces/SpaceWorkspace.tsx` |
 | 官方可选扩展管理（下载／开关／卸载） | [features/extensions.md](features/extensions.md) | `api/services/extensions.py`、`webui/src/components/accounts/ExtensionsPage.tsx` |
 | 空间 AI 研究（分区读取 + 可选本地视频转写 + 可选联网） | [features/space-research-ai.md](features/space-research-ai.md) | `api/services/research_jobs.py`、`api/services/research_transcription.py`、`webui/src/components/extensions/PluginUI.tsx` |
