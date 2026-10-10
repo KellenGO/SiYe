@@ -10,7 +10,7 @@
 |---|---|
 | 官方发布查询、下载校验、安全解压与安装切换 | `api/services/extensions.py` 的 `Extensions`、`extract_archive` |
 | 本机管理接口与受限界面资源 | `api/routers/extensions.py` 的 `extensions_router` |
-| 设置入口、扩展卡片和进度 | `webui/src/components/accounts/ExtensionsPage.tsx` |
+| 设置入口、扩展卡片、详情与卸载确认 | `webui/src/components/accounts/ExtensionsPage.tsx`、`webui/src/components/accounts/ExtensionsPage.css` |
 | 状态查询与界面桥接 | `webui/src/hooks/useExtensions.ts`、`webui/src/components/extensions/PluginUI.tsx` |
 | 资料收集和独立分析进程 | `api/services/research_jobs.py` 的 `task_command`、`ResearchJobs.process` |
 | 基础发布包排除 AI 依赖 | `MediaCrawler.spec`、`scripts/build_exe.ps1` |
@@ -18,8 +18,9 @@
 ## 关键决定
 
 - 第一版只支持官方 SiYe-AI 扩展，下载来源固定为官方 GitHub Release。匿名 API 限流时读取同一官方 Release 的版本清单，并按相同规则核对地址、版本、大小与 SHA256，不要求 GitHub 登录。浏览器式管理页是统一入口，不开放任意地址安装或第三方代码市场。
+- 管理页参照浏览器扩展列表：卡片显示名称、版本、说明和右上角开关，底部提供详细信息与卸载；模型配置收进详情页，开启后才加载插件配置。检查更新保留在列表与详情顶部。沿用四野主题和设置导航，不增加第三方商店或浏览器开发者工具。
 - 首次安装默认关闭；开启后出现空间 AI 入口和服务配置。停用结束正在运行的任务，关闭聊天面板仍保留任务。配置与聊天历史沿用旧路径，无需复制或迁移；已保存配置不会让首次安装自动开启。
-- 卸载默认只移除扩展程序；用户可勾选清除 AI 配置和聊天记录。空间快照、收藏、笔记及已写入的 AI 回答保留。
+- 卸载先打开确认框，默认只移除扩展程序；用户可在确认框勾选清除 AI 配置和聊天记录，每次打开重新默认保留。取消或 Esc 不卸载，卸载失败可在框内重试；确认框限制键盘焦点，取消后返回触发按钮。空间快照、收藏、笔记及已写入的 AI 回答保留。
 - 下载根据可信发布资产的 SHA256 校验，包内声明支持的主程序版本。下载和解压完成后才切换版本，失败保留原安装；用户可取消下载及安装。损坏或不兼容的插件不会显示为已开启。
 - 插件自带独立 Windows 运行程序和编译后的界面，不要求用户安装 Python 或 Node。平台账号和取数由主程序管理；分析进程只接收本次资料。界面通过笔记桥接请求写入，不能直接访问笔记编辑器。取消沿用 Windows 子进程树管理。长期取舍见[官方 AI 可选扩展](../decisions/2026-10-10-官方AI可选扩展.md)。
 
@@ -35,5 +36,5 @@
 
 - 后端：pytest tests/test_extensions.py tests/test_research.py tests/test_research_acquisition.py tests/test_reading.py tests/test_reading_platforms.py，使用每次新的项目内 --basetemp 子目录。所有安装、卸载和历史测试均使用临时目录。
 - 前端：webui 中 npm run test:search 和 npm run build。
-- 管理流程：scripts/extensions_ui_smoke.py --package 指向独立插件 ZIP，通过模拟官方下载响应在临时目录验收下载、默认关闭、开启、停用及卸载保留笔记。
+- 管理流程：scripts/extensions_ui_smoke.py --package 指向独立插件 ZIP，通过模拟官方下载响应在临时目录验收下载取消、默认关闭、键盘开关、详情配置、停用、卸载取消与失败重试、默认保留及主动清除 AI 数据；检查笔记保留、深色主题与 320/390px 布局。
 - 助手集成：SIYE_AI_SOURCE 指向插件源码目录，运行 scripts/research_ui_smoke.py；独立 worker 使用 scripts/research_ai_smoke.py --exe 验证。

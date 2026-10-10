@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import hashlib
 import json
+import os
 import sys
 import threading
 from functools import partial
@@ -26,11 +27,12 @@ class QuietHandler(SimpleHTTPRequestHandler):
         pass
 
 
-def main(package):
+def verify(package):
     from api.routers import extensions as extension_routes
     from api.routers.research import research_router, get_research_config, get_research_jobs
     from api.routers.spaces import spaces_router
     from api.services import extensions as extension_module
+    from api.services import research_config as config_module, research_jobs as jobs_module
     from api.services.extensions import Extensions, ASSET_NAME
     from api.services.research_config import ResearchConfig
     from api.services.research_jobs import ResearchJobs
@@ -39,6 +41,7 @@ def main(package):
     data = Path(package).read_bytes()
     digest = hashlib.sha256(data).hexdigest()
     real_client = httpx.AsyncClient
+    original_config, original_jobs = config_module.research_config, jobs_module.research_jobs
     slow = True
 
     class ArchiveStream(httpx.AsyncByteStream):
@@ -74,6 +77,8 @@ def main(package):
             config = ResearchConfig(root / "data/research-ai.json", cipher=lambda value, decrypt=False: value)
             config.save("https://example.com", "fixture-model", "isolated-key")
             jobs = ResearchJobs(config)
+            config_module.research_config = config
+            jobs_module.research_jobs = jobs
             jobs.history_store.root.mkdir(parents=True)
             saved = jobs.history_store.root / "saved.json"
             saved.write_text("{}")
@@ -90,11 +95,15 @@ def main(package):
                 browser = playwright.chromium.launch(channel="msedge", headless=True)
                 context = browser.new_context(viewport={"width": 1440, "height": 960})
                 context.add_init_script("localStorage.setItem('mediacrawler_license_accepted','true'); localStorage.setItem('siye_onboarding_preference_v1','completed')")
+                fail_uninstall = {"once": False}
                 def route_request(route):
                     request = route.request
                     parsed = urlparse(request.url)
                     if not request.url.startswith(origin + "/"):
                         route.abort()
+                    elif parsed.path == "/api/extensions/ai" and request.method == "DELETE" and fail_uninstall["once"]:
+                        fail_uninstall["once"] = False
+                        route.fulfill(status=503, json={"detail": "卸载暂时失败，请重试"})
                     elif parsed.path.startswith(("/api/extensions", "/api/research", "/api/spaces")):
                         response = client.request(request.method, parsed.path + ("?" + parsed.query if parsed.query else ""), content=request.post_data, headers={"content-type": "application/json"})
                         body = response.content
@@ -121,13 +130,31 @@ def main(package):
                 slow = False
                 page.get_by_role("button", name="下载并安装", exact=True).click()
                 expect(page.locator(".extension-state")).to_have_text("已关闭", timeout=90000)
-                expect(page.get_by_role("switch")).not_to_be_checked()
+                expect(page.get_by_role("switch")).to_have_attribute("aria-checked", "false")
                 assert manager.status()["installed"] and not manager.status()["enabled"]
                 page.screenshot(path=str(output / "installed-off.png"), full_page=True)
-                page.get_by_role("switch").click()
+                page.get_by_role("switch").focus()
+                page.keyboard.press("Space")
+                expect(page.get_by_role("switch")).to_have_attribute("aria-checked", "true", timeout=15000)
+                assert page.locator(".research-settings").count() == 0
+                page.screenshot(path=str(output / "installed-on.png"), full_page=True)
+                page.get_by_role("button", name="详细信息", exact=True).click()
+                expect(page.get_by_role("button", name="所有扩展", exact=True)).to_be_focused()
                 expect(page.locator(".research-settings")).to_be_visible(timeout=15000)
                 assert config.credentials()["api_key"] == "isolated-key"
                 page.screenshot(path=str(output / "enabled-settings.png"), full_page=True)
+                page.evaluate("document.documentElement.classList.add('dark')")
+                expect(page.locator("body")).to_have_css("background-color", "rgb(16, 18, 24)")
+                page.screenshot(path=str(output / "details-dark.png"), full_page=True)
+                page.evaluate("document.documentElement.classList.remove('dark')")
+                expect(page.locator("body")).to_have_css("background-color", "rgb(255, 255, 255)")
+                page.set_viewport_size({"width": 390, "height": 844})
+                page.screenshot(path=str(output / "details-mobile.png"), full_page=True)
+                assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+                page.set_viewport_size({"width": 1440, "height": 960})
+                page.get_by_role("button", name="所有扩展", exact=True).click()
+                expect(page.get_by_role("button", name="详细信息", exact=True)).to_be_focused()
+                assert page.locator(".research-settings").count() == 0
                 workspace = context.new_page()
                 workspace.on("pageerror", lambda error: errors.append(str(error)))
                 workspace.goto(origin + f"/#/spaces/{identity}")
@@ -139,6 +166,30 @@ def main(package):
                 expect(workspace.locator(".space-research-dialog[open]")).to_have_count(0)
                 assert not workspace.evaluate("document.body.classList.contains('has-ai-sidebar')")
                 page.get_by_role("button", name="卸载", exact=True).click()
+                uninstall = page.get_by_role("dialog", name="卸载 AI 研究助手？", exact=True)
+                expect(uninstall).to_be_visible()
+                expect(uninstall.get_by_role("button", name="取消", exact=True)).to_be_focused()
+                expect(uninstall.get_by_role("checkbox")).not_to_be_checked()
+                page.screenshot(path=str(output / "uninstall-confirm.png"), full_page=True)
+                for _ in range(5):
+                    page.keyboard.press("Tab")
+                    assert uninstall.evaluate("element => element.contains(document.activeElement)")
+                uninstall.get_by_role("checkbox").check()
+                page.keyboard.press("Escape")
+                expect(uninstall).not_to_be_visible()
+                expect(page.get_by_role("button", name="卸载", exact=True)).to_be_focused()
+                assert manager.status()["installed"]
+                page.get_by_role("button", name="卸载", exact=True).click()
+                expect(uninstall.get_by_role("checkbox")).not_to_be_checked()
+                uninstall.get_by_role("button", name="取消", exact=True).click()
+                assert manager.status()["installed"]
+                page.get_by_role("button", name="卸载", exact=True).click()
+                fail_uninstall["once"] = True
+                uninstall.get_by_role("button", name="卸载", exact=True).click()
+                expect(uninstall.get_by_role("alert")).to_contain_text("卸载暂时失败")
+                assert manager.status()["installed"]
+                uninstall.get_by_role("button", name="卸载", exact=True).click()
+                expect(uninstall).not_to_be_visible(timeout=15000)
                 expect(page.locator(".extension-state")).to_have_text("未安装", timeout=15000)
                 assert config.path.exists() and saved.exists()
                 assert store.get_space(identity)["note_document"] == note
@@ -146,12 +197,45 @@ def main(package):
                 page.set_viewport_size({"width": 390, "height": 844})
                 page.screenshot(path=str(output / "uninstalled-mobile.png"), full_page=True)
                 assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+                page.set_viewport_size({"width": 1440, "height": 960})
+                page.get_by_role("button", name="下载并安装", exact=True).click()
+                expect(page.locator(".extension-state")).to_have_text("已关闭", timeout=90000)
+                page.set_viewport_size({"width": 320, "height": 844})
+                page.screenshot(path=str(output / "installed-off-mobile.png"), full_page=True)
+                assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+                page.get_by_role("button", name="卸载", exact=True).click()
+                expect(uninstall.get_by_role("checkbox")).not_to_be_checked()
+                uninstall.get_by_role("checkbox").check()
+                assert config_module.research_config.path.is_relative_to(root)
+                assert jobs_module.research_jobs.history_store.root.is_relative_to(root)
+                uninstall.get_by_role("button", name="卸载", exact=True).click()
+                expect(uninstall).not_to_be_visible(timeout=15000)
+                expect(page.locator(".extension-state")).to_have_text("未安装", timeout=15000)
+                assert not config.path.exists() and not saved.exists()
+                assert store.get_space(identity)["note_document"] == note
+                assert len(store.get_space(identity)["items"]) == 1
                 assert not errors, errors
                 browser.close()
-                print("PASS: real ZIP download/cancel/install, default-off, plugin settings and panel, disable cleanup, uninstall preserves credentials/history/notes, 390px layout")
+                print("PASS: real ZIP download/cancel/install, default-off, keyboard toggle, details/settings and panel, disable cleanup, uninstall cancel/focus/retry/default-preserve/explicit-clear, notes retained, dark and 320/390px layouts")
     finally:
         extension_module.httpx.AsyncClient = real_client
+        config_module.research_config, jobs_module.research_jobs = original_config, original_jobs
         server.shutdown()
+
+
+def main(package):
+    output = ROOT / "build/extensions-ui"
+    output.mkdir(parents=True, exist_ok=True)
+    previous = os.environ.get("SIYE_DATA_DIR")
+    with TemporaryDirectory(prefix="extensions-environment-", dir=output) as temporary:
+        os.environ["SIYE_DATA_DIR"] = temporary
+        try:
+            verify(package)
+        finally:
+            if previous is None:
+                os.environ.pop("SIYE_DATA_DIR", None)
+            else:
+                os.environ["SIYE_DATA_DIR"] = previous
 
 
 if __name__ == "__main__":
