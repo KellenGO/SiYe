@@ -194,6 +194,10 @@ def main():
             assert drawer.bounding_box()["width"] == 1120
             assert drawer.locator(".reader-body").evaluate("el => el === window.beforeCommentsBody")
             expect(drawer.locator(".reader-comment.is-reply")).to_have_count(1)
+            thread = drawer.get_by_role("article", name="评论作者的评论", exact=True)
+            expect(thread.get_by_text("站内回复测试正文", exact=True)).to_be_visible()
+            expect(thread.get_by_role("group", name="回复 评论作者", exact=True)).to_be_visible()
+            expect(thread.get_by_label("8 赞", exact=True)).to_be_visible()
             left = drawer.locator(".reading-content-column")
             right = drawer.locator(".reader-comments")
             left_box, right_box = left.bounding_box(), right.bounding_box()

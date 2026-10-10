@@ -94,6 +94,20 @@ export interface ReadingComments {
   notice: string;
 }
 
+export function groupReadingComments(entries: ReadingComments["entries"]) {
+  const roots = new Map(entries.filter(entry => !entry.parent_id).map(entry => [entry.id, entry]));
+  const replies = new Map<string, ReadingComments["entries"]>();
+  for (const entry of entries) {
+    if (entry.parent_id && roots.has(entry.parent_id)) {
+      const group = replies.get(entry.parent_id) ?? [];
+      group.push(entry);
+      replies.set(entry.parent_id, group);
+    }
+  }
+  return entries.filter(entry => !entry.parent_id || !roots.has(entry.parent_id))
+    .map(entry => ({ entry, replies: replies.get(entry.id) ?? [] }));
+}
+
 export function decodeReadingComments(raw: unknown, source: Pick<UnifiedSearchResult, "platform" | "content_id" | "content_type">): ReadingComments {
   const row = raw as Partial<ReadingComments> & Partial<UnifiedSearchResult> | null;
   if (!row || row.platform !== source.platform || row.content_id !== source.content_id || row.content_type !== source.content_type || !Array.isArray(row.entries)) throw new Error("评论响应无效");

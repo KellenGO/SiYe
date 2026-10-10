@@ -1,8 +1,18 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { decodeReadingComments, decodeReadingDetail, readingError, readingImageUrl, readingMediaUrl, supportsReading } from "../src/lib/reading.js";
+import { decodeReadingComments, decodeReadingDetail, groupReadingComments, readingError, readingImageUrl, readingMediaUrl, supportsReading } from "../src/lib/reading.js";
 
 const source = { platform: "zhihu" as const, content_type: "answer", content_id: "42", url: "https://www.zhihu.com/question/1/answer/42" };
+
+test("回复归到对应主评论，乱序及缺失父评论不串组、不丢内容", () => {
+  const entry = (id: string, parent_id: string | null = null) => ({ id, parent_id, author: id, text: id });
+  const rows = [entry("reply", "root"), entry("other"), entry("root"), entry("orphan", "missing"), entry("reply2", "root")];
+  const groups = groupReadingComments(rows);
+  assert.deepEqual(groups.map(group => group.entry.id), ["other", "root", "orphan"]);
+  assert.deepEqual(groups[1].replies.map(reply => reply.id), ["reply", "reply2"]);
+  assert.equal(groups.flatMap(group => [group.entry, ...group.replies]).length, rows.length);
+  assert.deepEqual(rows.map(row => row.id), ["reply", "other", "root", "orphan", "reply2"]);
+});
 
 test("评论校验来源，保留回复及部分结果，不带出额外字段", () => {
   const raw = { ...source, entries: [{ id: "a", text: "<script>只是文字</script>", author: "读者", parent_id: "root", cookie: "secret", like_count: 2 }], limited: true, sort: "热门", notice: "部分读取失败" };
