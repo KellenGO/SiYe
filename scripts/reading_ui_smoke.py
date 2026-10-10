@@ -6,6 +6,7 @@
 """Verify the built reader with a mocked platform and a temporary library."""
 
 import json
+import re
 import sys
 import threading
 from functools import partial
@@ -26,6 +27,8 @@ from api.routers.reading import get_reading_service, reading_router
 from api.services.library_store import LibraryStore, get_library_store
 from api.services.reading import ReadingError
 from api.services.reading_content import reading_detail
+from api.services.reading_media import reading_media
+from api.services.reading_platforms import platform_detail
 
 
 class QuietHandler(SimpleHTTPRequestHandler):
@@ -43,16 +46,36 @@ def main():
                   author="阅读测试作者", snippet="这里只是搜索摘要，不是正文。", url="https://www.zhihu.com/question/1/answer/42",
                   cover_url=None, metrics={"like_count": 128}, rank=0, grouped_sources=None)
     article = {**source, "content_id": "43", "content_type": "article", "title": "一篇独立的文章", "url": "https://zhuanlan.zhihu.com/p/43"}
+    note_id, bvid = "abcdef0123456789abcdef01", "BV1234567890"
+    note = {**source, "platform": "xhs", "content_id": note_id, "content_type": "note", "title": "小红书图文阅读", "url": f"https://www.xiaohongshu.com/explore/{note_id}?xsec_token=fixture"}
+    douyin = {**source, "platform": "douyin", "content_id": "123", "content_type": "video", "title": "抖音视频阅读", "url": "https://www.douyin.com/video/123"}
+    bilibili = {**source, "platform": "bilibili", "content_id": bvid, "content_type": "video", "title": "B站视频阅读", "url": f"https://www.bilibili.com/video/{bvid}"}
     job = dict(job_id="reader-smoke", keyword="阅读", overall="completed", hydration_status="completed",
-               created_at="2026-10-10T00:00:00Z", results=[source, article], platforms={"zhihu": {
-                   "status": "succeeded", "result_count": 2, "error_summary": None, "cache_hit": False}})
-    mode, reads, views, errors, pending = "ok", [], [], [], []
+               created_at="2026-10-10T00:00:00Z", results=[source, article, note, douyin, bilibili], platforms={platform: {
+                   "status": "succeeded", "result_count": 2 if platform == "zhihu" else 1, "error_summary": None, "cache_hit": False} for platform in ("zhihu", "xhs", "douyin", "bilibili")})
+    mode, reads, views, errors, pending, media_requests = "ok", [], [], [], [], []
 
     class Reader:
-        async def read(self, kind, identity, url, refresh):
+        async def read(self, kind, identity, url, refresh, platform="zhihu"):
             reads.append((identity, refresh))
             if mode == "fail":
                 raise ReadingError("busy")
+            if platform != "zhihu":
+                if platform == "xhs":
+                    value = platform_detail(platform, kind, identity, {"note_id": identity, "type": "normal", "desc": "图文正文\n保留原始换行。", "image_list": [
+                        {"url_default": "https://sns-webpic-qc.xhscdn.com/one"}, {"url_default": "https://sns-webpic-qc.xhscdn.com/two"}]})
+                elif platform == "douyin":
+                    value = platform_detail(platform, kind, identity, {"aweme_id": identity, "desc": "抖音视频正文", "video": {
+                        "width": 90, "height": 160, "play_addr": {"url_list": ["https://v.douyincdn.com/video"]}}})
+                else:
+                    value = platform_detail(platform, kind, identity, {"bvid": identity, "aid": 12, "cid": 34, "desc": ""},
+                        {"durl": [{"url": "https://upos.bilivideo.com/one"}, {"url": "https://upos.bilivideo.com/two"}]})
+                for block in value["blocks"]:
+                    if block["type"] == "image":
+                        block["url"] = reading_media.register(platform, block["url"], "image")
+                for part in value["media"]:
+                    part["url"] = reading_media.register(platform, part["url"], "video")
+                return value
             body = '''<h2>给阅读留一点时间</h2><p>真正的正文，保留完整段落与图文顺序。</p>
                 <p>先阅读，再记录。<img src="https://pic.zhimg.com/reader-fixture.svg" alt="阅读示意图">图片后面的正文。</p>
                 <blockquote><p>慢一点，才能看清楚。</p></blockquote><pre>note = "阅读"\nprint(note)</pre>
@@ -74,6 +97,31 @@ def main():
             browser = p.chromium.launch(channel="msedge")
             context = browser.new_context(viewport={"width": 1440, "height": 1000})
             context.add_init_script("localStorage.setItem('mediacrawler_license_accepted','true'); localStorage.setItem('siye_onboarding_preference_v1','completed')")
+            fixture_page = context.new_page()
+            fixture_page.goto("data:text/html,<body>Video fixture</body>")
+            video_bytes = bytes(fixture_page.evaluate("""async () => {
+                const canvas = document.createElement('canvas'); canvas.width = 160; canvas.height = 90;
+                document.body.append(canvas); canvas.getContext('2d').fillRect(0,0,160,90);
+                await new Promise(resolve => requestAnimationFrame(resolve));
+                const stream = canvas.captureStream(12), chunks = [];
+                const recorder = new MediaRecorder(stream, {mimeType:'video/webm;codecs=vp8'});
+                const done = new Promise(resolve => recorder.onstop = resolve);
+                recorder.ondataavailable = event => chunks.push(event.data);
+                let frame = 0;
+                const timer = setInterval(() => {const ctx=canvas.getContext('2d'); ctx.fillStyle=frame++%2?'#6799ba':'#a4c0d4'; ctx.fillRect(0,0,160,90)}, 80);
+                recorder.start(100);
+                for (let warmup=0; warmup<80 && chunks.reduce((n,b)=>n+b.size,0)<2000; warmup++) await new Promise(resolve => setTimeout(resolve,100));
+                await new Promise(resolve => setTimeout(resolve,1800)); recorder.stop(); await done;
+                clearInterval(timer); stream.getTracks().forEach(track => track.stop());
+                return Array.from(new Uint8Array(await new Blob(chunks).arrayBuffer()));
+            }"""))
+            assert video_bytes, "Edge did not encode the test video"
+            (output / "fixture.webm").write_bytes(video_bytes)
+            fixture_page.close()
+            from io import BytesIO
+            from PIL import Image
+            image_output = BytesIO()
+            Image.new("RGB", (640, 240), "#a4c0d4").save(image_output, "PNG")
 
             def route_request(route):
                 parsed = urlparse(route.request.url)
@@ -81,6 +129,20 @@ def main():
                     route.fulfill(content_type="image/svg+xml", body='<svg xmlns="http://www.w3.org/2000/svg" width="640" height="240"><rect width="640" height="240" fill="#e5eff8"/><path d="M180 60h280v120H180z" fill="#9fb8cc"/></svg>')
                 elif not route.request.url.startswith(origin + "/"):
                     route.abort()
+                elif parsed.path.startswith("/api/reading/media/"):
+                    _, _, kind = reading_media.resolve(parsed.path.rsplit("/", 1)[-1])
+                    media_requests.append((kind, route.request.headers.get("range")))
+                    data = image_output.getvalue() if kind == "image" else video_bytes
+                    headers = {"Content-Type": "image/png" if kind == "image" else "video/webm", "Accept-Ranges": "bytes"}
+                    if mode == "media-fail":
+                        route.fulfill(status=502, body="unavailable")
+                    elif kind == "video" and route.request.headers.get("range"):
+                        start, end = route.request.headers["range"].removeprefix("bytes=").split("-")
+                        start, end = int(start or 0), min(int(end) if end else len(data)-1, len(data)-1)
+                        headers["Content-Range"] = f"bytes {start}-{end}/{len(data)}"
+                        route.fulfill(status=206, body=data[start:end+1], headers=headers)
+                    else:
+                        route.fulfill(body=data, headers=headers)
                 elif parsed.path.startswith("/api/library/") or parsed.path == "/api/reading/detail":
                     if parsed.path == "/api/reading/detail" and mode == "pending":
                         pending.append(route)
@@ -101,7 +163,7 @@ def main():
             page = context.new_page()
             page.on("pageerror", lambda error: errors.append(str(error)))
             page.goto(origin + "/#/search")
-            expect(page.locator(".local-content-card")).to_have_count(2)
+            expect(page.locator(".local-content-card")).to_have_count(5)
             page.get_by_role("button", name="列表", exact=True).click()
             title = page.get_by_role("button", name=source["title"], exact=True)
             expect(title).to_be_visible()
@@ -117,7 +179,7 @@ def main():
             drawer.get_by_role("button", name="增大正文字号").click()
             assert drawer.locator(".reader-body").evaluate("el => getComputedStyle(el).fontSize") == "19px"
             mode = "fail"
-            drawer.get_by_role("button", name="重新读取正文").click()
+            drawer.get_by_role("button", name="重新读取内容").click()
             expect(drawer.get_by_role("alert")).to_contain_text("正在进行")
             expect(drawer.get_by_text("真正的正文，保留完整段落与图文顺序。", exact=True)).to_be_visible()
             mode = "ok"
@@ -138,7 +200,7 @@ def main():
             page.set_viewport_size({"width": 1440, "height": 1000})
             mode = "pending"
             title.click()
-            expect(page.get_by_role("status").filter(has_text="正在读取知乎正文")).to_be_visible()
+            expect(page.get_by_role("status").filter(has_text="正在读取知乎内容")).to_be_visible()
             page.keyboard.press("Escape")
             expect(drawer).to_have_count(0)
             assert len(views) == 1 and pending
@@ -163,10 +225,63 @@ def main():
             page.get_by_role("button", name="网格", exact=True).click()
             page.get_by_role("button", name=f"查看内容信息：{source['title']}", exact=True).click()
             expect(drawer.locator(".reader-body")).to_be_visible()
+            page.keyboard.press("Escape")
+            page.get_by_role("button", name="列表", exact=True).click()
+            page.get_by_role("button", name=note["title"], exact=True).click()
+            expect(drawer.locator(".reader-image img")).to_have_count(2)
+            expect(drawer.get_by_text("图文正文\n保留原始换行。", exact=True)).to_be_visible()
+            assert drawer.locator(".reader-image img").first.evaluate("el => el.complete && el.naturalWidth > 0")
+            page.screenshot(path=str(output / "xhs-gallery.png"))
+            page.keyboard.press("Escape")
+            page.get_by_role("button", name=douyin["title"], exact=True).click()
+            video = drawer.locator("video")
+            expect(video).to_have_count(1)
+            expect(video).to_have_attribute("src", re.compile(r"/api/reading/media/"))
+            assert not media_requests or media_requests[-1][0] == "image", "video should not preload"
+            playback = video.evaluate("async el => {try {await el.play(); return {ok:true}} catch(e) {return {ok:false,error:e.name,code:el.error?.code,src:el.getAttribute('src')}}}")
+            assert playback["ok"], {"playback": playback, "fixture_bytes": len(video_bytes), "media_requests": media_requests}
+            page.wait_for_function("document.querySelector('.reader-video video').currentTime > 0.15")
+            video.evaluate("el => { el.pause(); el.currentTime = 0.5; }")
+            page.wait_for_function("!document.querySelector('.reader-video video').seeking")
+            assert video.evaluate("el => el.currentTime") >= 0.49
+            for width in (390, 320):
+                page.set_viewport_size({"width": width, "height": 844})
+                assert drawer.evaluate("el => el.scrollWidth <= el.clientWidth")
+            page.screenshot(path=str(output / "douyin-mobile.png"))
+            video.evaluate("el => { window.closedReaderVideo = el; }")
+            page.keyboard.press("Escape")
+            assert page.evaluate("window.closedReaderVideo.paused && !window.closedReaderVideo.getAttribute('src')")
+            page.set_viewport_size({"width": 1440, "height": 1000})
+            history_before_video = len(views)
+            mode = "media-fail"
+            page.get_by_role("button", name=bilibili["title"], exact=True).click()
+            drawer.locator("video").evaluate("el => el.play().catch(() => {})")
+            expect(drawer.get_by_role("alert")).to_contain_text("视频加载失败")
+            assert len(views) == history_before_video
+            page.keyboard.press("Escape")
+            mode = "ok"
+            page.get_by_role("button", name=bilibili["title"], exact=True).click()
+            expect(drawer.get_by_role("button", name="第 1 段", exact=True)).to_have_attribute("aria-pressed", "true")
+            assert len(views) == history_before_video
+            drawer.get_by_role("button", name="第 2 段", exact=True).click()
+            expect(drawer.get_by_role("button", name="第 2 段", exact=True)).to_have_attribute("aria-pressed", "true")
+            video = drawer.locator("video")
+            video.evaluate("el => el.play()")
+            page.wait_for_function("document.querySelector('.reader-video video').currentTime > 0.15")
+            assert len(views) == history_before_video + 1
+            page.screenshot(path=str(output / "bilibili-player.png"))
+            page.keyboard.press("Escape")
+            mode = "media-fail"
+            page.get_by_role("button", name=douyin["title"], exact=True).click()
+            drawer.locator("video").evaluate("el => el.play().catch(() => {})")
+            expect(drawer.get_by_role("alert")).to_contain_text("视频加载失败")
+            expect(drawer.get_by_text("抖音视频正文", exact=True)).to_be_visible()
+            assert any(kind == "video" and header for kind, header in media_requests)
             assert not errors, errors
             browser.close()
             print(json.dumps({"passed": True, "reading_requests": len(reads), "history_views": len(views), "screenshots": str(output)}, ensure_ascii=False))
     finally:
+        reading_media.clear()
         server.shutdown()
         server.server_close()
 

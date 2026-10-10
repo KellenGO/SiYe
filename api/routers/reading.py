@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..services.reading import ReadingError, reading_service
+from ..services.reading_media import reading_media
 
 
 async def local_reading_request(request: Request):
@@ -28,9 +29,9 @@ reading_router = APIRouter(prefix="/api/reading", tags=["reading"], dependencies
 
 class ReadingInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    platform: Literal["zhihu"]
-    content_type: Literal["answer", "article"]
-    content_id: str = Field(min_length=1, max_length=30, pattern=r"^[0-9]+$")
+    platform: Literal["zhihu", "xhs", "douyin", "bilibili"]
+    content_type: Literal["answer", "article", "note", "video"]
+    content_id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9]+$")
     url: str = Field(min_length=1, max_length=2000)
     refresh: bool = False
 
@@ -41,7 +42,7 @@ def get_reading_service():
 
 @reading_router.post("/detail")
 async def read_detail(payload: ReadingInput, request: Request, service=Depends(get_reading_service)):
-    task = asyncio.create_task(service.read(payload.content_type, payload.content_id, payload.url, payload.refresh))
+    task = asyncio.create_task(service.read(payload.content_type, payload.content_id, payload.url, payload.refresh, platform=payload.platform))
     try:
         while not task.done():
             await asyncio.wait({task}, timeout=0.25)
@@ -51,8 +52,13 @@ async def read_detail(payload: ReadingInput, request: Request, service=Depends(g
     except ReadingError as error:
         raise HTTPException(409 if error.code == "busy" else 503, {"code": error.code, "message": str(error)}) from None
     except ValueError:
-        raise HTTPException(422, "内容编号与知乎原文链接不一致") from None
+        raise HTTPException(422, "内容类型、编号或原文链接不匹配") from None
     finally:
         if not task.done():
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
+
+
+@reading_router.api_route("/media/{token}", methods=["GET", "HEAD"])
+async def read_media(token: str, request: Request):
+    return await reading_media.stream(token, request.headers.get("range"), request.method)

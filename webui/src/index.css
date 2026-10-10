@@ -1070,6 +1070,11 @@ html.dark .search-submit { color: #101525; }
 .reader-notice, .reader-status { font-size: 13px; line-height: 1.7; color: var(--siye-muted); }
 .reader-notice { padding: 12px 14px; border-radius: 8px; border: 1px solid var(--siye-line); margin: 12px 0; }
 .reader-notice p { margin: 0 0 8px; }
+.reader-video { margin: 12px 0 22px; }
+.reader-video video { display: block; width: 100%; max-height: 65vh; aspect-ratio: 16 / 9; object-fit: contain; border-radius: 14px; background: #111; }
+.reader-video.is-portrait video { aspect-ratio: 9 / 16; max-width: 360px; margin-inline: auto; }
+.reader-segments { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.reader-segments button[aria-pressed="true"] { color: var(--siye-brand-ink); border-color: var(--siye-brand); }
 .result-reader-title { background: none; border: 0; cursor: pointer; text-align: left; }
 .result-reader-cover { display: block; width: 100%; padding: 0; border: 0; background: none; cursor: pointer; border-radius: 12px; }
 .result-reader-title:focus-visible, .result-reader-cover:focus-visible { outline: 2px solid var(--siye-brand); outline-offset: 3px; }

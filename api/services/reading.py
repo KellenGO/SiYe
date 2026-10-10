@@ -12,16 +12,18 @@ from contextlib import AsyncExitStack
 
 from .accounts import ensure_session_snapshot, get_account_generation, operation_coordinator
 from .reading_content import detail_from_page, reading_detail, reading_reference
+from .reading_media import reading_media
+from .reading_platforms import fetch_platform_reading, platform_reference
 from .research_diagnostics import AcquisitionError, classify
 from .research_platforms import ResearchBrowserProvider
 from .result_hydration import ResultHydrator
 
 MESSAGES = {
     "busy": "搜索、研究或账号操作正在进行，请结束后重试读取正文。",
-    "login_required": "请先在设置中登录知乎，再重试读取正文。",
-    "session_expired": "知乎登录已失效，请重新登录后重试。",
-    "rate_limited": "知乎触发验证码或访问限制，请在原平台检查后稍后重试。",
-    "restricted": "知乎暂未提供此内容的读取权限，请打开原文查看。",
+    "login_required": "请先在设置中登录此平台，再重试读取内容。",
+    "session_expired": "平台登录已失效，请重新登录后重试。",
+    "rate_limited": "平台触发验证码或访问限制，请在原平台检查后稍后重试。",
+    "restricted": "平台暂未提供此内容的读取权限，请打开原文查看。",
     "timeout": "正文读取超时，请重试或打开原文。",
     "unavailable": "暂时无法读取正文，请重试或打开原文。",
 }
@@ -33,15 +35,17 @@ class ReadingError(Exception):
         super().__init__(MESSAGES[self.code])
 
 
-async def prepare_reading():
+async def prepare_reading(platform="zhihu"):
     from .search_job_manager import search_job_manager
     if search_job_manager.is_search_active():
         raise ReadingError("busy")
-    await search_job_manager.stop_platform_worker("zhihu")
+    await search_job_manager.stop_platform_worker(platform)
 
 
-async def fetch_reading(kind, identity, url):
-    await prepare_reading()
+async def fetch_reading(kind, identity, url, platform="zhihu"):
+    await prepare_reading(platform)
+    if platform != "zhihu":
+        return await fetch_platform_reading(platform, kind, identity, url)
     snapshot = await ensure_session_snapshot("zhihu", raise_on_error=True)
     if not snapshot or not snapshot.get("d_c0"):
         raise ReadingError("login_required")
@@ -81,11 +85,18 @@ class ReadingService:
         self.cache = OrderedDict()
         self.tasks = set()
 
-    async def read(self, kind, identity, url, refresh=False):
-        canonical = reading_reference(kind, identity, url)
-        generation = get_account_generation("zhihu")
-        key = (generation, kind, identity)
+    async def read(self, kind, identity, url, refresh=False, platform="zhihu"):
+        canonical = reading_reference(kind, identity, url) if platform == "zhihu" else platform_reference(platform, kind, identity, url)
+        generation = get_account_generation(platform)
+        key = (platform, generation, kind, identity)
         cached = self.cache.get(key)
+        if cached and platform != "zhihu":
+            value = cached[1]
+            urls = [row["url"] for row in value["media"]] + [row["url"] for row in value["blocks"] if row["type"] == "image"]
+            if value.get("poster"):
+                urls.append(value["poster"])
+            if not all(reading_media.available(url) for url in urls):
+                cached = None
         if not refresh and cached and time.monotonic() - cached[0] < 120:
             self.cache.move_to_end(key)
             return cached[1]
@@ -93,11 +104,19 @@ class ReadingService:
             raise ReadingError("busy")
         task = None
         try:
-            task = asyncio.create_task(fetch_reading(kind, identity, canonical))
+            task = asyncio.create_task(fetch_reading(kind, identity, canonical, platform))
             self.tasks.add(task)
-            value = await asyncio.wait_for(task, timeout=45)
+            value = await asyncio.wait_for(task, timeout=75)
+            if platform != "zhihu":
+                for block in value["blocks"]:
+                    if block["type"] == "image":
+                        block["url"] = reading_media.register(platform, block["url"], "image")
+                for segment in value["media"]:
+                    segment["url"] = reading_media.register(platform, segment["url"], "video")
+                if value.get("poster"):
+                    value["poster"] = reading_media.register(platform, value["poster"], "image")
             # Restoring the session can advance its generation during the read.
-            key = (get_account_generation("zhihu"), kind, identity)
+            key = (platform, get_account_generation(platform), kind, identity)
             self.cache[key] = (time.monotonic(), value)
             self.cache.move_to_end(key)
             while len(self.cache) > 6:
@@ -119,6 +138,7 @@ class ReadingService:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
         self.cache.clear()
+        reading_media.clear()
 
 
 reading_service = ReadingService()
