@@ -215,7 +215,42 @@ def main():
             page.get_by_role("button", name="查看内容信息：苏州攻略0", exact=True).click()
             source_drawer = page.get_by_role("dialog", name="内容信息", exact=True)
             source_remove = source_drawer.get_by_role("button", name="移出空间：苏州攻略3", exact=True)
-            expect(source_remove).to_have_text("")
+            expect(source_remove).to_have_text("移出空间")
+            toolbar = source_drawer.locator(".local-content-actions").first
+            expect(toolbar.locator(":scope > button")).to_have_text(["收藏", "稍后再看", "移出空间"])
+            watch_later = toolbar.get_by_role("button", name="稍后再看 苏州攻略0", exact=True)
+            watch_later.click()
+            expect(toolbar.get_by_role("button", name="取消稍后再看 苏州攻略0", exact=True)).to_have_text("已加入稍后再看")
+            original_viewport = page.viewport_size
+            screenshot_dir = ROOT / "build/detail-actions"
+            screenshot_dir.mkdir(parents=True, exist_ok=True)
+            for width in (1280, 390, 320):
+                page.set_viewport_size({"width": width, "height": 900})
+                for dark in (False, True):
+                    page.evaluate("dark => document.documentElement.classList.toggle('dark', dark)", dark)
+                    geometry = toolbar.evaluate("""el => Array.from(el.children).map(button => {
+                        const rect = button.getBoundingClientRect(), style = getComputedStyle(button);
+                        const icon = button.querySelector('svg').getBoundingClientRect();
+                        return { x: rect.x, y: rect.y, width: rect.width, height: rect.height,
+                            radius: style.borderRadius, font: style.fontSize, gap: style.gap,
+                            icon: icon.width, overflow: button.scrollWidth > button.clientWidth,
+                            border: style.borderStyle, background: style.backgroundColor, color: style.color };
+                    })""")
+                    assert len(geometry) == 3, geometry
+                    assert all(button["height"] >= 44 and button["radius"] == "9px" and button["font"] == "12px" and button["gap"] == "8px" and button["icon"] == 16 and button["border"] == "solid" and not button["overflow"] for button in geometry), geometry
+                    assert max(button["width"] for button in geometry) - min(button["width"] for button in geometry) < 1, geometry
+                    assert geometry[1]["background"] == geometry[2]["background"] and geometry[1]["color"] == geometry[2]["color"], geometry
+                    assert geometry[0]["y"] == geometry[1]["y"], geometry
+                    if width == 320:
+                        assert geometry[2]["y"] > geometry[0]["y"] and geometry[2]["x"] == geometry[0]["x"], geometry
+                    elif width == 1280:
+                        assert geometry[2]["y"] == geometry[0]["y"], geometry
+                    assert toolbar.evaluate("el => el.scrollWidth <= el.clientWidth"), geometry
+                    toolbar.screenshot(path=str(screenshot_dir / f"buttons-{width}-{'dark' if dark else 'light'}.png"))
+            page.evaluate("document.documentElement.classList.remove('dark')")
+            page.set_viewport_size(original_viewport)
+            toolbar.get_by_role("button", name="取消稍后再看 苏州攻略0", exact=True).click()
+            expect(watch_later).to_have_text("稍后再看")
             source_remove.click()
             expect(source_drawer.get_by_role("button", name="加入空间：苏州攻略3", exact=True)).to_be_enabled()
             assert store.get_space(1)["item_count"] == 3

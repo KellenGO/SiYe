@@ -501,7 +501,7 @@ export function SearchPage({ active = true, homeRequested = false, onViewChange,
             library={library}
             fetchedAt={fetchedAt}
             pageSize={100}
-            renderExtraActions={(result) => <SpaceAddButton result={result} />}
+            renderExtraActions={(result, showLabel) => <SpaceAddButton result={result} showLabel={showLabel} />}
           />
         </div>
       )}

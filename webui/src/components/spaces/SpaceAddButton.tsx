@@ -8,7 +8,7 @@ import { resultKey } from "@/lib/resultTools";
 import { spaceError } from "@/lib/spaceNotes";
 import type { UnifiedSearchResult } from "@/types/search";
 
-export function SpaceAddButton({ result }: { result: UnifiedSearchResult }) {
+export function SpaceAddButton({ result, showLabel = false }: { result: UnifiedSearchResult; showLabel?: boolean }) {
   const { t } = useTranslation();
   const spaces = useSpaces();
   const detail = useSpaceDetail(spaces.activeId);
@@ -27,5 +27,5 @@ export function SpaceAddButton({ result }: { result: UnifiedSearchResult }) {
     try { await (added ? removeSpaceItem(id, result) : addSpaceItems(id, result)); await spaces.refresh(); }
     catch (error) { toast.error(spaceError(error)); }
     finally { pendingRef.current = false; setPending(false); }
-  }}>{pending ? <Loader2 className="animate-spin" aria-hidden="true" /> : added ? <Check aria-hidden="true" /> : <Layers aria-hidden="true" />}</button>;
+  }}>{pending ? <Loader2 className="animate-spin" aria-hidden="true" /> : added ? <Check aria-hidden="true" /> : <Layers aria-hidden="true" />}{showLabel && <span>{label}</span>}</button>;
 }

@@ -83,7 +83,7 @@ function SystemCollectionButton({ result, library, fetchedAt, collection, compac
         void run();
       }}>
       {saved ? <Check className="w-3.5 h-3.5 text-brand-strong" /> : <Icon className="w-3.5 h-3.5" />}
-      {!compact && (saved ? `已${baseLabel}` : label)}
+      {!compact && (saved ? collection === "default" ? "已收藏" : "已加入稍后再看" : label)}
     </button>
     <ConfirmDialog open={confirming} title="是否要取消收藏" danger confirmLabel="取消收藏"
       description="取消后这条内容将从本机收藏库移除，备注所有收藏夹归属一并消失。"
@@ -95,10 +95,11 @@ function SystemCollectionButton({ result, library, fetchedAt, collection, compac
   </>;
 }
 
-function SystemCollectionControl({ result, library, fetchedAt, collection, onToggled }: {
+function SystemCollectionControl({ result, library, fetchedAt, collection, compact = true, onToggled }: {
   result: UnifiedSearchResult; library: BookmarkLibrary;
   fetchedAt: Partial<Record<PlatformSlug, string | null>>;
   collection: SystemCollectionKey;
+  compact?: boolean;
   onToggled?: (added: boolean, keys: string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -119,7 +120,7 @@ function SystemCollectionControl({ result, library, fetchedAt, collection, onTog
     document.addEventListener("keydown", escape);
     return () => { document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", escape); };
   }, [open]);
-  if (sources.length < 2) return <SystemCollectionButton result={result} library={library} fetchedAt={fetchedAt} collection={collection} compact onToggled={onToggled} />;
+  if (sources.length < 2) return <SystemCollectionButton result={result} library={library} fetchedAt={fetchedAt} collection={collection} compact={compact} onToggled={onToggled} />;
   return <div ref={root} className="relative shrink-0">
     <button type="button" aria-label={`选择${baseLabel}平台 ${result.title}`} aria-expanded={open} aria-controls={id}
       title={savedCount ? `${baseLabel} ${savedCount}/${sources.length} 个来源，点击管理` : `选择要加入${baseLabel}的平台`}

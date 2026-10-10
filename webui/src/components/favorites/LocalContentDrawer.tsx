@@ -19,7 +19,7 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
   fetchedAt?: Partial<Record<PlatformSlug, string | null>>;
   onDelete?: () => void;
   onClose: () => void;
-  renderExtraActions?: (result: UnifiedSearchResult) => ReactNode;
+  renderExtraActions?: (result: UnifiedSearchResult, showLabel?: boolean) => ReactNode;
   fallbackFocus: RefObject<HTMLDivElement>;
 }) {
   const id = useId();
@@ -139,9 +139,12 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
               : <><h4>简介</h4><p className="local-content-snippet">{source.snippet || "暂无简介"}</p></>}
             {metrics.length ? <dl className="local-content-metrics">{metrics.map(({ key, label }) => <div key={key}><dt>{label}</dt><dd>{source.metrics_approximate?.includes(key) ? "约 " : ""}{source.metrics[key].toLocaleString("zh-CN")}</dd></div>)}</dl>
               : <p className="local-content-detail-meta">暂无互动数据</p>}
-            {library && <div className="local-content-actions"><span><BookmarkControl result={source} library={library} fetchedAt={fetchedAt}
-              onToggled={(added, savedKeys) => setMembershipKeys(added ? savedKeys : null)} />{item?.saved ? "已收藏" : "收藏"}</span><span><WatchLaterControl result={source} library={library} fetchedAt={fetchedAt} />{item?.watchLater ? "已加入稍后再看" : "稍后再看"}</span></div>}
-            {renderExtraActions && <div className="space-detail-actions">{renderExtraActions(source)}</div>}
+            {(library || renderExtraActions) && <div className="local-content-actions">
+              {library && <><BookmarkControl result={source} library={library} fetchedAt={fetchedAt} compact={false}
+                onToggled={(added, savedKeys) => setMembershipKeys(added ? savedKeys : null)} />
+                <WatchLaterControl result={source} library={library} fetchedAt={fetchedAt} compact={false} /></>}
+              {renderExtraActions?.(source, true)}
+            </div>}
             {item && library && <>
             <div className="local-content-folders">
               <h4>所在收藏夹</h4>

@@ -44,7 +44,7 @@ interface ResultTabsProps {
   selectionResetKey?: number;
   emptyMessage?: string;
   showExportTools?: boolean;
-  renderExtraActions?: (result: UnifiedSearchResult) => ReactNode;
+  renderExtraActions?: (result: UnifiedSearchResult, showLabel?: boolean) => ReactNode;
 }
 
 type TabKey = "all" | PlatformSlug;
