@@ -86,7 +86,7 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
     closeButton.current?.focus({ preventScroll: true });
     const escapeOutsidePanel = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !event.defaultPrevented && !panel.current?.contains(event.target as Node)
-        && !panel.current?.querySelector('.confirm-card, .membership-card, [aria-expanded="true"]')) escapeRequest.current();
+        && !panel.current?.querySelector('.confirm-card, .membership-card, [aria-expanded="true"]:not(.reader-comment-toggle)')) escapeRequest.current();
     };
     document.addEventListener("keydown", escapeOutsidePanel);
     return () => {
@@ -113,7 +113,7 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
         const confirmation = panel.current?.querySelector<HTMLElement>('.confirm-card, .membership-card[role="dialog"]');
         if (event.key === "Escape") {
           // 嵌套确认和归属选择先处理 Escape，不能连抽屉一起退出。
-          if (confirmation || panel.current?.querySelector('.membership-card, [aria-expanded="true"]')) return;
+          if (confirmation || panel.current?.querySelector('.membership-card, [aria-expanded="true"]:not(.reader-comment-toggle)')) return;
           event.preventDefault();
           event.stopPropagation();
           escapeRequest.current();

@@ -3,12 +3,15 @@ import axios from "axios";
 import type { UnifiedSearchResult } from "@/types/search";
 import { decodeReadingComments, readingError, type ReadingComments as Comments } from "@/lib/reading";
 
-export function ReadingComments({ source, bodyLoading }: { source: UnifiedSearchResult; bodyLoading: boolean }) {
+export function ReadingComments({ source, bodyLoading, id, hidden = false }: { source: UnifiedSearchResult; bodyLoading: boolean; id?: string; hidden?: boolean }) {
   const [revision, setRevision] = useState(0);
   const [comments, setComments] = useState<Comments | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const { platform, content_id, content_type, url } = source;
+  useEffect(() => {
+    if (!revision && !bodyLoading) setRevision(1);
+  }, [revision, bodyLoading]);
   useEffect(() => {
     if (!revision) return;
     const controller = new AbortController();
@@ -22,10 +25,10 @@ export function ReadingComments({ source, bodyLoading }: { source: UnifiedSearch
     }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [platform, content_id, content_type, url, revision]);
-  return <section className="reader-comments" aria-label="评论" aria-busy={loading}>
+  return <section id={id} hidden={hidden} className="reader-comments" aria-label="评论" aria-busy={loading}>
     <div className="reader-toolbar"><h4>评论{comments && <span>{comments.sort} · {comments.entries.length} 条</span>}</h4>
       <button className="btn small" type="button" disabled={loading || bodyLoading} onClick={() => setRevision(value => value + 1)}>
-        {loading ? "正在读取评论…" : error ? "重试评论" : comments ? "刷新评论" : "查看评论"}
+        {loading || !revision ? "正在读取评论…" : error ? "重试评论" : "刷新评论"}
       </button>
     </div>
     {error && <p className="reader-notice" role="alert">{error}</p>}

@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import axios from "axios";
-import { Minus, Plus, RotateCw } from "lucide-react";
+import { ChevronLeft, ChevronRight, MessageSquare, Minus, Plus, RotateCw } from "lucide-react";
 import type { UnifiedSearchResult } from "@/types/search";
 import { PLATFORM_LABELS } from "@/types/search";
 import { decodeReadingDetail, readingError, type ReadingDetail } from "@/lib/reading";
@@ -35,6 +35,9 @@ function ReadingVideo({ detail, onPlay }: { detail: ReadingDetail; onPlay: () =>
 }
 
 export function ReadingBody({ source, header, actions }: { source: UnifiedSearchResult; header?: ReactNode; actions?: ReactNode }) {
+  const commentsId = useId();
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [commentsRequested, setCommentsRequested] = useState(false);
   const [detail, setDetail] = useState<ReadingDetail | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -70,7 +73,11 @@ export function ReadingBody({ source, header, actions }: { source: UnifiedSearch
     return () => controller.abort();
   }, [platform, content_id, content_type, url, revision]);
 
-  return <div className="reading-layout"><div className="reading-content-column">
+  return <div className={`reading-layout ${commentsOpen ? "comments-open" : ""}`}><div className="reading-content-column">
+    <button type="button" className="btn small reader-comment-toggle" aria-expanded={commentsOpen} aria-controls={commentsId}
+      onClick={() => { setCommentsOpen(value => !value); setCommentsRequested(true); }}>
+      <MessageSquare aria-hidden="true" />{commentsOpen ? "收起评论" : "展开评论"}{commentsOpen ? <ChevronLeft aria-hidden="true" /> : <ChevronRight aria-hidden="true" />}
+    </button>
     {header}
     <section className="reader" aria-label={`${platformLabel}内容`} aria-busy={loading} style={{ "--reader-font-size": `${fontSize}px` } as CSSProperties}>
     <div className="reader-toolbar">
@@ -99,5 +106,5 @@ export function ReadingBody({ source, header, actions }: { source: UnifiedSearch
     </>}
     </section>
     {actions}
-  </div><ReadingComments key={`${platform}:${content_type}:${content_id}`} source={source} bodyLoading={loading} /></div>;
+  </div>{commentsRequested && <ReadingComments key={`${platform}:${content_type}:${content_id}`} id={commentsId} hidden={!commentsOpen} source={source} bodyLoading={loading} />}</div>;
 }

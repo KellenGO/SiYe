@@ -185,8 +185,14 @@ def main():
             expect(drawer.locator(".reader-image img")).to_be_visible()
             expect(drawer.locator("iframe, script")).to_have_count(0)
             assert not comment_reads, "Comments must load only when requested"
-            drawer.get_by_role("button", name="查看评论", exact=True).click()
+            assert drawer.bounding_box()["width"] == 760
+            expect(drawer.get_by_role("region", name="评论", exact=True)).to_have_count(0)
+            drawer.locator(".reader-body").evaluate("el => window.beforeCommentsBody = el")
+            page.screenshot(path=str(output / "comments-collapsed.png"))
+            drawer.get_by_role("button", name="展开评论", exact=True).click()
             expect(drawer.get_by_text("站内评论测试正文", exact=True)).to_be_visible()
+            assert drawer.bounding_box()["width"] == 1120
+            assert drawer.locator(".reader-body").evaluate("el => el === window.beforeCommentsBody")
             expect(drawer.locator(".reader-comment.is-reply")).to_have_count(1)
             left = drawer.locator(".reading-content-column")
             right = drawer.locator(".reader-comments")
@@ -198,6 +204,12 @@ def main():
             right.evaluate("el => el.scrollTop = 100")
             assert right.evaluate("el => el.scrollTop") > 0 and drawer.evaluate("el => el.scrollTop") == scroll_before
             right.evaluate("el => el.scrollTop = 0")
+            drawer.get_by_role("button", name="收起评论", exact=True).click()
+            expect(right).to_be_hidden()
+            assert drawer.bounding_box()["width"] == 760
+            drawer.get_by_role("button", name="展开评论", exact=True).click()
+            expect(drawer.get_by_text("站内评论测试正文", exact=True)).to_be_visible()
+            assert comment_reads == ["42"], "Reopening must keep loaded comments without another request"
             drawer.get_by_role("button", name="全屏查看", exact=True).click()
             expect(drawer.get_by_text("站内评论测试正文", exact=True)).to_be_visible()
             assert comment_reads == ["42"], "Fullscreen must preserve comments without another request"
