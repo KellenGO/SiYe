@@ -53,6 +53,8 @@
 
 ## 测试怎么跑
 
+- 空间与 AI 界面 smoke 需要设置 `SIYE_AI_SOURCE` 指向独立 SiYe-AI 源码目录，先构建两份前端；空间验收通过模拟已开启扩展状态加载独立插件前端的 `ui.js` 产物，不安装到用户目录，也不访问真实模型服务。
+
 - 并排验收：空间 smoke 覆盖搜索与收藏入口、还原后的开关及原编辑器；AI smoke 覆盖 1024／1440／1920px 各半、中线拖动与上下限、双击／键盘复位、两个单独全屏的还原、历史浮层、关闭与 Escape、生成不中断、追加与撤销、保存失败重试、导航及手机切换。数据与 AI 配置均隔离在临时目录。
 - 笔记导出回归：`webui/tests/noteExport.test.ts` 覆盖嵌套列表、勾选、引用、文字转义和非法链接；界面 smoke 验证下载的 UTF-8 Markdown、复制按钮及 Ctrl+C 的 Markdown／HTML、链接新标签页、边缘拖动与键盘缩放、全屏／还原与拖回侧栏、编辑器和撤销历史保留、刷新恢复尺寸。`scripts/research_ui_smoke.py` 覆盖 AI 同时打开时的笔记全屏、还原后 AI 草稿与布局保留。所有 AI 配置与会话数据均使用临时目录。
 - 后端：`tests/test_spaces.py`；收藏独立性回归同时运行 `tests/test_library_store.py`、`tests/test_library_api.py` 和 `tests/test_watch_history_store.py`。使用每次新建的项目内 `--basetemp` 子目录，先创建父目录。

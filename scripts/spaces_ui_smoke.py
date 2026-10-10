@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import threading
 from datetime import datetime, timezone
@@ -34,6 +35,12 @@ def main():
     dist = ROOT / "webui/dist"
     if not (dist / "index.html").exists():
         raise SystemExit("Build webui first")
+    plugin_source = os.environ.get("SIYE_AI_SOURCE")
+    if not plugin_source:
+        raise SystemExit("Set SIYE_AI_SOURCE to the independent SiYe-AI source checkout")
+    plugin_ui = Path(plugin_source).resolve() / "webui/dist/ui.js"
+    if not plugin_ui.is_file():
+        raise SystemExit("Build the independent SiYe-AI frontend first")
     server = ThreadingHTTPServer(("127.0.0.1", 0), partial(QuietHandler, directory=str(dist)))
     threading.Thread(target=server.serve_forever, daemon=True).start()
     origin = f"http://127.0.0.1:{server.server_port}"
@@ -72,6 +79,13 @@ def main():
                     route.fulfill(body="Note link opened", content_type="text/html")
                 elif not request.url.startswith(origin + "/"):
                     route.abort()
+                elif path == "/api/extensions/ai/assets/ui.js":
+                    route.fulfill(path=str(plugin_ui), content_type="text/javascript")
+                elif path.startswith("/api/extensions/ai"):
+                    route.fulfill(json={"id": "siye-ai", "name": "AI", "installed": True,
+                                        "enabled": True, "version": "0.1.0", "compatible": True,
+                                        "phase": "idle", "downloaded": 0, "total": None,
+                                        "error": "", "available": None})
                 elif path.startswith(("/api/spaces", "/api/library")):
                     if path.endswith("/items") and request.method == "DELETE":
                         item_deletes.append(json.loads(request.post_data))

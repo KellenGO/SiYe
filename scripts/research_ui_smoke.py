@@ -181,6 +181,7 @@ def main():
                     expect(sessions).to_be_visible()
                     sessions.get_by_role("button", name="关闭会话列表", exact=True).click()
                 page.goto(origin + "/#/settings/extensions")
+                page.get_by_role("button", name="详细信息", exact=True).click()
                 settings = page.locator(".research-settings")
                 settings.get_by_label("模型名称", exact=True).fill("new-model")
                 settings.get_by_role("button", name="保存并测试连接", exact=True).click()
