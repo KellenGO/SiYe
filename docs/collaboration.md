@@ -8,6 +8,7 @@
 
 | 任务 ID | 负责人 / 会话 | worktree / 分支 / 起始 HEAD | 修改范围 | 状态 / 下一步 |
 |---|---|---|---|---|
+| `AI-EXTENSION-20261010` | Codex 插件会话 | 主工作区与 `C:/Users/Kellen/.codex/worktrees/ai-extension/MediaCrawler-main` / `master`、`codex-ai-extension` / `81c1ccf` | AI 扩展的主线集成、验证与候选包 | 主工作区已干净，正在集成插件分支 |
 
 ## 待接手事项
 
