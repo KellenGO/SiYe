@@ -8,6 +8,8 @@
 
 | 任务 ID | 负责人 / 会话 | worktree / 分支 / 起始 HEAD | 修改范围 | 状态 / 下一步 |
 |---|---|---|---|---|
+| `READER-PLATFORMS-20261010` | Codex / 当前会话 | 主工作区 / `master` / `d498e68` | 站内阅读服务、平台解析与媒体接口、阅读界面及入口、测试、功能 wiki / CHANGELOG；串行集成详情按钮 | 阅读功能与独立验收已完成，提交后等待按钮分支合并主线并验证，再快进集成与释放范围 |
+| `DETAIL-ACTIONS-20261010` | Codex /「统一详情抽屉操作按钮样式」 | `C:\Users\Kellen\.codex\worktrees\detail-actions\MediaCrawler-main` / `codex/detail-actions` / `d498e68` | 详情操作按钮与接线、非阅读 CSS、spaces_ui_smoke、favorites-library wiki、CHANGELOG | `78f19ac` 已提交、未集成；阅读提交后在功能分支 merge master，验证后由主工作区当前会话快进集成 |
 
 ## 待接手事项
 

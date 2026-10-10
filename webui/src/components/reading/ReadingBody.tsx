@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import axios from "axios";
 import { Minus, Plus, RotateCw } from "lucide-react";
 import type { UnifiedSearchResult } from "@/types/search";
+import { PLATFORM_LABELS } from "@/types/search";
 import { decodeReadingDetail, readingError, type ReadingDetail } from "@/lib/reading";
 import { recordView } from "@/lib/historyApi";
 
@@ -9,6 +10,27 @@ function ReadingImage({ url, alt }: { url: string; alt: string }) {
   const [failed, setFailed] = useState(false);
   return failed ? <p className="reader-notice">图片加载失败，可打开原文查看。</p>
     : <figure className="reader-image"><img src={url} alt={alt || "原文图片"} loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} />{alt && <figcaption>{alt}</figcaption>}</figure>;
+}
+
+function ReadingVideo({ detail, onPlay }: { detail: ReadingDetail; onPlay: () => void }) {
+  const [segment, setSegment] = useState(0);
+  const [failed, setFailed] = useState(false);
+  const player = useRef<HTMLVideoElement>(null);
+  const mediaUrl = detail.media[segment].url;
+  useEffect(() => {
+    const video = player.current;
+    if (video) video.src = mediaUrl;
+    return () => { if (video) { video.pause(); video.removeAttribute("src"); video.load(); } };
+  }, [mediaUrl]);
+  const choose = (index: number) => { setSegment(index); setFailed(false); };
+  return <div className={`reader-video ${detail.portrait ? "is-portrait" : ""}`}>
+    <video ref={player} key={mediaUrl} poster={detail.poster} controls playsInline preload="none"
+      aria-label="站内视频播放器" onPlaying={onPlay} onError={() => setFailed(true)}
+      onEnded={() => { if (segment + 1 < detail.media.length) choose(segment + 1); }} />
+    {detail.media.length > 1 && <div className="reader-segments" aria-label="视频段落">{detail.media.map((part, index) =>
+      <button className="btn small" type="button" key={part.url} aria-pressed={index === segment} onClick={() => choose(index)}>{part.label}</button>)}</div>}
+    {failed && <p className="reader-notice" role="alert">视频加载失败或格式暂不支持，可重新读取内容或打开原文观看。</p>}
+  </div>;
 }
 
 export function ReadingBody({ source }: { source: UnifiedSearchResult }) {
@@ -20,16 +42,20 @@ export function ReadingBody({ source }: { source: UnifiedSearchResult }) {
   const viewed = useRef(false);
   const sourceRef = useRef(source);
   sourceRef.current = source;
-  const { content_id, content_type, url } = source;
+  const { platform, content_id, content_type, url } = source;
+  const platformLabel = PLATFORM_LABELS[platform];
+  const markViewed = () => {
+    if (!viewed.current) { viewed.current = true; void recordView(sourceRef.current); }
+  };
 
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
     setError("");
-    void axios.post("/api/reading/detail", { platform: "zhihu", content_id, content_type, url, refresh: revision > 0 },
-      { signal: controller.signal, timeout: 50000 }).then(({ data }) => {
+    void axios.post("/api/reading/detail", { platform, content_id, content_type, url, refresh: revision > 0 },
+      { signal: controller.signal, timeout: 80000 }).then(({ data }) => {
       if (controller.signal.aborted) return;
-      const next = decodeReadingDetail(data, { content_id, content_type });
+      const next = decodeReadingDetail(data, { platform, content_id, content_type });
       setDetail(next);
       if (!viewed.current && next.blocks.some((block) => block.type !== "unsupported")) {
         viewed.current = true;
@@ -41,21 +67,22 @@ export function ReadingBody({ source }: { source: UnifiedSearchResult }) {
       if (!controller.signal.aborted) setLoading(false);
     });
     return () => controller.abort();
-  }, [content_id, content_type, url, revision]);
+  }, [platform, content_id, content_type, url, revision]);
 
-  return <section className="reader" aria-label="知乎正文" aria-busy={loading} style={{ "--reader-font-size": `${fontSize}px` } as CSSProperties}>
+  return <section className="reader" aria-label={`${platformLabel}内容`} aria-busy={loading} style={{ "--reader-font-size": `${fontSize}px` } as CSSProperties}>
     <div className="reader-toolbar">
-      <h4>正文<span>站内阅读</span></h4>
+      <h4>内容<span>站内阅读</span></h4>
       <div className="reader-tools">
         <button type="button" className="btn small" aria-label="减小正文字号" disabled={fontSize <= 16} onClick={() => setFontSize((value) => value - 1)}><Minus aria-hidden="true" /></button>
         <span aria-label={`正文字号 ${fontSize}`}>{fontSize}</span>
         <button type="button" className="btn small" aria-label="增大正文字号" disabled={fontSize >= 24} onClick={() => setFontSize((value) => value + 1)}><Plus aria-hidden="true" /></button>
-        <button type="button" className="btn small" disabled={loading} onClick={() => setRevision((value) => value + 1)} aria-label="重新读取正文"><RotateCw aria-hidden="true" /></button>
+        <button type="button" className="btn small" disabled={loading} onClick={() => setRevision((value) => value + 1)} aria-label="重新读取内容"><RotateCw aria-hidden="true" /></button>
       </div>
     </div>
-    {loading && <p className="reader-status" role="status">{detail ? "正在重新读取，已有正文保留…" : "正在读取知乎正文…"}</p>}
+    {loading && <p className="reader-status" role="status">{detail ? "正在重新读取，已有内容保留…" : `正在读取${platformLabel}内容…`}</p>}
     {error && <div className="reader-notice" role="alert"><p>{error}</p><button type="button" className="text-link" disabled={loading} onClick={() => setRevision((value) => value + 1)}>重试读取</button></div>}
     {detail && <>
+      {detail.media.length > 0 && <ReadingVideo key={detail.media.map((part) => part.url).join(":")} detail={detail} onPlay={markViewed} />}
       {detail.limited && <p className="reader-notice">当前正文可能不完整，请结合原文查看。</p>}
       {detail.notices.map((notice, index) => <p className="reader-notice" key={index}>{notice}</p>)}
       <div className="reader-body">{detail.blocks.map((block, index) => {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { decodeReadingDetail, readingError, readingImageUrl, supportsReading } from "../src/lib/reading.js";
+import { decodeReadingDetail, readingError, readingImageUrl, readingMediaUrl, supportsReading } from "../src/lib/reading.js";
 
 const source = { platform: "zhihu" as const, content_type: "answer", content_id: "42", url: "https://www.zhihu.com/question/1/answer/42" };
 
@@ -31,4 +31,33 @@ test("正文响应不能串到其它内容，非法图片给出明确占位", ()
 test("失败文案不会展示平台异常或凭据", () => {
   assert.ok(readingError({ response: { data: { detail: { code: "busy" } } } }).includes("正在进行"));
   assert.equal(readingError(new Error("cookie=private-secret")), "暂时无法读取正文，请重试或打开原文。");
+});
+
+test("三平台只接受匹配的官方内容链接，不把番剧或短链当作普通视频", () => {
+  const examples = [
+    { platform: "xhs" as const, content_type: "note", content_id: "abcdef0123456789abcdef01", url: "https://www.xiaohongshu.com/explore/abcdef0123456789abcdef01?xsec_token=t" },
+    { platform: "douyin" as const, content_type: "video", content_id: "123", url: "https://www.douyin.com/video/123" },
+    { platform: "bilibili" as const, content_type: "video", content_id: "BV1234567890", url: "https://www.bilibili.com/video/BV1234567890" },
+    { platform: "bilibili" as const, content_type: "video", content_id: "123", url: "https://www.bilibili.com/video/av123" },
+  ];
+  for (const row of examples) {
+    assert.equal(supportsReading(row), true);
+    assert.equal(supportsReading({ ...row, content_id: "other" }), false);
+    assert.equal(supportsReading({ ...row, url: row.url.replace(".com", ".com.evil.test") }), false);
+  }
+  assert.equal(supportsReading({ ...examples[2], url: "https://www.bilibili.com/bangumi/play/ep123" }), false);
+  assert.equal(supportsReading({ ...examples[1], url: "https://v.douyin.com/123" }), false);
+});
+
+test("本机媒体句柄允许播放，远端签名地址和跨平台响应被拒绝", () => {
+  const url = "/api/reading/media/" + "a".repeat(32);
+  assert.equal(readingMediaUrl(url), url);
+  assert.equal(readingImageUrl(url), url);
+  for (const row of ["//evil.test/api/reading/media/" + "a".repeat(32), url + "?url=x", "/api/reading/media/../", "https://cdn.bilivideo.com/a.mp4"]) assert.equal(readingMediaUrl(row), null);
+  const src = { platform: "douyin" as const, content_type: "video", content_id: "123" };
+  const raw = { ...src, blocks: [], portrait: true, media: [{ url, label: "视频" }, { url: "https://evil.test/a", label: "bad" }] };
+  const value = decodeReadingDetail(raw, src);
+  assert.deepEqual(value.media, [{ url, label: "视频" }]);
+  assert.equal(value.portrait, true);
+  assert.throws(() => decodeReadingDetail({ ...raw, platform: "xhs" }, src));
 });

@@ -25,7 +25,7 @@ PREPARE_READING = reading.prepare_reading
 
 @pytest.fixture(autouse=True)
 def isolated_preparation(monkeypatch):
-    async def prepare():
+    async def prepare(*args):
         pass
     monkeypatch.setattr(reading, "prepare_reading", prepare)
 
@@ -106,7 +106,7 @@ def service(monkeypatch):
 @pytest.mark.asyncio
 async def test_cache_refresh_generation_ttl_and_capacity(service, monkeypatch):
     calls = []
-    async def fetch(kind, identity, url):
+    async def fetch(kind, identity, url, platform="zhihu"):
         calls.append(identity)
         return {"content_id": identity, "blocks": [{"type": "paragraph", "text": "正文"}]}
     monkeypatch.setattr(reading, "fetch_reading", fetch)
@@ -117,7 +117,7 @@ async def test_cache_refresh_generation_ttl_and_capacity(service, monkeypatch):
     monkeypatch.setattr(reading, "get_account_generation", lambda _: 2)
     await service.read("answer", "42", url)
     assert len(calls) == 3
-    key = (2, "answer", "42")
+    key = ("zhihu", 2, "answer", "42")
     service.cache[key] = (0, first)
     await service.read("answer", "42", url)
     assert len(calls) == 4
@@ -236,7 +236,7 @@ async def test_closed_page_cancels_pending_api_read():
     from fastapi import HTTPException
     closed = asyncio.Event()
     class Service:
-        async def read(self, *args):
+        async def read(self, *args, **kwargs):
             try:
                 await asyncio.Event().wait()
             finally:
@@ -251,7 +251,9 @@ async def test_closed_page_cancels_pending_api_read():
 
 def test_api_checks_local_origin_and_input_without_touching_profiles():
     class Service:
-        async def read(self, kind, identity, url, refresh):
+        async def read(self, kind, identity, url, refresh, platform="zhihu"):
+            if platform != "zhihu":
+                raise ValueError("unsupported fixture")
             reading_reference(kind, identity, url)
             return reading_detail({"id": identity, "content": "<p>正文</p>"}, kind, identity)
     app = FastAPI()
