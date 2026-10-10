@@ -73,6 +73,7 @@ export function PluginPanel(props: Omit<PanelProps, "note"> & { editor: Editor; 
       if (!await props.session.flush()) throw new Error(t("research.appendSaveFailed"));
     }
   };
-  if (module) return <module.Panel {...props} note={note} />;
+  const { editor: _editor, session: _session, ...panelProps } = props;
+  if (module) return <module.Panel {...panelProps} note={note} />;
   return props.open ? <div className="extension-loading" role={error ? "alert" : "status"}>{error || "正在加载 AI 助手…"}{error && <button className="text-link" onClick={retry}>重试</button>}<button className="text-link" onClick={props.onClose}>关闭</button></div> : null;
 }

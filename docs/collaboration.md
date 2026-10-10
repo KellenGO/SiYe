@@ -8,9 +8,10 @@
 
 | 任务 ID | 负责人 / 会话 | worktree / 分支 / 起始 HEAD | 修改范围 | 状态 / 下一步 |
 |---|---|---|---|---|
-| `AI-EXTENSION-20261010` | Codex 插件会话 | `C:/Users/Kellen/.codex/worktrees/ai-extension/MediaCrawler-main` / `codex-ai-extension` / `d7a9fa9` | AI 拆分、共享资料能力、扩展管理、打包、相关测试和文档 | 模型、界面及管理流程本地验收通过；待集成主线及确认远程仓库可见性后发布 |
 
 ## 待接手事项
+
+- `AI-EXTENSION-20261010`：`codex-ai-extension` 已提交，主线阅读提交 `e31f5f3` 已合入并通过全量测试；主工作区 `READER-EXPAND-20261010` 仍在写入，本支线未合回 master，修改范围已释放。独立仓库在 `C:/Users/Kellen/Desktop/SiYe-AI`（`68dc6a9`），Windows ZIP 已构建；基础候选在本 worktree 的 `build/ai-extension-base/dist/`，均未发布。下一步由集成者等主工作区干净后按规则合并、复验；用户尚未确认远程仓库可见性，正式官方下载在 GitHub Release 发布前不可用。资料／笔记不随扩展卸载；真实付费服务未新增验收，模型协议使用模拟服务验证。
 
 - `READER-ACCESS-20261010`：实现提交按任务 ID 定位；抖音单条真实 MP4 播放及拖动通过，知乎旧收藏回答在四野 profile 中仍为 403，用户日常浏览器可看但尚未提供同一链接。下一步由阅读功能接手者取得该链接，对照正常浏览器与四野会话；不能把 UA／延迟正文修正当作知乎已恢复。修改范围已释放，现有 EXE 未重建。
 

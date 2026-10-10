@@ -97,7 +97,10 @@ def main(package):
                         route.abort()
                     elif parsed.path.startswith(("/api/extensions", "/api/research", "/api/spaces")):
                         response = client.request(request.method, parsed.path + ("?" + parsed.query if parsed.query else ""), content=request.post_data, headers={"content-type": "application/json"})
-                        route.fulfill(status=response.status_code, body=response.content, headers={"content-type": response.headers.get("content-type", "application/json")})
+                        body = response.content
+                        if parsed.path == "/api/extensions/ai/assets/ui.js" and response.status_code == 200:
+                            body += b';const OriginalPanel=SiYeAI.Panel; SiYeAI.Panel=(props)=>{if("editor" in props || "session" in props) throw new Error("private editor leaked to plugin"); return SiYeAIHost.react.createElement(OriginalPanel,props);};'
+                        route.fulfill(status=response.status_code, body=body, headers={"content-type": response.headers.get("content-type", "application/json")})
                     elif parsed.path.startswith("/api/"):
                         route.fulfill(json={"accounts": []} if parsed.path == "/api/search/accounts" else {"status": "ok", "environment_status": "ok"} if parsed.path == "/api/health" else {})
                     else:

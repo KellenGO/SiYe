@@ -71,6 +71,7 @@ def validate_distribution(package: Path) -> None:
     forbidden = {
         ".env", "browser_data", "logs", "node_modules", "tests", ".git",
         ".github", "webui/src", "__pycache__",
+        "agent_runtime", "claude_agent_sdk", "mcp", "siye_ai", "claude.exe",
     }
     bad = []
     for path in package.rglob("*"):
@@ -133,6 +134,12 @@ def run_web_smoke(
             time.sleep(0.5)
         if health is None:
             raise AssertionError("frozen backend did not pass /api/health")
+
+        status, body = _request(f"{base_url}/api/extensions/ai")
+        extension = json.loads(body) if status == 200 else {}
+        assert extension.get("installed") is False and extension.get("enabled") is False, "clean base package includes AI"
+        status, _ = _request(f"{base_url}/api/research/config")
+        assert status == 409, "AI service accessible without enabled extension"
 
         for path in ("/", "/accounts"):
             status, body = _request(f"{base_url}{path}")
@@ -211,11 +218,13 @@ def main() -> int:
         raise AssertionError(
             f"port {args.port} is already in use; leave the existing application untouched"
         )
-    env = _clean_env(package, args.port)
-    run_runtime_smoke(exe, package, env)
-    run_worker_protocol_smoke(exe, package, env)
-    run_web_smoke(exe, package, env, base_url)
-    run_managed_shutdown_smoke(exe, package, env, base_url)
+    with tempfile.TemporaryDirectory(prefix="siye-exe-smoke-") as temporary:
+        env = _clean_env(package, args.port)
+        env["SIYE_DATA_DIR"] = str(Path(temporary) / "data")
+        run_runtime_smoke(exe, package, env)
+        run_worker_protocol_smoke(exe, package, env)
+        run_web_smoke(exe, package, env, base_url)
+        run_managed_shutdown_smoke(exe, package, env, base_url)
     print("executable clean-room validation: PASS")
     print("node/python-free runtime: PASS")
     print("worker protocol: PASS")
