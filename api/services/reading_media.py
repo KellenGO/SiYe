@@ -17,7 +17,7 @@ from starlette.background import BackgroundTask
 from starlette.responses import StreamingResponse
 
 from .accounts import get_account_generation
-from .research_web import public_target
+from .public_network import public_target
 
 CDN_HOSTS = {
     "xhs": ("xhscdn.com", "xiaohongshu.com"),

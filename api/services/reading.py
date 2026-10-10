@@ -14,8 +14,8 @@ from .accounts import ensure_session_snapshot, get_account_generation, operation
 from .reading_content import detail_from_page, reading_detail, reading_reference
 from .reading_media import reading_media
 from .reading_platforms import fetch_platform_reading, platform_reference
-from .research_diagnostics import AcquisitionError, classify
-from .research_platforms import ResearchBrowserProvider
+from .acquisition_diagnostics import AcquisitionError, classify
+from .platform_browser import ResearchBrowserProvider
 from .result_hydration import ResultHydrator
 
 MESSAGES = {

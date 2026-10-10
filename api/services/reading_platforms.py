@@ -12,8 +12,8 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 from .accounts import ensure_session_snapshot
 from .reading_content import MAX_TEXT_CHARS
 from .reading_media import media_url
-from .research_diagnostics import AcquisitionError, classify
-from .research_materials import MaterialCollector
+from .acquisition_diagnostics import AcquisitionError, classify
+from .platform_materials import MaterialCollector
 
 
 def platform_reference(platform, kind, identity, url):

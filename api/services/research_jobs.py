@@ -20,8 +20,8 @@ from pathlib import Path
 from base.runtime_paths import application_root, library_data_root
 from .accounts import operation_coordinator, get_session_snapshot, ensure_session_snapshot
 from .research_config import research_config, runtime_status
-from .research_materials import material
-from .research_diagnostics import classify
+from .platform_materials import material
+from .acquisition_diagnostics import classify
 from .research_history import ResearchHistory
 from .worker_process import terminate_worker, windows_process_job
 
