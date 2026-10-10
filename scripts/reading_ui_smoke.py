@@ -54,8 +54,16 @@ def main():
                created_at="2026-10-10T00:00:00Z", results=[source, article, note, douyin, bilibili], platforms={platform: {
                    "status": "succeeded", "result_count": 2 if platform == "zhihu" else 1, "error_summary": None, "cache_hit": False} for platform in ("zhihu", "xhs", "douyin", "bilibili")})
     mode, reads, views, errors, pending, media_requests = "ok", [], [], [], [], []
+    comment_reads = []
 
     class Reader:
+        async def comments(self, kind, identity, url, platform="zhihu"):
+            comment_reads.append(identity)
+            return {"platform": platform, "content_type": kind, "content_id": identity,
+                    "entries": [{"id": "comment-1", "parent_id": None, "text": "站内评论测试正文", "author": "评论作者", "like_count": 8},
+                                {"id": "reply-1", "parent_id": "comment-1", "text": "站内回复测试正文", "author": "回复作者"}],
+                    "limited": True, "sort": "热门", "notice": ""}
+
         async def read(self, kind, identity, url, refresh, platform="zhihu"):
             reads.append((identity, refresh))
             if mode == "fail":
@@ -143,7 +151,7 @@ def main():
                         route.fulfill(status=206, body=data[start:end+1], headers=headers)
                     else:
                         route.fulfill(body=data, headers=headers)
-                elif parsed.path.startswith("/api/library/") or parsed.path == "/api/reading/detail":
+                elif parsed.path.startswith("/api/library/") or parsed.path in {"/api/reading/detail", "/api/reading/comments"}:
                     if parsed.path == "/api/reading/detail" and mode == "pending":
                         pending.append(route)
                         return
@@ -174,6 +182,14 @@ def main():
             expect(drawer.get_by_text(source["snippet"], exact=True)).to_have_count(0)
             expect(drawer.locator(".reader-image img")).to_be_visible()
             expect(drawer.locator("iframe, script")).to_have_count(0)
+            assert not comment_reads, "Comments must load only when requested"
+            drawer.get_by_role("button", name="查看评论", exact=True).click()
+            expect(drawer.get_by_text("站内评论测试正文", exact=True)).to_be_visible()
+            expect(drawer.locator(".reader-comment.is-reply")).to_have_count(1)
+            drawer.get_by_role("button", name="全屏查看", exact=True).click()
+            expect(drawer.get_by_text("站内评论测试正文", exact=True)).to_be_visible()
+            assert comment_reads == ["42"], "Fullscreen must preserve comments without another request"
+            drawer.get_by_role("button", name="退出全屏", exact=True).click()
             assert len(context.pages) == 1 and len(views) == 1 and views[0]["content_id"] == "42"
             expect(drawer.get_by_role("link", name="在原平台打开", exact=True)).to_have_attribute("href", source["url"])
             drawer.get_by_role("button", name="增大正文字号").click()

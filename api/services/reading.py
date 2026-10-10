@@ -74,6 +74,30 @@ async def fetch_reading(kind, identity, url, platform="zhihu"):
         await hydrator.close()
 
 
+async def fetch_comments(kind, identity, url, platform):
+    from .research_materials import MaterialCollector
+    await prepare_reading(platform)
+    snapshot = await ensure_session_snapshot(platform, raise_on_error=True) or {}
+    collector = MaterialCollector({platform: snapshot})
+    try:
+        client = await collector.client(platform)
+        detail = None
+        if platform == "bilibili":
+            response = await collector.request(client.get_video_info,
+                bvid=identity if identity.startswith("BV") else None,
+                aid=int(identity) if identity.isdigit() else None)
+            detail = response.get("View", response)
+            if (identity.startswith("BV") and detail.get("bvid") != identity) or (identity.isdigit() and str(detail.get("aid")) != identity):
+                raise ValueError("video identity mismatch")
+        result = await collector.comments(client, {"platform": platform, "content_id": identity,
+            "content_type": kind, "url": url}, detail)
+        return {"platform": platform, "content_id": identity, "content_type": kind,
+                "entries": result.get("entries", []), "limited": result.get("truncated", False),
+                "sort": result.get("sort", "平台默认"), "notice": result.get("reason", "")}
+    finally:
+        await collector.close()
+
+
 class ReadingService:
     def __init__(self):
         self.cache = OrderedDict()
@@ -134,6 +158,25 @@ class ReadingService:
         await asyncio.gather(*tasks, return_exceptions=True)
         self.cache.clear()
         reading_media.clear()
+
+    async def comments(self, kind, identity, url, platform="zhihu"):
+        canonical = reading_reference(kind, identity, url) if platform == "zhihu" else platform_reference(platform, kind, identity, url)
+        if not await operation_coordinator.acquire_exclusive("reading"):
+            raise ReadingError("busy")
+        task = None
+        try:
+            task = asyncio.create_task(fetch_comments(kind, identity, canonical, platform))
+            self.tasks.add(task)
+            return await asyncio.wait_for(task, timeout=75)
+        except ReadingError:
+            raise
+        except Exception as error:
+            code, _ = classify(error)
+            raise ReadingError(code) from None
+        finally:
+            if task is not None:
+                self.tasks.discard(task)
+            await operation_coordinator.release_exclusive("reading")
 
 
 reading_service = ReadingService()

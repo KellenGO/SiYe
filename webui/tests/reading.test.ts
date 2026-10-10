@@ -1,8 +1,20 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { decodeReadingDetail, readingError, readingImageUrl, readingMediaUrl, supportsReading } from "../src/lib/reading.js";
+import { decodeReadingComments, decodeReadingDetail, readingError, readingImageUrl, readingMediaUrl, supportsReading } from "../src/lib/reading.js";
 
 const source = { platform: "zhihu" as const, content_type: "answer", content_id: "42", url: "https://www.zhihu.com/question/1/answer/42" };
+
+test("评论校验来源，保留回复及部分结果，不带出额外字段", () => {
+  const raw = { ...source, entries: [{ id: "a", text: "<script>只是文字</script>", author: "读者", parent_id: "root", cookie: "secret", like_count: 2 }], limited: true, sort: "热门", notice: "部分读取失败" };
+  const result = decodeReadingComments(raw, source);
+  assert.equal(result.entries[0].parent_id, "root");
+  assert.equal(result.entries[0].text, raw.entries[0].text);
+  assert.equal(result.limited, true);
+  assert.ok(!JSON.stringify(result).includes("secret"));
+  assert.throws(() => decodeReadingComments({ ...raw, content_id: "43" }, source));
+  assert.throws(() => decodeReadingComments({ ...raw, platform: "douyin" }, source));
+  assert.throws(() => decodeReadingComments({}, source));
+});
 
 test("仅可信且身份匹配的知乎回答和文章进入站内阅读", () => {
   assert.equal(supportsReading(source), true);

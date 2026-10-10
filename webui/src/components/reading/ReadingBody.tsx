@@ -5,6 +5,7 @@ import type { UnifiedSearchResult } from "@/types/search";
 import { PLATFORM_LABELS } from "@/types/search";
 import { decodeReadingDetail, readingError, type ReadingDetail } from "@/lib/reading";
 import { recordView } from "@/lib/historyApi";
+import { ReadingComments } from "./ReadingComments";
 
 function ReadingImage({ url, alt }: { url: string; alt: string }) {
   const [failed, setFailed] = useState(false);
@@ -94,5 +95,6 @@ export function ReadingBody({ source }: { source: UnifiedSearchResult }) {
         return <p className={block.type === "list-item" ? "reader-list-item" : undefined} key={index}>{block.text}</p>;
       })}</div>
     </>}
+    <ReadingComments key={`${platform}:${content_type}:${content_id}`} source={source} bodyLoading={loading} />
   </section>;
 }

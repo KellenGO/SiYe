@@ -59,6 +59,25 @@ async def read_detail(payload: ReadingInput, request: Request, service=Depends(g
             await asyncio.gather(task, return_exceptions=True)
 
 
+@reading_router.post("/comments")
+async def read_comments(payload: ReadingInput, request: Request, service=Depends(get_reading_service)):
+    task = asyncio.create_task(service.comments(payload.content_type, payload.content_id, payload.url, platform=payload.platform))
+    try:
+        while not task.done():
+            await asyncio.wait({task}, timeout=0.25)
+            if not task.done() and await request.is_disconnected():
+                raise HTTPException(499, "评论请求已关闭")
+        return await task
+    except ReadingError as error:
+        raise HTTPException(409 if error.code == "busy" else 503, {"code": error.code, "message": str(error).replace("正文", "评论")}) from None
+    except ValueError:
+        raise HTTPException(422, "内容类型、编号或原文链接不匹配") from None
+    finally:
+        if not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+
 @reading_router.api_route("/media/{token}", methods=["GET", "HEAD"])
 async def read_media(token: str, request: Request):
     return await reading_media.stream(token, request.headers.get("range"), request.method)
