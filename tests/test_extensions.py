@@ -221,6 +221,42 @@ async def test_catalog_rejects_non_official_downloads(tmp_path, monkeypatch):
     assert manager.available is None and manager.error
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [403, 429])
+async def test_rate_limited_catalog_uses_official_release_manifest(tmp_path, monkeypatch, status):
+    from api.services import extensions as module
+    requests = []
+    async def respond(request):
+        requests.append(request)
+        if request.url.host == "api.github.com":
+            return httpx.Response(status, headers={"x-ratelimit-remaining": "0"})
+        if request.url.host == "github.com":
+            assert str(request.url) == module.RELEASE_MANIFEST
+            return httpx.Response(302, headers={"location": "https://release-assets.githubusercontent.com/manifest.json"})
+        return httpx.Response(200, json={"tag_name": "v0.1.0", "assets": [{
+            "name": module.ASSET_NAME, "size": 128, "digest": "sha256:" + "a" * 64,
+            "browser_download_url": "https://github.com/KellenGO/SiYe-AI/releases/download/v0.1.0/" + module.ASSET_NAME
+        }]})
+    monkeypatch.setattr(module.httpx, "AsyncClient", lambda **kwargs: REAL_CLIENT(transport=httpx.MockTransport(respond), **kwargs))
+    manager = Extensions(tmp_path / "extension")
+    await manager.catalog()
+    assert manager.available["sha256"] == "a" * 64 and not manager.error
+    assert len(requests) == 3 and all("authorization" not in request.headers for request in requests)
+
+
+@pytest.mark.asyncio
+async def test_release_manifest_rejects_external_redirect(tmp_path, monkeypatch):
+    from api.services import extensions as module
+    async def respond(request):
+        if request.url.host == "api.github.com":
+            return httpx.Response(403, headers={"x-ratelimit-remaining": "0"})
+        return httpx.Response(302, headers={"location": "https://evil.example/manifest.json"})
+    monkeypatch.setattr(module.httpx, "AsyncClient", lambda **kwargs: REAL_CLIENT(transport=httpx.MockTransport(respond), **kwargs))
+    manager = Extensions(tmp_path / "extension")
+    await manager.catalog()
+    assert manager.available is None and manager.error
+
+
 def test_routes_reject_external_origins_and_research_when_disabled(tmp_path, monkeypatch):
     from api.services import extensions as module
     manager = Extensions(tmp_path / "extension")

@@ -19,6 +19,7 @@ from base.app_version import APP_VERSION
 from base.runtime_paths import library_data_root
 
 RELEASE_API = "https://api.github.com/repos/KellenGO/SiYe-AI/releases/latest"
+RELEASE_MANIFEST = "https://github.com/KellenGO/SiYe-AI/releases/latest/download/extension-release.json"
 ASSET_NAME = "SiYe-AI-Windows-x64.zip"
 MAX_DOWNLOAD = 512 * 1024 * 1024
 MAX_EXPANDED = 1024 * 1024 * 1024
@@ -155,6 +156,22 @@ class Extensions:
         try:
             async with httpx.AsyncClient(timeout=20, follow_redirects=False) as client:
                 response = await client.get(self.release_api, headers={"Accept": "application/vnd.github+json"})
+                if (response.status_code == 429 or response.status_code == 403
+                        and response.headers.get("x-ratelimit-remaining") == "0"):
+                    url = RELEASE_MANIFEST
+                    for _ in range(6):
+                        parsed = urlsplit(url)
+                        if (parsed.scheme != "https" or parsed.hostname not in {
+                                "github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com"}
+                                or parsed.username or parsed.password):
+                            raise ValueError("扩展发布地址无效")
+                        response = await client.get(url)
+                        if not response.is_redirect:
+                            break
+                        from urllib.parse import urljoin
+                        url = urljoin(url, response.headers["location"])
+                    else:
+                        raise ValueError("扩展发布跳转过多")
                 response.raise_for_status()
                 if len(response.content) > 1024 * 1024:
                     raise ValueError("扩展发布信息过大")
