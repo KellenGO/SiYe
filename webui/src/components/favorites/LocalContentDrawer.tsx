@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState, type RefObject, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ArrowUpRight, Maximize2, Minimize2, Trash2, X } from "lucide-react";
+import { ArrowUpRight, Bookmark, Coins, Heart, Maximize2, MessageCircle, Minimize2, Play, Share2, Trash2, X, type LucideIcon } from "lucide-react";
 import type { PlatformSlug, UnifiedSearchResult } from "@/types/search";
 import { PLATFORM_LABELS } from "@/types/search";
 import type { BookmarkLibrary } from "@/hooks/useBookmarks";
@@ -11,6 +11,9 @@ import { LocalContentCover, localContentType } from "./LocalContentCard";
 import { useResearchWorkspace } from "@/components/spaces/WorkspaceContext";
 import { ReadingBody } from "@/components/reading/ReadingBody";
 import { supportsReading } from "@/lib/reading";
+
+const METRIC_ICONS: Record<string, LucideIcon> = { view_count: Play, like_count: Heart, coin_count: Coins,
+  comment_count: MessageCircle, collect_count: Bookmark, share_count: Share2 };
 
 export function LocalContentDrawer({ result, library, onClose, fallbackFocus, savedView = false, fetchedAt = {}, onDelete, renderExtraActions }: {
   result: UnifiedSearchResult;
@@ -141,6 +144,7 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
           const url = safeContentUrl(source.url);
           const published = source.published_at ? new Date(source.published_at) : null;
           const metrics = orderedMetrics(source.metrics);
+          const metricMax = Math.max(1, ...metrics.map(({ key }) => source.metrics[key]));
           const header = <>
             {!supportsReading(source) && <LocalContentCover result={source} />}
             <p className="local-content-detail-source">{PLATFORM_LABELS[source.platform]} · {localContentType(source.content_type)}</p>
@@ -149,7 +153,17 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
             {url && <a className="btn small local-content-original" href={url} target="_blank" rel="noreferrer" onClick={() => { void recordView(source); }}>在原平台打开<ArrowUpRight aria-hidden="true" /></a>}
           </>;
           const actions = <>
-            {metrics.length ? <dl className="local-content-metrics">{metrics.map(({ key, label }) => <div key={key}><dt>{label}</dt><dd>{source.metrics_approximate?.includes(key) ? "约 " : ""}{source.metrics[key].toLocaleString("zh-CN")}</dd></div>)}</dl>
+            {metrics.length ? <section className="local-content-metric-chart" aria-label="互动数据">
+              <div className="local-content-metric-heading"><h4>互动数据</h4><span>数量对比</span></div>
+              <dl className="local-content-metrics">{metrics.map(({ key, label }) => {
+                const Icon = METRIC_ICONS[key];
+                return <div key={key}><dt><Icon aria-hidden="true" />{label}</dt><dd>
+                  <span className="local-content-metric-track" aria-hidden="true"><span style={{ width: `${source.metrics[key] / metricMax * 100}%` }} /></span>
+                  <span className="local-content-metric-value">{source.metrics_approximate?.includes(key) ? "约 " : ""}{source.metrics[key].toLocaleString("zh-CN")}</span>
+                </dd></div>;
+              })}</dl>
+              <p className="local-content-metric-caption">条形长度以当前最大值为基准，不代表占比。</p>
+            </section>
               : <p className="local-content-detail-meta">暂无互动数据</p>}
             {(library || renderExtraActions) && <div className="local-content-actions">
               {library && <><BookmarkControl result={source} library={library} fetchedAt={fetchedAt} compact={false}

@@ -1113,10 +1113,19 @@ html.dark .search-submit { color: #101525; }
 .result-reader-title { background: none; border: 0; cursor: pointer; text-align: left; }
 .result-reader-cover { display: block; width: 100%; padding: 0; border: 0; background: none; cursor: pointer; border-radius: 12px; }
 .result-reader-title:focus-visible, .result-reader-cover:focus-visible { outline: 2px solid var(--siye-brand); outline-offset: 3px; }
-.local-content-metrics { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0; }
-.local-content-metrics > div { min-width: 65px; padding: 10px 12px; border-radius: 8px; background: var(--siye-soft); }
-.local-content-metrics dt { font-size: 11px; color: var(--siye-muted); }
-.local-content-metrics dd { margin: 4px 0 0; font-size: 14px; font-variant-numeric: tabular-nums; }
+.local-content-metric-chart { margin: 24px 0; padding: 16px; border: 1px solid var(--siye-line); border-radius: 12px; background: var(--siye-soft); }
+.local-content-metric-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.local-content-metric-heading h4 { margin: 0; font-size: 14px; }
+.local-content-metric-heading > span { font-size: 11px; color: var(--siye-muted); }
+.local-content-metrics { display: grid; gap: 12px; margin: 0; }
+.local-content-metrics > div { display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: center; gap: 12px; min-height: 24px; }
+.local-content-metrics dt { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--siye-secondary); }
+.local-content-metrics dt svg { width: 14px; height: 14px; color: var(--siye-brand-ink); flex-shrink: 0; }
+.local-content-metrics dd { display: grid; grid-template-columns: minmax(0, 1fr) minmax(64px, max-content); align-items: center; gap: 12px; margin: 0; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.local-content-metric-value { text-align: right; white-space: nowrap; }
+.local-content-metric-track { height: 7px; border-radius: 8px; background: var(--siye-line); overflow: hidden; }
+.local-content-metric-track > span { display: block; height: 100%; border-radius: inherit; background: var(--siye-brand); }
+.local-content-metric-caption { margin: 14px 0 0; color: var(--siye-muted); font-size: 11px; line-height: 1.6; }
 .local-content-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 132px), 1fr)); gap: 8px; margin: 24px 0 16px; }
 .local-content-actions > button, .local-content-drawer .bookmark-meta-actions > button, .local-content-drawer .bookmark-meta-actions > .membership-editor > button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; min-height: 44px; padding: 10px; border: 1px solid var(--siye-line-strong); border-radius: 9px; background: var(--siye-bg); color: var(--siye-secondary); font-size: 12px; line-height: 1.5; white-space: nowrap; }
 .local-content-actions > button { width: 100%; }

@@ -44,7 +44,8 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     source = dict(platform="zhihu", content_id="42", content_type="answer", title="为什么读书需要慢下来？",
                   author="阅读测试作者", snippet="这里只是搜索摘要，不是正文。", url="https://www.zhihu.com/question/1/answer/42",
-                  cover_url=None, metrics={"like_count": 128}, rank=0, grouped_sources=None)
+                  cover_url=None, metrics={"like_count": 237761, "comment_count": 6349, "collect_count": 166439, "share_count": 110253},
+                  metrics_approximate=["collect_count"], rank=0, grouped_sources=None)
     article = {**source, "content_id": "43", "content_type": "article", "title": "一篇独立的文章", "url": "https://zhuanlan.zhihu.com/p/43"}
     note_id, bvid = "abcdef0123456789abcdef01", "BV1234567890"
     note = {**source, "platform": "xhs", "content_id": note_id, "content_type": "note", "title": "小红书图文阅读", "url": f"https://www.xiaohongshu.com/explore/{note_id}?xsec_token=fixture"}
@@ -184,6 +185,16 @@ def main():
             expect(drawer.get_by_text(source["snippet"], exact=True)).to_have_count(0)
             expect(drawer.locator(".reader-image img")).to_be_visible()
             expect(drawer.locator("iframe, script")).to_have_count(0)
+            chart = drawer.get_by_role("region", name="互动数据", exact=True)
+            expect(chart.locator("dt")).to_have_text(["点赞", "评论", "收藏", "分享"])
+            expect(chart.locator("dd")).to_have_text(["237,761", "6,349", "约 166,439", "110,253"])
+            bars = chart.locator(".local-content-metric-track > span")
+            assert bars.count() == 4
+            assert bars.nth(0).evaluate("el => el.style.width") == "100%"
+            assert 2 < float(bars.nth(1).evaluate("el => el.style.width").rstrip('%')) < 3
+            chart.scroll_into_view_if_needed()
+            page.screenshot(path=str(output / "metrics-chart.png"))
+            drawer.evaluate("el => el.scrollTop = 0")
             assert not comment_reads, "Comments must load only when requested"
             assert drawer.bounding_box()["width"] == 760
             expect(drawer.get_by_role("region", name="评论", exact=True)).to_have_count(0)
