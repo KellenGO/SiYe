@@ -15,11 +15,11 @@ dependencies = [
     "pydantic>=2.13.4",
     "pyexecjs==1.5.1",
     # 托盘启动器（无窗口启动 + 托盘菜单），仅 Windows 发行版需要
+    "pywin32==312; sys_platform == 'win32'",
     "pystray>=0.19.5; sys_platform == 'win32'",
     "redis~=4.6.0",
     "tenacity==8.2.2",
     "uvicorn==0.31.1",
-    "claude-agent-sdk==0.2.163",
     "xhshow>=0.2.0",
 ]
 

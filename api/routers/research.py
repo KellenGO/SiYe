@@ -36,7 +36,15 @@ async def local_request(request: Request):
         raise HTTPException(403, "研究接口仅允许四野本机页面访问")
 
 
-research_router.dependencies.append(Depends(local_request))
+def require_research_extension():
+    from ..services.extensions import extensions
+    try:
+        extensions.require_enabled()
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from None
+
+
+research_router.dependencies.extend([Depends(local_request), Depends(require_research_extension)])
 
 
 class ConfigInput(BaseModel):

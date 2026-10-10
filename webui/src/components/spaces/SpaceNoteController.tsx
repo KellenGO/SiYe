@@ -11,7 +11,7 @@ import { useSpaceDetail, useSpaces } from "@/hooks/useSpaces";
 import { EMPTY_NOTE, NOTE_FONT_SIZES, noteText, spaceError, type NoteDocument, type NoteSession } from "@/lib/spaceNotes";
 import { fetchSpace } from "@/lib/spacesApi";
 import { noteMarkdown, noteExportFilename, safeNoteUrl } from "@/lib/noteExport";
-import SpaceResearchPanel from "./SpaceResearchPanel";
+import { PluginPanel } from "@/components/extensions/PluginUI";
 import type { WorkspaceSplitLayout } from "./WorkspaceContext";
 
 function cleanPastedNode(node: EditorNode): EditorNode {
@@ -171,6 +171,6 @@ export default function SpaceNoteController({ spaceId, open, onClose, researchOp
   }, [editor, session, detail.data]);
   return editor && session && detail.data ? <>
     {createPortal(<NotePanel key={spaceId} editor={editor} session={session} name={detail.data.name} spaceId={detail.data.id} archived={detail.data.archived} modal={modal} onClose={onClose} />, container)}
-    <SpaceResearchPanel key={spaceId} spaceId={spaceId} spaceName={detail.data.name} sourceCount={detail.data.items.length} editor={editor} session={session} archived={detail.data.archived} open={researchOpen} onClose={onCloseResearch} split={split} />
+    <PluginPanel key={spaceId} spaceId={spaceId} spaceName={detail.data.name} sourceCount={detail.data.items.length} editor={editor} session={session} archived={detail.data.archived} open={researchOpen} onClose={onCloseResearch} split={split} />
   </> : null;
 }

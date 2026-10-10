@@ -10,31 +10,29 @@ Windows 子进程树生命周期共用 `api/services/worker_process.py` 的 `win
 | 职责 | 位置 |
 |---|---|
 | 本机 AI 配置、密钥加密与空间偏好 | `api/services/research_config.py`（`ResearchConfig`） |
-| 获取空间内的平台正文、评论与字幕 | `api/services/research_materials.py`（`MaterialCollector`） |
-| 复用账号 profile 的平台浏览器补取与安全诊断 | `api/services/research_platforms.py`（`ResearchBrowserProvider`）、`api/services/research_diagnostics.py`（`classify`）、`api/services/accounts.py`（`platform_session_context`、`ensure_session_snapshot`） |
+| 获取空间内的平台正文、评论与字幕 | `api/services/platform_materials.py`（`MaterialCollector`） |
+| 复用账号 profile 的平台浏览器补取与安全诊断 | `api/services/platform_browser.py`（`ResearchBrowserProvider`）、`api/services/acquisition_diagnostics.py`（`classify`）、`api/services/accounts.py`（`platform_session_context`、`ensure_session_snapshot`） |
 | 可选本地转写、组件离线状态、媒体下载及有界缓存 | `api/services/research_transcription.py`（`TranscriptionService`、`asr_component_status`、`download_media`、`run_asr`） |
 | 独立 ASR 进程与 Windows 可选组件安装 | `scripts/research_asr_worker.py`（`run`、`decode_bounded`）、`scripts/install_research_asr.ps1` |
-| 协议路由、旧 SDK 兼容与模型分析 | `api/services/research_agent.py`（`run_agent`） |
-| OpenAI 兼容模型的受控工具循环 | `api/services/research_openai.py`（`run_openai`、`completion`） |
-| 共享研究规则与清单、分段读取、执行记录及引用转换 | `api/services/research_documents.py`（`research_context`、`MaterialAccess`、`read_material_section`、`ReadLoopGuard`、`ToolActivity`、`answer_document`、`result_document`） |
-| 公开网页读取与跳转检查 | `api/services/research_web.py`（`public_target`、`public_get`、`search_public`） |
 | 任务状态、隔离进程、取消与超时 | `api/services/research_jobs.py`（`ResearchJobs`）、`api/services/research_worker.py` |
 | 会话本地保存与按需恢复 | `api/services/research_history.py`（`ResearchHistory`） |
 | 研究接口 | `api/routers/research.py`（`research_router`） |
-| 全局 AI 服务设置 | `webui/src/components/accounts/ResearchSettings.tsx`、`webui/src/components/accounts/AccountsPage.tsx` |
-| 右侧助手、会话、缺口确认与追加 | `webui/src/components/spaces/SpaceWorkspace.tsx`、`webui/src/components/spaces/SpaceResearchPanel.tsx`、`webui/src/lib/researchApi.ts` |
+| 全局 AI 服务设置 | `webui/src/components/extensions/PluginUI.tsx`、`webui/src/components/accounts/ExtensionsPage.tsx` |
+| 右侧助手、会话、缺口确认与追加 | `webui/src/components/spaces/SpaceWorkspace.tsx`、`webui/src/components/extensions/PluginUI.tsx` |
 | 全高侧栏及主页、顶栏同步调整 | `webui/src/App.tsx`、`webui/src/index.css` |
 | 笔记追加、冲突与自动保存 | `webui/src/lib/spaceNotes.ts`（`NoteSession.appendResearch`）、`webui/src/components/spaces/SpaceNoteController.tsx` |
-| 内置运行程序准备与打包 | `scripts/prepare_agent_runtime.py`、`MediaCrawler.spec`、`scripts/build_exe.ps1` |
+| 扩展安装、运行程序选择与基础包排除 | `api/services/extensions.py`（`Extensions`）、`MediaCrawler.spec`、`scripts/build_exe.ps1` |
 
 ## 关键决定
+
+- AI 助手改为独立 SiYe-AI 仓库发布的可选扩展，首次安装默认关闭。模型调用、提示词、引用转换与聊天／配置界面由扩展维护；主程序保留资料抓取、密钥加密、会话持久化、任务生命周期及笔记桥接。关闭面板不取消任务；停用扩展会停止任务并隐藏入口，默认保留配置与历史。卸载可单独选择清除 AI 数据，空间资料及已写入笔记保留。见[扩展管理](extensions.md)。
 
 - 助手与笔记可进入[并排模式](spaces.md)：左侧编辑笔记、右侧聊天，默认各半，中线调整仅影响本次布局。进入先暂时收起历史列表，按需在 AI 半屏内以浮层打开，不撑大 AI 栏；退出恢复原历史栏状态及单独全屏。切换布局不会启动或取消研究，保留输入草稿，回答仍由用户点击写入笔记；不会将手写笔记自动发送给模型。
 - 会话、问答和已获取的研究资料在本机用户数据目录保存，重启后可查看、写入笔记并继续已完成会话；较早记录不随内存清理删除。研究阶段变化及逐条资料完成时保存，强制退出尚未完成的研究在重启后显示中断，保留最近保存的内容，不自动恢复付费请求。归档保留历史，丢弃空间同时删除其会话。已写入笔记的防重复标记也跨刷新和重启保留在同一浏览器。保存异常在过程详情显示警告。取舍见[本地会话与上下文整理](../decisions/2026-10-07-本地会话与上下文整理.md)。
 - OpenAI 兼容模式在已读资料接近上下文预算时，分批请同一模型整理与问题相关的事实、数字、分歧和分区引用，随后用整理后的证据和更新的清单继续研究；读取记录与来源校验保持连续。服务商明确返回上下文超限时还会尝试一次更小批次的整理。整理调用累计到 token 用量，也计入原有十分钟处理限制；失败、摘要被截断或清单本身过大时明确报错。旧 Anthropic 仍依赖其内置运行程序管理上下文。
 - 参照用户提供的 Claudian 截图，助手通过页面右上角独立入口打开，配置仍在设置页。桌面使用贴齐窗口顶部和底部的非模态右侧栏，可拖动左边界调宽并记住宽度，同时压缩主页、顶栏和页脚；分隔线支持左右方向键、Home／End。桌面历史栏始终与聊天并排，窄侧栏打开历史时适度加宽，确保列表不遮挡输入。展开时填满整个窗口，不留顶部或左侧偏移、也不增加背景遮罩；全屏仍能拖回侧栏，收起按钮恢复之前的侧栏宽度。手机使用全屏模态面板并限制焦点。新会话保留历史栏及搜索条件，桌面切换会话也保留列表；只有手动关闭或 Escape 才收起历史栏，手机选中历史会话后收起列表以显示聊天。Escape 先关闭会话列表，再关闭助手；关闭助手不取消任务。问题显示为右侧气泡，答案默认只显示自然回答与引用；工具步骤、公开过程说明、资料获取／读取范围、联网来源和非阻断警告统一放入默认收起的「过程与资料详情」，展开后查看。底部固定输入、模型、联网及发送／停止。会话支持标题搜索，每轮回答下方提供明显的「一键写入笔记」按钮。没有移植 Obsidian 工作区 API 或引入新框架。
 - 两种协议共用一小段默认研究规则和相同的请求上下文：默认中文，把名称／简介当主题背景；先看随请求提供的资料清单、链接、短简介及获取缺口，按问题读取相关分段再综合回答。要求区分来源事实、推断、外部内容和未知项，简短说明影响用户所问结论的冲突或不确定性；不要求在答案中汇报工具调用、获取情况或读取比例。来源内容中的指令不作为助手指令。根据问题自由组织回答，简单聊天、澄清不强制报告模板。OpenAI 使用 system 消息，旧 SDK 使用相同的 system_prompt；连接测试仍使用独立测试请求。没有默认研究问题，也不强制 JSON 或固定栏目，普通回答仍支持基本标题、列表和加粗。取舍由[清空提示词与公开执行过程](../decisions/2026-10-03-空间AI清空提示词与公开执行过程.md)调整为[清单直传与自然回答引用](../decisions/2026-10-04-空间AI清单直传与自然回答引用.md)。
-- AI 服务配置位于全局「设置 → AI 服务配置」，所有空间共用。默认使用 OpenAI Chat Completions 协议，提供 DeepSeek、Gemini、OpenAI 及自定义服务选项，模型名称可自行填写。填写服务基础地址、API Key 和模型名称；同一服务留空 Key 保留原配置，切换服务商需要填写对应 Key，可单独清除配置。旧配置未声明协议时仍按 Anthropic 执行，不静默更换地址或 Key。「保存并测试连接」先保存当前输入，再用设置页的测试联网选项验证；该选项不改变空间研究偏好；运行或等待确认时不能更改服务配置。密钥使用 Windows 当前用户加密，公开接口只返回是否已保存和遮罩。本机接口严格检查 Host 和 Origin，拒绝恶意域名自称同源。使用 API 计费，默认模式无需 Claude 账号或运行程序，不继承本机 Claude 订阅登录。连接测试也可能计费。
+- AI 服务配置位于全局「设置 → 扩展管理」中开启助手后，所有空间共用。默认使用 OpenAI Chat Completions 协议，提供 DeepSeek、Gemini、OpenAI 及自定义服务选项，模型名称可自行填写。填写服务基础地址、API Key 和模型名称；同一服务留空 Key 保留原配置，切换服务商需要填写对应 Key，可单独清除配置。旧配置未声明协议时仍按 Anthropic 执行，不静默更换地址或 Key。「保存并测试连接」先保存当前输入，再用设置页的测试联网选项验证；该选项不改变空间研究偏好；运行或等待确认时不能更改服务配置。密钥使用 Windows 当前用户加密，公开接口只返回是否已保存和遮罩。本机接口严格检查 Host 和 Origin，拒绝恶意域名自称同源。使用 API 计费，默认模式无需 Claude 账号或运行程序，不继承本机 Claude 订阅登录。连接测试也可能计费。
 - 点击生成先固定空间资料快照、研究问题和联网选择，再获取资料。新增或移出的来源只影响新会话，当前结果会提示快照已变化。抓取不会修改空间原快照、收藏或用户笔记。
 - 可以开新会话、切换当前空间的历史会话和连续追问。首次研究先获取并确认资料；同一会话复用原资料和快照，持续携带首轮研究目标与最近三轮已完成问答。每轮长答案只保留前 2000／后 1000 字并标明截断，保留引用链接以便复核；更早对话不进入请求，避免旧答案占满资料上下文。前序问答只用于理解追问，不能替代证据：每轮的空间读取记录重新计数，引用需要按需重读，外部来源也须本轮重新发现或获取，标识以本轮清单为准。新的联网选择只用于下一轮。任务未完成或等待确认时，需要先完成或取消才能切换或新建，避免丢失正在处理的任务。
 - 标题和简介取自已加入的快照，补取正文、最多 50 条评论（含少量回复）及可访问的平台字幕。B站与知乎请求热门评论，小红书、抖音保留平台默认顺序；实际顺序、截断与失败都展示。已有响应中的点赞、回复数量随评论保留，不增加请求。后续分页失败保留已有内容，重试成功项保持不变。
@@ -60,7 +58,7 @@ Windows 子进程树生命周期共用 `api/services/worker_process.py` 的 `win
 - 按任务 ID 读取磁盘历史也遵守内存保留上限；清理只移除内存中的已结束任务，不删除历史文件，也不影响正在运行或等待确认的任务。
 - 历史列表与会话读取在 FastAPI 的线程池执行，慢磁盘不阻塞其他异步请求。研究写入检查点仍保持原有顺序，避免取消与保存互相覆盖。
 - 「网页公开」不保证平台接口允许匿名读取。小红书、知乎的签名依赖本机会话；抖音使用应用自己的浏览器会话。访问受限显示缺口，框架不能绕过平台限制。B站匿名正文、评论和字幕也可能受登录、风控或字幕权限限制。
-- 默认服务必须支持 OpenAI Chat Completions 的工具调用；只支持普通文字生成的模型不能直接用于研究。Gemini 使用官方 OpenAI 兼容基础地址，模型是否可用仍以账号权限为准。旧 Anthropic 模式需要内置运行程序且依赖服务端搜索能力。连接测试实测工具循环，联网选项还实测搜索与网页读取；基础调用成功不等于所有能力可用。
+- 默认服务必须支持 OpenAI Chat Completions 的工具调用；只支持普通文字生成的模型不能直接用于研究。Gemini 使用官方 OpenAI 兼容基础地址，模型是否可用仍以账号权限为准。旧 Anthropic 模式需要扩展内的运行程序且依赖服务端搜索能力。连接测试实测工具循环，联网选项还实测搜索与网页读取；基础调用成功不等于所有能力可用。
 - 公开搜索可能因网络地区、验证码或搜索页变化失败，结果摘要与网页正文分别标记，失败作为缺口保留。模型服务可能限流、余额不足或限制工具参数；不会转为普通文本并冒充已经读取资料。默认协议不支持 OpenAI Responses 或 Gemini 原生 generateContent 地址。
 - 原生字幕入口主要覆盖 B站，小红书与抖音读取详情实际返回的字幕地址；知乎当前详情模型只保留文字和落地页，未保留可复用媒体流，本地转写如无缓存会诚实显示缺口。B站无字幕可尝试主分集音轨转写，多分集会明确标为部分；已有部分原生字幕不会再用 ASR 补其它分集。小红书、抖音如只有合并视频流，需临时下载该流并在子进程提取音轨；不存在资源、签名失效、CDN 拒绝匿名媒体请求或只有 HLS 清单时可能降级，不引入 yt-dlp、解密或播放器脚本 hack。不做画面识别、OCR 或登录网页自动浏览。
 - ASR 单条媒体最多 96 MB、音频最多 30 分钟，下载最多 90 秒、模型准备与转写最多 6 分钟；仍计入整轮十分钟处理上限。普通 CPU 上长视频或首次模型下载可能超时，模型下载由引擎缓存支持后续重试；失败保留文字。各项文字最多保留 256000 字，字幕最多 10000 条，超限展示截断。默认 OpenAI 循环还限制累计上下文，避免反复读取长字幕持续扩大请求。字幕显示的原生时长是取得字幕的时间终点（多分集求和），不是保证整个视频时长；本地转写时长来自解码音轨。
@@ -85,11 +83,11 @@ Windows 子进程树生命周期共用 `api/services/worker_process.py` 的 `win
 | 知乎 | 回答正文 3331 字，主评论 24 条；文章正文 3074 字，后续含少量回复共 37 条 | 回答／文章不适用；视频没有稳定音轨适配 | 原会话阶段页面 403；用户人工重新登录后浏览器正文／评论成功，HTTP 详情仍 403 |
 | B站 | 正文及评论可用，原 Space 视频评论 50 条 | 原 Space 视频原生字幕 204 段；无字幕短视频自动 ASR 16 段（英语，71.85 秒）；中文音轨独立 ASR 14 段（64.09 秒） | 中文短视频本身有原生字幕，不能冒充“无字幕中文自动 fallback”验收；中文字幕转写与无字幕自动 fallback 分别实测，缓存及分区读取通过 |
 
-- 后端：`.venv/Scripts/python.exe -m pytest tests/test_research.py tests/test_research_openai.py tests/test_research_sections.py tests/test_research_protocol.py tests/test_research_transcription.py tests/test_research_acquisition.py tests/test_spaces.py tests/test_account_coordinator.py tests/test_tray_launcher.py tests/test_docs_wiki.py tests/test_webui_ui_contract.py --basetemp=.tmp_pytest_ai/check`，先创建父目录。所有写入数据测试使用临时目录，不下载真实模型、不访问真人平台。
+- 后端：`.venv/Scripts/python.exe -m pytest tests/test_research.py tests/test_extensions.py tests/test_research_transcription.py tests/test_research_acquisition.py tests/test_spaces.py tests/test_account_coordinator.py tests/test_tray_launcher.py tests/test_docs_wiki.py tests/test_webui_ui_contract.py --basetemp=.tmp_pytest_ai/check`，先创建父目录。所有写入数据测试使用临时目录，不下载真实模型、不访问真人平台。
 - 前端：`webui` 内运行 `npm run test:search` 和 `npm run build`，笔记测试覆盖生成期间修改、重复追加、冲突与超限。
-- SDK：先按项目锁文件安装依赖并运行 `scripts/prepare_agent_runtime.py`，再运行 `.venv/Scripts/python.exe scripts/research_ai_smoke.py`。真实 worker 连接本机模拟 OpenAI / Anthropic 服务，不用真实 Key、不产生服务费用；覆盖共享规则、公开分区引用、普通回答、DeepSeek/Gemini 元数据、结构化提交、工具范围、取消和清理，也模拟三条资料中一条正文失败、一条评论样本完整读取而平台获取截断、视频字幕失败。单元测试另覆盖伪引用、未读分区、批量提交、重复读取与有限重试、网页摘要／正文、联网关闭、追问重读与上下文预算。
-- Windows 包：上述 SDK smoke 加 `--exe <发布目录>/SiYe.exe`，验证冻结后的研究 worker。构建仍由 `scripts/build_exe.ps1` 统一入口准备运行程序；当前候选路径及验证情况见 [V1.2 发布检查](../releases/v1.2.0.md)。
-- 界面：构建后运行 `scripts/research_ui_smoke.py` 与 `scripts/spaces_ui_smoke.py`。临时 SQLite 与模拟研究服务，覆盖设置、消息及默认折叠的执行／资料记录、自动回答和启动失败后手动重试、任务联网快照、手写与保存恢复、逐轮追加、独立偏好、拖拽／键盘调宽及刷新记忆、全高停靠与顶栏同步压缩、四边贴齐的全屏及拖回侧栏、新会话／切换历史保留列表与搜索条件、新会话／追问／搜索历史和手机全屏／固定操作栏／Escape；截图在忽略的 `build/`。空间删除测试须隔离 AI 配置和任务管理器，不能只隔离 SQLite。
+- 独立插件的模型、上下文、引用和工具权限测试迁入 SiYe-AI 仓库，由该仓库运行 pytest；主程序不再安装模型 SDK。
+- 集成 UI：设置 SIYE_AI_SOURCE 为独立插件源码目录，构建两份前端后运行 scripts/research_ui_smoke.py；仅在临时目录加载插件界面，使用模拟后端，不访问真实模型或平台。
+- 独立 Windows worker：scripts/research_ai_smoke.py --exe 指向插件包内的 SiYeAI.exe，验证两个协议的模拟服务、工具范围、取消和清理。基础 SiYe.exe 只保留资料收集 worker。
 
 ## 启用可选本地视频转写
 

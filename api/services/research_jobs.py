@@ -30,13 +30,16 @@ MAX_FINISHED_JOBS = 10
 MAX_RETAINED_BYTES = 32 * 1024 * 1024
 
 
-def task_command():
+def task_command(mode="collect"):
+    if mode != "collect":
+        from .extensions import extensions
+        return extensions.command()
     return [sys.executable, "--research-worker"] if getattr(sys, "frozen", False) else [sys.executable, "-m", "api.services.research_worker"]
 
 
 def task_environment(workdir, credentials=None):
     env = {key: value for key, value in os.environ.items() if not key.startswith(("ANTHROPIC_", "CLAUDE_")) and key not in {"CLAUDECODE", "SIYE_RESEARCH_API_KEY"}}
-    env.update(PYTHONUTF8="1", PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1", CLAUDE_CONFIG_DIR=str(Path(workdir) / "claude"),
+    env.update(PYINSTALLER_RESET_ENVIRONMENT="1", PYTHONUTF8="1", PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1", CLAUDE_CONFIG_DIR=str(Path(workdir) / "claude"),
                CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1")
     if credentials:
         if credentials.get("protocol", "anthropic") == "openai":
@@ -221,7 +224,7 @@ class ResearchJobs:
             payload.update(workdir=workdir)
             if credentials:
                 payload.update(model=credentials["model"], base_url=credentials["base_url"], protocol=credentials.get("protocol", "anthropic"))
-            proc = await asyncio.create_subprocess_exec(*task_command(), cwd=str(application_root()),
+            proc = await asyncio.create_subprocess_exec(*task_command(payload["mode"]), cwd=str(application_root()),
                 env=task_environment(workdir, credentials), stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, limit=16 * 1024 * 1024,
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
@@ -375,7 +378,10 @@ class ResearchJobs:
                 "space_name": job["snapshot"]["name"], "description": job["snapshot"]["description"],
                 "question": job["question"], "research_focus": job.get("research_focus", ""),
                 "web_enabled": job["web_enabled"], "conversation": job.get("history", [])}, self.config.credentials())
-            job.update(result)
+            from .space_notes import validate_note
+            if result.get("document") is not None:
+                validate_note(result["document"])
+            job.update({key: value for key, value in result.items() if key in {"document", "coverage", "external_sources", "web_errors"}})
             job.update(status="ready", phase="ready", message="笔记已生成，请预览后追加")
         except asyncio.CancelledError:
             job.update(status="cancelled", phase="cancelled", message="研究已取消")

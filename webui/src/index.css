@@ -2412,3 +2412,21 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
 @media (max-width: 700px), (pointer: coarse) {
   .result-row > .row-actions > button, .result-row > .row-actions > .relative > button { min-width: 44px; min-height: 44px; height: 44px; }
 }
+
+/* Optional extension management follows the existing settings theme. */
+.extension-card { margin-top: 24px; padding: 24px; border: 1px solid var(--siye-line); border-radius: 16px; background: var(--siye-bg); }
+.extension-card-heading { display: flex; align-items: flex-start; gap: 14px; }
+.extension-card-heading > svg { width: 28px; height: 28px; flex-shrink: 0; color: var(--siye-brand); }
+.extension-card-heading h3 { margin: 0 0 6px; }
+.extension-card-heading p, .extension-meta, .extension-hint { color: var(--siye-muted); font-size: 13px; }
+.extension-state { margin-left: auto; white-space: nowrap; font-size: 13px; }
+.extension-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 18px; margin: 20px 0 12px; }
+.extension-switch, .extension-clear-data { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.extension-clear-data { color: var(--siye-muted); font-size: 12px; }
+.extension-switch input { accent-color: var(--siye-brand); width: 18px; height: 18px; }
+.extension-progress { display: flex; align-items: center; gap: 10px; margin: 14px 0; font-size: 13px; }
+.extension-progress svg { width: 16px; height: 16px; }
+.extension-error { color: rgb(var(--danger)); font-size: 13px; margin-top: 12px; }
+.extensions-page > .research-settings { margin-top: 28px; }
+.extension-loading { position: fixed; right: 0; top: 0; z-index: 80; width: min(360px, 100%); padding: 24px; background: var(--siye-bg); border: 1px solid var(--siye-line); }
+@media (max-width: 600px) { .extension-card { padding: 16px; } .extension-card-heading { flex-wrap: wrap; } .extension-state { margin-left: 0; } }

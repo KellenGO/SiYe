@@ -25,7 +25,7 @@ import { useSlidingIndicator } from '@/hooks/useSlidingIndicator'
 const PLATFORM_ORDER = PLATFORM_SLUGS
 
 export type ViewMode = 'search' | 'favorites' | 'history' | 'accounts' | 'help' | 'spaces'
-export type SettingsSection = 'search' | 'accounts' | 'appearance' | 'ai'
+export type SettingsSection = 'search' | 'accounts' | 'appearance' | 'extensions'
 
 interface HeaderProps {
   viewMode: ViewMode

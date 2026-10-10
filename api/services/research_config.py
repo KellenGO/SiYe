@@ -43,24 +43,11 @@ def protect_key(value: str, decrypt: bool = False) -> str:
         kernel.LocalFree(ctypes.cast(target.data, ctypes.c_void_p))
 
 
-def agent_cli_path() -> Path:
-    packaged = resource_path("agent_runtime", "claude.exe" if os.name == "nt" else "claude")
-    if packaged.is_file():
-        return packaged
-    try:
-        import claude_agent_sdk
-        return Path(claude_agent_sdk.__file__).parent / "_bundled" / ("claude.exe" if os.name == "nt" else "claude")
-    except ImportError:
-        return packaged
-
-
 def runtime_status() -> dict:
-    try:
-        import claude_agent_sdk  # noqa: F401
-        available = True
-    except (ImportError, OSError):
-        available = False
-    return {"sdk_available": available, "cli_available": agent_cli_path().is_file(),
+    from .extensions import extensions
+    row = extensions.status()
+    return {"sdk_available": row["installed"] and row["compatible"],
+            "cli_available": row["installed"] and row["compatible"],
             "sdk_version": SDK_VERSION, "cli_version": CLI_VERSION}
 
 

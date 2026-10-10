@@ -7,7 +7,8 @@
 |---|---|---|
 | 站内阅读与视频播放（小红书／抖音／B站／知乎，统一主题） | [features/content-reading.md](features/content-reading.md) | `api/services/reading.py`、`webui/src/components/reading/ReadingBody.tsx` |
 | 研究空间（跨平台资料收集 + 富文本总笔记 + 笔记／AI 并排） | [features/spaces.md](features/spaces.md) | `api/services/spaces_store.py`、`webui/src/components/spaces/SpacesPage.tsx`、`webui/src/components/spaces/SpaceWorkspace.tsx` |
-| 空间 AI 研究（分区读取 + 可选本地视频转写 + 可选联网） | [features/space-research-ai.md](features/space-research-ai.md) | `api/services/research_jobs.py`、`api/services/research_openai.py`、`api/services/research_transcription.py`、`webui/src/components/accounts/ResearchSettings.tsx`、`webui/src/components/spaces/SpaceResearchPanel.tsx` |
+| 官方可选扩展管理（下载／开关／卸载） | [features/extensions.md](features/extensions.md) | `api/services/extensions.py`、`webui/src/components/accounts/ExtensionsPage.tsx` |
+| 空间 AI 研究（分区读取 + 可选本地视频转写 + 可选联网） | [features/space-research-ai.md](features/space-research-ai.md) | `api/services/research_jobs.py`、`api/services/research_transcription.py`、`webui/src/components/extensions/PluginUI.tsx` |
 | 主要页面与内容视图切换动效 | [features/interface-transitions.md](features/interface-transitions.md) | `webui/src/App.tsx`、`webui/src/hooks/useSlidingIndicator.ts`、`webui/src/components/search/ResultTabs.tsx`、`webui/src/components/accounts/AccountsPage.tsx` |
 | 可跳过的新手引导（七步逐页导览，关键步骤带框选高亮） | [features/getting-started.md](features/getting-started.md) | `webui/src/lib/onboarding.ts`、`webui/src/components/help/GettingStarted.tsx`、`webui/src/components/help/GuideSpotlight.tsx`、`webui/src/components/help/GuideExit.tsx`、`webui/src/hooks/useOnboarding.ts`、`webui/src/components/help/HelpPage.tsx` |
 | 本机诊断报告与问题反馈 | [features/support-diagnostics.md](features/support-diagnostics.md) | `webui/src/lib/supportDiagnostics.ts`、`webui/src/components/help/SupportDiagnostics.tsx` |

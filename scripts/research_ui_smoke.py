@@ -6,6 +6,7 @@
 """Verify the built research UI with temporary storage and an isolated fake worker."""
 
 import asyncio
+import os
 import json
 import sys
 import threading
@@ -22,11 +23,13 @@ from playwright.sync_api import expect, sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from api.routers.research import research_router, get_research_config, get_research_jobs
+from api.routers.research import research_router, get_research_config, get_research_jobs, require_research_extension
 from api.routers.spaces import spaces_router
 from api.services import research_jobs as jobs_module
 from api.services.research_config import ResearchConfig
-from api.services.research_documents import MaterialAccess, answer_document
+PLUGIN_SOURCE = Path(os.environ["SIYE_AI_SOURCE"]).resolve()
+sys.path.insert(0, str(PLUGIN_SOURCE))
+from siye_ai.research_documents import MaterialAccess, answer_document
 from api.services.research_materials import material, component
 from api.services.spaces_store import SpacesStore, get_spaces_store
 
@@ -102,6 +105,7 @@ def main():
             app = FastAPI()
             app.include_router(spaces_router)
             app.include_router(research_router)
+            app.dependency_overrides[require_research_extension] = lambda: None
             app.dependency_overrides[get_spaces_store] = lambda: store
             app.dependency_overrides[get_research_config] = lambda: config
             app.dependency_overrides[get_research_jobs] = lambda: manager
@@ -112,6 +116,10 @@ def main():
                     path = urlparse(request.url).path
                     if not request.url.startswith(origin + "/"):
                         route.abort()
+                    elif path == "/api/extensions/ai/assets/ui.js":
+                        route.fulfill(path=str(PLUGIN_SOURCE / "webui/dist/ui.js"), content_type="text/javascript")
+                    elif path.startswith("/api/extensions/ai"):
+                        route.fulfill(json={"id": "siye-ai", "name": "AI", "installed": True, "enabled": True, "version": "0.1.0", "compatible": True, "phase": "idle", "downloaded": 0, "total": None, "error": "", "available": None})
                     elif path.startswith(("/api/spaces", "/api/research")):
                         if path.endswith("/generate") and request.method == "POST":
                             generation_attempts += 1
@@ -172,7 +180,7 @@ def main():
                     sessions.locator(".research-session-list button").filter(has_text=title).click()
                     expect(sessions).to_be_visible()
                     sessions.get_by_role("button", name="关闭会话列表", exact=True).click()
-                page.goto(origin + "/#/settings/ai")
+                page.goto(origin + "/#/settings/extensions")
                 settings = page.locator(".research-settings")
                 settings.get_by_label("模型名称", exact=True).fill("new-model")
                 settings.get_by_role("button", name="保存并测试连接", exact=True).click()

@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useState, type ReactNode } from "react";
 import { Layers, NotebookPen, PanelRightOpen } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useExtensions } from "@/hooks/useExtensions";
 import { useSpaceDetail, useSpaces } from "@/hooks/useSpaces";
 import { SpaceEdgePanel } from "./SpaceEdgePanel";
 import { SpaceInfoDialog } from "./SpaceInfoDialog";
@@ -9,6 +10,8 @@ const SpaceNoteController = lazy(() => import("./SpaceNoteController"));
 
 export function SpaceWorkspace({ spaceId, selector = false, active = true, panelsHidden = false, children }: { spaceId: number | null; selector?: boolean; active?: boolean; panelsHidden?: boolean; children: ReactNode }) {
   const { t } = useTranslation();
+  const extension = useExtensions();
+  const aiEnabled = Boolean(extension.data?.enabled);
   const spaces = useSpaces();
   const detail = useSpaceDetail(spaceId);
   const [open, setOpen] = useState(false);
@@ -41,19 +44,20 @@ export function SpaceWorkspace({ spaceId, selector = false, active = true, panel
   const hasNote = Boolean(active && !panelsHidden && !creating && spaceId && detail.data && open);
   const noteSlot = hasNote ? <div className="space-note-slot" ref={setDrawerHost} /> : null;
   const hidePanels = !active || detailOpen || creating || panelsHidden;
-  const showResearch = researchOpen && !hidePanels && Boolean(spaceId && detail.data);
-  const splitActive = Boolean(beforeSplit && beforeSplit.spaceId === spaceId && !hidePanels && viewportWidth > 1000);
+  const showResearch = aiEnabled && researchOpen && !hidePanels && Boolean(spaceId && detail.data);
+  const splitActive = Boolean(aiEnabled && beforeSplit && beforeSplit.spaceId === spaceId && !hidePanels && viewportWidth > 1000);
   const restoreSplit = useCallback((focus = true) => {
     if (!beforeSplit) return;
     setOpen(beforeSplit.open); setNotePinned(beforeSplit.pinned); setResearchOpen(beforeSplit.researchOpen); setBeforeSplit(null);
     if (focus) requestAnimationFrame(() => { if (beforeSplit.focus?.isConnected) beforeSplit.focus.focus(); });
   }, [beforeSplit]);
+  useEffect(() => { if (!aiEnabled) { setResearchOpen(false); setResearchVisited(false); } }, [aiEnabled]);
   const split: WorkspaceSplitLayout = {
     active: splitActive,
     noteWidth: Math.max(360, Math.min(viewportWidth * splitRatio, viewportWidth - 360)),
     historyOpen: splitHistoryOpen,
     enter: () => {
-      if (!spaceId || !detail.data || hidePanels || window.innerWidth <= 1000 || beforeSplit) return;
+      if (!aiEnabled || !spaceId || !detail.data || hidePanels || window.innerWidth <= 1000 || beforeSplit) return;
       setBeforeSplit({ spaceId, open, pinned: notePinned, researchOpen, focus: document.activeElement as HTMLElement | null });
       setSplitRatio(.5); setSplitHistoryOpen(false); setNotePinned(true); changeNotes(true); changeResearch(true);
     },
@@ -67,8 +71,8 @@ export function SpaceWorkspace({ spaceId, selector = false, active = true, panel
     return () => window.removeEventListener("resize", resize);
   }, []);
   useEffect(() => {
-    if (beforeSplit && (hidePanels || viewportWidth <= 1000 || beforeSplit.spaceId !== spaceId)) restoreSplit(false);
-  }, [beforeSplit, hidePanels, viewportWidth, spaceId, restoreSplit]);
+    if (beforeSplit && (!aiEnabled || hidePanels || viewportWidth <= 1000 || beforeSplit.spaceId !== spaceId)) { restoreSplit(false); if (!aiEnabled) setResearchOpen(false); }
+  }, [beforeSplit, aiEnabled, hidePanels, viewportWidth, spaceId, restoreSplit]);
   useLayoutEffect(() => {
     if (!splitActive) return;
     document.body.classList.add("has-research-split");
@@ -94,7 +98,7 @@ export function SpaceWorkspace({ spaceId, selector = false, active = true, panel
   }, [showResearch, owner]);
   return <WorkspaceContext.Provider value={{ setDetailOpen, hasNote, noteSlot }}>
     {active && spaceId && (open || notesVisited || researchVisited) && <Suspense fallback={null}><SpaceNoteController spaceId={spaceId} open={open && !creating && !panelsHidden} onClose={closeNotes} researchOpen={showResearch} onCloseResearch={closeResearch} split={split} target={detailOpen ? drawerHost : inlineHost} /></Suspense>}
-    {spaceId && !hidePanels && !showResearch && <button type="button" className="btn small space-ai-trigger" disabled={!detail.data} onClick={() => changeResearch(true)}><PanelRightOpen aria-hidden="true" />{t("research.open")}</button>}
+    {aiEnabled && spaceId && !hidePanels && !showResearch && <button type="button" className="btn small space-ai-trigger" disabled={!detail.data} onClick={() => changeResearch(true)}><PanelRightOpen aria-hidden="true" />{t("research.open")}</button>}
     {selector && <SpaceEdgePanel side="left" label={t("spaces.current")} icon={<Layers aria-hidden="true" />} open={spaceOpen} pinned={spacePinned} hidden={hidePanels} closeLabel={t("spaces.closeSpacePanel")} onOpenChange={setSpaceOpen} onPinChange={setSpacePinned}>
         <div className="space-search-bar">
           <label><span>{t("spaces.current")}</span><select aria-label={t("spaces.current")} value={spaces.activeId ?? ""} disabled={spaces.loading || spaces.busy} onChange={(event) => { void spaces.activate(event.target.value ? Number(event.target.value) : null); }}>

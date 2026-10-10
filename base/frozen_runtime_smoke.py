@@ -24,12 +24,6 @@ async def _browser_smoke() -> str:
 
 
 def run_frozen_runtime_smoke() -> None:
-    from api.services.research_config import runtime_status, agent_cli_path
-    import subprocess
-    if not all(runtime_status()[key] for key in ("sdk_available", "cli_available")):
-        raise AssertionError("AI runtime is missing")
-    subprocess.run([str(agent_cli_path()), "--version"], check=True, timeout=30,
-                   creationflags=subprocess.CREATE_NO_WINDOW if __import__("os").name == "nt" else 0)
     if not resource_path("libs", "douyin.js").is_file():
         raise AssertionError("bundled signing resources are missing")
 

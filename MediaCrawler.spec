@@ -25,13 +25,10 @@ datas = [
     (str(ROOT / "assets" / "siye-icon.png"), "assets"),
 ]
 datas.extend((str(path), "libs") for path in (ROOT / "libs").glob("*.js"))
-if not (ROOT / "agent_runtime" / "claude.exe").is_file():
-    raise SystemExit("AI runtime is required; run python scripts/prepare_agent_runtime.py first")
-datas.append((str(ROOT / "agent_runtime"), "agent_runtime"))
 binaries = [(node_exe, ".")]
 hiddenimports = []
 
-for package in ("playwright", "cv2", "PIL", "xhshow", "pystray", "claude_agent_sdk", "mcp"):
+for package in ("playwright", "cv2", "PIL", "xhshow", "pystray"):
     package_datas, package_binaries, package_hidden = collect_all(package,
         filter_submodules=lambda name: name != "mcp.cli" and not name.startswith("mcp.cli."))
     datas.extend(package_datas)
@@ -78,7 +75,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["tkinter", "faster_whisper", "ctranslate2", "av", "onnxruntime",
+    excludes=["tkinter", "claude_agent_sdk", "mcp", "siye_ai", "faster_whisper", "ctranslate2", "av", "onnxruntime",
               "tools.file_header_manager", "tools.smoke_cookie_import"],
     noarchive=False,
 )

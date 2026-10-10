@@ -21,7 +21,7 @@ from urllib.parse import urljoin, urlsplit
 import httpx
 
 from base.runtime_paths import library_data_root, resource_path
-from .research_web import public_target
+from .public_network import public_target
 from .worker_process import terminate_worker, windows_process_job
 
 MODEL = "small"

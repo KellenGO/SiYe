@@ -27,8 +27,7 @@ async def run(payload):
         finally:
             await collector.close()
         return {"collected": True}
-    from .research_agent import run_agent
-    return await run_agent(payload, emit)
+    raise ValueError("AI 分析由独立插件运行")
 
 
 def main():

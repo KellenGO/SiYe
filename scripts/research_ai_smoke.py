@@ -15,7 +15,6 @@ sys.path.insert(0, str(ROOT))
 
 from api.services import research_jobs as jobs_module
 from api.services.research_materials import component, material
-from api.services.research_documents import RESEARCH_INSTRUCTIONS
 
 
 class Provider(BaseHTTPRequestHandler):
@@ -59,7 +58,7 @@ class Provider(BaseHTTPRequestHandler):
             self.resume.wait(30)
         if self.path.endswith("chat/completions"):
             if data["messages"][0]["role"] == "system":
-                assert data["messages"][0]["content"] == RESEARCH_INSTRUCTIONS
+                assert data["messages"][0]["content"].startswith("默认中文")
                 assert json.loads(data["messages"][1]["content"])["manifest"][0]["citation"] == "S1"
             names = [row["function"]["name"] for row in data["tools"]]
             self.native_exposed.update(names)
@@ -166,7 +165,7 @@ async def smoke(executable=None):
         return handle
     jobs_module.windows_process_job = capture
     if executable:
-        jobs_module.task_command = lambda: [str(Path(executable).resolve()), "--research-worker"]
+        jobs_module.task_command = lambda mode="collect": [str(Path(executable).resolve())]
     credentials = {"protocol": "anthropic", "model": "claude-sonnet-4-6", "base_url": f"http://127.0.0.1:{server.server_port}", "api_key": "isolated-test-key"}
     try:
         with TemporaryDirectory(prefix="research-smoke-", dir=ROOT / "build") as directory:
@@ -266,7 +265,7 @@ async def smoke(executable=None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--exe", help="Use a built SiYe.exe research worker")
+    parser.add_argument("--exe", required=True, help="Use the independent plugin SiYeAI.exe")
     args = parser.parse_args()
     (ROOT / "build").mkdir(exist_ok=True)
     asyncio.run(smoke(args.exe))

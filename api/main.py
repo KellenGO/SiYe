@@ -37,6 +37,7 @@ from .routers.trending import trending_router
 from .routers.spaces import spaces_router
 from .routers.research import research_router
 from .routers.reading import reading_router
+from .routers.extensions import extensions_router
 from .schemas.search import HealthResponse
 from .services.environment_health import build_health_response
 from .services.search_job_manager import search_job_manager
@@ -71,6 +72,8 @@ async def _shutdown_cleanup():
     await search_job_manager.cleanup()
     await favorites_job_manager.cleanup()
     from .services.research_jobs import research_jobs
+    from .services.extensions import extensions
+    await extensions.cancel_install()
     await research_jobs.cleanup()
     from .services.reading import reading_service
     await reading_service.cleanup()
@@ -100,6 +103,7 @@ app.include_router(trending_router)  # platform trending words, /api/trending pr
 app.include_router(spaces_router)
 app.include_router(research_router)
 app.include_router(reading_router)
+app.include_router(extensions_router)
 
 
 @app.get("/api/health", response_model=HealthResponse)

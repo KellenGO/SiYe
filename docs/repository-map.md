@@ -21,7 +21,7 @@
 
 源码运行和 EXE 运行的数据目录不同。旧测试包资料保存在根目录 `data/version-backups/`，未自动合并数据库；发布包必须从干净目录构建，不能把日常使用后的 dist 直接上传。
 
-`cache/` 是受跟踪的 Python 缓存实现，`.cache/` 才是本机缓存；`build/tools/` 是本机构建工具，`agent_runtime/` 是固定版本 AI 运行程序，`.venv/` 与 `webui/node_modules/` 是开发依赖。它们不能仅因未进入 Git 就当作垃圾。根目录 `.tmp_*` 的忽略规则已入库，不再依赖某一台机器的 `.git/info/exclude`。
+`cache/` 是受跟踪的 Python 缓存实现，`.cache/` 才是本机缓存；`build/tools/` 是本机构建工具，AI 运行程序由独立 SiYe-AI 扩展仓库构建，`.venv/` 与 `webui/node_modules/` 是开发依赖。它们不能仅因未进入 Git 就当作垃圾。根目录 `.tmp_*` 的忽略规则已入库，不再依赖某一台机器的 `.git/info/exclude`。
 
 V1.2 发布准备与尚待验收的边界见 [发布检查](releases/v1.2.0.md)。当前 `dist/` 仍是旧版本日常入口，准备候选包时使用独立目录，不覆盖已有运行环境。
 
