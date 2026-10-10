@@ -110,6 +110,8 @@ def service(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_cache_refresh_generation_ttl_and_capacity(service, monkeypatch):
+    now = 10.0
+    monkeypatch.setattr(reading.time, "monotonic", lambda: now)
     calls = []
     async def fetch(kind, identity, url, platform="zhihu"):
         calls.append(identity)
@@ -123,7 +125,7 @@ async def test_cache_refresh_generation_ttl_and_capacity(service, monkeypatch):
     await service.read("answer", "42", url)
     assert len(calls) == 3
     key = ("zhihu", 2, "answer", "42")
-    service.cache[key] = (0, first)
+    now += 121
     await service.read("answer", "42", url)
     assert len(calls) == 4
     for identity in range(50, 58):
