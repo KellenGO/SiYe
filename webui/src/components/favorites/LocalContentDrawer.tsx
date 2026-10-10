@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState, type RefObject, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { ArrowUpRight, Trash2, X } from "lucide-react";
+import { ArrowUpRight, Maximize2, Minimize2, Trash2, X } from "lucide-react";
 import type { PlatformSlug, UnifiedSearchResult } from "@/types/search";
 import { PLATFORM_LABELS } from "@/types/search";
 import type { BookmarkLibrary } from "@/hooks/useBookmarks";
@@ -28,9 +28,11 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
   useEffect(() => { setDetailOpen?.(true); return () => setDetailOpen?.(false); }, [setDetailOpen]);
   const panel = useRef<HTMLDivElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
+  const fullscreenButton = useRef<HTMLButtonElement>(null);
   const dirtyNotes = useRef(new Map<string, boolean>());
   const pointerStartedOutside = useRef(false);
-  const closeRequest = useRef<() => void>(() => {});
+  const escapeRequest = useRef<() => void>(() => {});
+  const [fullscreen, setFullscreen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [noteError, setNoteError] = useState("");
   const [membershipKeys, setMembershipKeys] = useState<string[] | null>(null);
@@ -43,7 +45,12 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
     if ([...dirtyNotes.current.values()].some(Boolean) && !window.confirm("备注尚未保存，确定放弃修改并关闭详情吗？")) return;
     onClose();
   };
-  closeRequest.current = requestClose;
+  escapeRequest.current = () => {
+    if (fullscreen) {
+      setFullscreen(false);
+      fullscreenButton.current?.focus({ preventScroll: true });
+    } else requestClose();
+  };
 
   // 笔记通过独立 portal 保留编辑器；键盘事件需按真实 DOM 归属处理。
   useEffect(() => {
@@ -52,7 +59,7 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
       if (event.defaultPrevented || !panel.current?.contains(target) || !target.closest(".space-note-slot")) return;
       if (event.key === "Escape") {
         event.preventDefault();
-        closeRequest.current();
+        escapeRequest.current();
       }
       if (event.key === "Tab") {
         const controls = [...panel.current.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [contenteditable="true"]')].filter((element) => element.tabIndex >= 0 && element.getClientRects().length > 0);
@@ -79,7 +86,7 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
     closeButton.current?.focus({ preventScroll: true });
     const escapeOutsidePanel = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !event.defaultPrevented && !panel.current?.contains(event.target as Node)
-        && !panel.current?.querySelector('.confirm-card, .membership-card, [aria-expanded="true"]')) closeRequest.current();
+        && !panel.current?.querySelector('.confirm-card, .membership-card, [aria-expanded="true"]')) escapeRequest.current();
     };
     document.addEventListener("keydown", escapeOutsidePanel);
     return () => {
@@ -101,7 +108,7 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
       if (event.target === event.currentTarget && pointerStartedOutside.current) requestClose();
       pointerStartedOutside.current = false;
     }}>
-    <div className={`local-content-drawer ${hasReader ? "with-reader" : ""} ${workspace?.hasNote ? "with-research-note" : ""}`} ref={panel} role="dialog" aria-modal="true" aria-labelledby={id}
+    <div className={`local-content-drawer ${hasReader ? "with-reader" : ""} ${workspace?.hasNote ? "with-research-note" : ""} ${fullscreen ? "is-fullscreen" : ""}`} ref={panel} role="dialog" aria-modal="true" aria-labelledby={id}
       onKeyDown={(event) => {
         const confirmation = panel.current?.querySelector<HTMLElement>('.confirm-card, .membership-card[role="dialog"]');
         if (event.key === "Escape") {
@@ -109,7 +116,7 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
           if (confirmation || panel.current?.querySelector('.membership-card, [aria-expanded="true"]')) return;
           event.preventDefault();
           event.stopPropagation();
-          requestClose();
+          escapeRequest.current();
         }
         if (event.key !== "Tab") return;
         const scope = confirmation ?? panel.current;
@@ -121,7 +128,12 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
         if (event.shiftKey && (document.activeElement === first || !scope?.contains(document.activeElement))) { event.preventDefault(); last.focus(); }
         else if (!event.shiftKey && (document.activeElement === last || !scope?.contains(document.activeElement))) { event.preventDefault(); first.focus(); }
       }}>
-      <div className="local-content-drawer-head"><h2 id={id}>{hasReader ? "内容阅读" : "内容信息"}</h2><button ref={closeButton} type="button" className="btn small" aria-label="关闭内容详情" disabled={saving} onClick={requestClose}><X aria-hidden="true" />关闭</button></div>
+      <div className="local-content-drawer-head"><h2 id={id}>{hasReader ? "内容阅读" : "内容信息"}</h2><div className="local-content-view-actions">
+        <button ref={fullscreenButton} type="button" className="btn small" aria-pressed={fullscreen} onClick={() => setFullscreen((value) => !value)}>
+          {fullscreen ? <Minimize2 aria-hidden="true" /> : <Maximize2 aria-hidden="true" />}{fullscreen ? "退出全屏" : "全屏查看"}
+        </button>
+        <button ref={closeButton} type="button" className="btn small" aria-label="关闭内容详情" disabled={saving} onClick={requestClose}><X aria-hidden="true" />关闭</button>
+      </div></div>
       <div className={workspace?.hasNote ? "local-content-research-layout" : undefined}><div className="local-content-drawer-body">
         {resultSources(result).map((snapshot) => {
           const item = items.find((item) => item.key === resultKey(snapshot));
