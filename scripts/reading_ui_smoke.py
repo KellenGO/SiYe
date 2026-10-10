@@ -193,6 +193,14 @@ def main():
             assert bars.nth(0).evaluate("el => el.style.width") == "100%"
             assert 2 < float(bars.nth(1).evaluate("el => el.style.width").rstrip('%')) < 3
             chart.scroll_into_view_if_needed()
+            for name in ("展开评论", "减小正文字号", "增大正文字号", "重新读取内容"):
+                expect(drawer.get_by_role("button", name=name, exact=True)).to_be_in_viewport()
+            controls = drawer.get_by_role("group", name="阅读工具", exact=True)
+            tools_y = controls.bounding_box()["y"]
+            drawer.evaluate("el => el.scrollTop -= 100")
+            assert abs(controls.bounding_box()["y"] - tools_y) <= 1
+            assert tools_y >= drawer.locator(".local-content-drawer-head").bounding_box()["height"]
+            chart.scroll_into_view_if_needed()
             page.screenshot(path=str(output / "metrics-chart.png"))
             drawer.evaluate("el => el.scrollTop = 0")
             assert not comment_reads, "Comments must load only when requested"
@@ -257,7 +265,16 @@ def main():
                 assert drawer.bounding_box() == {"x": 0, "y": 0, "width": width, "height": 844}
                 assert right.bounding_box()["y"] >= left.bounding_box()["y"] + left.bounding_box()["height"]
                 expect(drawer.get_by_role("button", name="退出全屏", exact=True)).to_be_in_viewport()
+                drawer.evaluate("el => el.scrollTop = 500")
+                for name in ("收起评论", "减小正文字号", "增大正文字号", "重新读取内容"):
+                    expect(drawer.get_by_role("button", name=name, exact=True)).to_be_in_viewport()
+                assert controls.bounding_box()["y"] >= drawer.locator(".local-content-drawer-head").bounding_box()["height"]
                 page.screenshot(path=str(output / f"mobile-{width}.png"))
+                drawer.evaluate("el => el.scrollTop = el.scrollHeight")
+                for name in ("收起评论", "减小正文字号", "增大正文字号", "重新读取内容"):
+                    expect(drawer.get_by_role("button", name=name, exact=True)).to_be_in_viewport()
+                assert controls.bounding_box()["y"] >= drawer.locator(".local-content-drawer-head").bounding_box()["height"]
+                drawer.evaluate("el => el.scrollTop = 500")
             page.evaluate("document.documentElement.classList.add('dark'); document.documentElement.dataset.accent = 'pine'")
             page.screenshot(path=str(output / "mobile-dark.png"))
             page.keyboard.press("Escape")

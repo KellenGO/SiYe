@@ -73,15 +73,12 @@ export function ReadingBody({ source, header, actions }: { source: UnifiedSearch
     return () => controller.abort();
   }, [platform, content_id, content_type, url, revision]);
 
-  return <div className={`reading-layout ${commentsOpen ? "comments-open" : ""}`}><div className="reading-content-column">
-    <button type="button" className="btn small reader-comment-toggle" aria-expanded={commentsOpen} aria-controls={commentsId}
-      onClick={() => { setCommentsOpen(value => !value); setCommentsRequested(true); }}>
-      <MessageSquare aria-hidden="true" />{commentsOpen ? "收起评论" : "展开评论"}{commentsOpen ? <ChevronLeft aria-hidden="true" /> : <ChevronRight aria-hidden="true" />}
-    </button>
-    {header}
-    <section className="reader" aria-label={`${platformLabel}内容`} aria-busy={loading} style={{ "--reader-font-size": `${fontSize}px` } as CSSProperties}>
-    <div className="reader-toolbar">
-      <h4>内容<span>站内阅读</span></h4>
+  return <div className={`reading-layout ${commentsOpen ? "comments-open" : ""}`}>
+    <div className="reader-control-bar" role="group" aria-label="阅读工具">
+      <button type="button" className="btn small reader-comment-toggle" aria-expanded={commentsOpen} aria-controls={commentsId}
+        onClick={() => { setCommentsOpen(value => !value); setCommentsRequested(true); }}>
+        <MessageSquare aria-hidden="true" />{commentsOpen ? "收起评论" : "展开评论"}{commentsOpen ? <ChevronLeft aria-hidden="true" /> : <ChevronRight aria-hidden="true" />}
+      </button>
       <div className="reader-tools">
         <button type="button" className="btn small" aria-label="减小正文字号" disabled={fontSize <= 16} onClick={() => setFontSize((value) => value - 1)}><Minus aria-hidden="true" /></button>
         <span aria-label={`正文字号 ${fontSize}`}>{fontSize}</span>
@@ -89,6 +86,9 @@ export function ReadingBody({ source, header, actions }: { source: UnifiedSearch
         <button type="button" className="btn small" disabled={loading} onClick={() => setRevision((value) => value + 1)} aria-label="重新读取内容"><RotateCw aria-hidden="true" /></button>
       </div>
     </div>
+    <div className="reading-content-column">{header}
+    <section className="reader" aria-label={`${platformLabel}内容`} aria-busy={loading} style={{ "--reader-font-size": `${fontSize}px` } as CSSProperties}>
+    <div className="reader-toolbar"><h4>内容<span>站内阅读</span></h4></div>
     {loading && <p className="reader-status" role="status">{detail ? "正在重新读取，已有内容保留…" : `正在读取${platformLabel}内容…`}</p>}
     {error && <div className="reader-notice" role="alert"><p>{error}</p><button type="button" className="text-link" disabled={loading} onClick={() => setRevision((value) => value + 1)}>重试读取</button></div>}
     {detail && <>

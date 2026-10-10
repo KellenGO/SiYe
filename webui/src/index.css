@@ -1056,14 +1056,18 @@ html.dark .search-submit { color: #101525; }
 .local-content-drawer.is-fullscreen .reader-video.is-portrait video { max-width: 440px; }
 .with-reader .reading-content-column > h3 { font-size: 26px; line-height: 1.45; }
 .local-content-detail { container: content-detail / inline-size; }
-.reading-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; }
+.reading-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; row-gap: 0; }
 .reading-content-column { min-width: 0; }
-.reader-comment-toggle { float: right; margin: 8px 0 12px 16px; min-height: 44px; }
+.reader-control-bar { position: sticky; top: 77px; z-index: 1; align-self: start; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 0; margin-bottom: 16px; border-bottom: 1px solid var(--siye-line); background: var(--siye-bg); }
+.local-content-research-layout .reader-control-bar { top: 0; }
+.reader-comment-toggle { margin: 0; min-height: 44px; }
 .reader-comment-toggle svg { width: 16px; height: 16px; }
 .reader-comments[hidden] { display: none; }
 @container content-detail (min-width: 700px) {
   .reading-layout.comments-open { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; }
-  .comments-open > .reading-content-column { padding-right: 28px; }
+  .comments-open > .reader-control-bar { grid-column: 1; grid-row: 1; margin-right: 28px; }
+  .comments-open > .reading-content-column { grid-column: 1; grid-row: 2; padding-right: 28px; }
+  .comments-open > .reader-comments { grid-column: 2; grid-row: 1 / span 2; }
   .reading-layout > .reader-comments { margin: 0; padding: 16px 0 16px 28px; border-top: 0; border-left: 1px solid var(--siye-line); position: sticky; top: 88px; align-self: start; max-height: calc(100dvh - 120px); overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 }
 .reader { margin: 28px 0; border-top: 1px solid var(--siye-line); padding-top: 16px; }
@@ -1152,6 +1156,7 @@ html.dark .search-submit { color: #101525; }
   .local-content-folder-tools { width: 100%; }
   .local-content-drawer { width: 100%; }
   .local-content-drawer-head { padding: 12px 16px; }
+  .reader-control-bar { top: 69px; }
   .local-content-drawer-body { padding: 16px; padding-bottom: max(16px, env(safe-area-inset-bottom)); }
   .local-content-title { font-size: 14px; min-height: 42px; }
   .local-content-topic { padding: 8px 10px 26px; gap: 3px; }

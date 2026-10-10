@@ -11,6 +11,8 @@
 
 ## 待接手事项
 
+- `READER-TOOLS-20261011`：固定阅读工具栏的独立界面验收通过；`scripts/spaces_ui_smoke.py` 在「并排显示笔记与 AI」后等待 `.space-research-dialog` 失败，脚本未提供独立 AI 扩展界面，未跑到后续空间阅读验收。下一步由空间／扩展验收维护者适配该脚本；本次未修改 AI 流程，EXE 未重建。
+
 - `EXTENSIONS-EDGE-20261011`：界面实现按任务 ID 定位，完成后修改范围释放；EXE 未重建。验收新增清除场景时遗漏全局对象隔离，2026-10-11 00:16 错误调用默认 AI 数据清除；本机 `%LOCALAPPDATA%/SiYe/data/research-ai.json` 与 `research-history` 现缺失，目录修改时间相符，但没有事前快照，无法确定原有记录范围。收藏／空间／笔记共用的 `library.db` 修改时间及大小未变化，清除逻辑不涉及该库。版本备份、研究临时目录与系统影子副本未找到可恢复副本，用户已明确表示没有备份；尚未恢复，无法可靠找回原配置和聊天记录，若原来已配置模型需重新填写。验收脚本已加导入前临时数据环境、全局对象替换和清除路径断言，完整流程通过；不得据此宣称历史数据已恢复。
 
 - `AI-EXTENSION-20261010` / `AI-EXTENSION-PUBLISH-20261010`：已集成 master；独立插件 [SiYe-AI v0.1.0](https://github.com/KellenGO/SiYe-AI/releases/tag/v0.1.0) 已公开发布，正式包匿名下载、摘要校验、安装／开关／卸载、界面及两协议模拟服务通过。`6132eac` 增加匿名 API 限流时的官方清单兼容，最终四野基础候选在 `build/ai-extension/dist/`，主程序 v1.2.0 尚未正式发布，旧 `build/v1.2.0/dist/` 仍是拆分前候选；后续主程序发布者需使用新构建。共用 Python 环境已按锁文件恢复、全量测试通过，插件前端依赖已独立；后续 worktree 不用共享 junction，见仓库地图。npm audit 报现有 Axios／Vite 两项 high，独立仓库 README 与 `build/ai-extension/published/npm-audit.json` 已记录，影响评估及升级待依赖维护者接手。修改范围已释放。
