@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import axios from "axios";
 import { Minus, Plus, RotateCw } from "lucide-react";
 import type { UnifiedSearchResult } from "@/types/search";
@@ -34,7 +34,7 @@ function ReadingVideo({ detail, onPlay }: { detail: ReadingDetail; onPlay: () =>
   </div>;
 }
 
-export function ReadingBody({ source }: { source: UnifiedSearchResult }) {
+export function ReadingBody({ source, header, actions }: { source: UnifiedSearchResult; header?: ReactNode; actions?: ReactNode }) {
   const [detail, setDetail] = useState<ReadingDetail | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -70,7 +70,9 @@ export function ReadingBody({ source }: { source: UnifiedSearchResult }) {
     return () => controller.abort();
   }, [platform, content_id, content_type, url, revision]);
 
-  return <section className="reader" aria-label={`${platformLabel}内容`} aria-busy={loading} style={{ "--reader-font-size": `${fontSize}px` } as CSSProperties}>
+  return <div className="reading-layout"><div className="reading-content-column">
+    {header}
+    <section className="reader" aria-label={`${platformLabel}内容`} aria-busy={loading} style={{ "--reader-font-size": `${fontSize}px` } as CSSProperties}>
     <div className="reader-toolbar">
       <h4>内容<span>站内阅读</span></h4>
       <div className="reader-tools">
@@ -95,6 +97,7 @@ export function ReadingBody({ source }: { source: UnifiedSearchResult }) {
         return <p className={block.type === "list-item" ? "reader-list-item" : undefined} key={index}>{block.text}</p>;
       })}</div>
     </>}
-    <ReadingComments key={`${platform}:${content_type}:${content_id}`} source={source} bodyLoading={loading} />
-  </section>;
+    </section>
+    {actions}
+  </div><ReadingComments key={`${platform}:${content_type}:${content_id}`} source={source} bodyLoading={loading} /></div>;
 }

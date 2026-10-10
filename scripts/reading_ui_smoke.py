@@ -61,7 +61,9 @@ def main():
             comment_reads.append(identity)
             return {"platform": platform, "content_type": kind, "content_id": identity,
                     "entries": [{"id": "comment-1", "parent_id": None, "text": "站内评论测试正文", "author": "评论作者", "like_count": 8},
-                                {"id": "reply-1", "parent_id": "comment-1", "text": "站内回复测试正文", "author": "回复作者"}],
+                                {"id": "reply-1", "parent_id": "comment-1", "text": "站内回复测试正文", "author": "回复作者"}]
+                               + [{"id": f"discussion-{i}", "parent_id": None, "author": f"阅读者 {i + 1}",
+                                   "text": "阅读之后，也想看看其他人的理解。保留不同角度，回到原文再做判断。", "like_count": i + 2} for i in range(18)],
                     "limited": True, "sort": "热门", "notice": ""}
 
         async def read(self, kind, identity, url, refresh, platform="zhihu"):
@@ -186,6 +188,16 @@ def main():
             drawer.get_by_role("button", name="查看评论", exact=True).click()
             expect(drawer.get_by_text("站内评论测试正文", exact=True)).to_be_visible()
             expect(drawer.locator(".reader-comment.is-reply")).to_have_count(1)
+            left = drawer.locator(".reading-content-column")
+            right = drawer.locator(".reader-comments")
+            left_box, right_box = left.bounding_box(), right.bounding_box()
+            assert right_box["x"] >= left_box["x"] + left_box["width"] - 1
+            assert abs(left_box["width"] - right_box["width"]) <= 2
+            assert left.locator(".local-content-actions").count() == 1
+            scroll_before = drawer.evaluate("el => el.scrollTop")
+            right.evaluate("el => el.scrollTop = 100")
+            assert right.evaluate("el => el.scrollTop") > 0 and drawer.evaluate("el => el.scrollTop") == scroll_before
+            right.evaluate("el => el.scrollTop = 0")
             drawer.get_by_role("button", name="全屏查看", exact=True).click()
             expect(drawer.get_by_text("站内评论测试正文", exact=True)).to_be_visible()
             assert comment_reads == ["42"], "Fullscreen must preserve comments without another request"
@@ -216,6 +228,7 @@ def main():
                 assert drawer.evaluate("el => el.scrollWidth <= el.clientWidth")
                 assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
                 assert drawer.bounding_box() == {"x": 0, "y": 0, "width": width, "height": 844}
+                assert right.bounding_box()["y"] >= left.bounding_box()["y"] + left.bounding_box()["height"]
                 expect(drawer.get_by_role("button", name="退出全屏", exact=True)).to_be_in_viewport()
                 page.screenshot(path=str(output / f"mobile-{width}.png"))
             page.evaluate("document.documentElement.classList.add('dark'); document.documentElement.dataset.accent = 'pine'")
@@ -259,7 +272,8 @@ def main():
             page.get_by_role("button", name=note["title"], exact=True).click()
             expect(drawer.locator(".reader-image img")).to_have_count(2)
             expect(drawer.get_by_text("图文正文\n保留原始换行。", exact=True)).to_be_visible()
-            assert drawer.locator(".reader-image img").first.evaluate("el => el.complete && el.naturalWidth > 0")
+            drawer.locator(".reader-image img").first.scroll_into_view_if_needed()
+            page.wait_for_function("(() => { const img = document.querySelector('.reader-image img'); return img?.complete && img.naturalWidth > 0; })()")
             page.screenshot(path=str(output / "xhs-gallery.png"))
             page.keyboard.press("Escape")
             page.get_by_role("button", name=douyin["title"], exact=True).click()
