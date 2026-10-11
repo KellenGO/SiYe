@@ -58,6 +58,10 @@ def main():
     comment_reads = []
 
     class Reader:
+        async def question_answers(self, identity, title, url, cursor=None):
+            return {"question_id": identity, "answers": [source], "next_cursor": None,
+                    "exhausted": True, "limit_reached": False}
+
         async def comments(self, kind, identity, url, platform="zhihu"):
             comment_reads.append(identity)
             return {"platform": platform, "content_type": kind, "content_id": identity,
@@ -154,7 +158,7 @@ def main():
                         route.fulfill(status=206, body=data[start:end+1], headers=headers)
                     else:
                         route.fulfill(body=data, headers=headers)
-                elif parsed.path.startswith("/api/library/") or parsed.path in {"/api/reading/detail", "/api/reading/comments"}:
+                elif parsed.path.startswith("/api/library/") or parsed.path.startswith("/api/reading/"):
                     if parsed.path == "/api/reading/detail" and mode == "pending":
                         pending.append(route)
                         return
@@ -181,6 +185,7 @@ def main():
             title.click()
             drawer = page.get_by_role("dialog", name="内容阅读", exact=True)
             expect(drawer).to_be_visible()
+            drawer.get_by_role("button", name="阅读 阅读测试作者 的回答", exact=True).click()
             expect(drawer.get_by_text("真正的正文，保留完整段落与图文顺序。", exact=True)).to_be_visible()
             expect(drawer.get_by_text(source["snippet"], exact=True)).to_have_count(0)
             expect(drawer.locator(".reader-image img")).to_be_visible()
@@ -286,6 +291,7 @@ def main():
             page.set_viewport_size({"width": 1440, "height": 1000})
             mode = "pending"
             title.click()
+            drawer.get_by_role("button", name="阅读 阅读测试作者 的回答", exact=True).click()
             expect(page.get_by_role("status").filter(has_text="正在读取知乎内容")).to_be_visible()
             page.keyboard.press("Escape")
             expect(drawer).to_have_count(0)
@@ -300,6 +306,7 @@ def main():
             page.keyboard.press("Escape")
             mode = "fail"
             title.click()
+            drawer.get_by_role("button", name="阅读 阅读测试作者 的回答", exact=True).click()
             expect(drawer.get_by_role("alert")).to_contain_text("正在进行")
             expect(drawer.locator(".reader-body")).to_have_count(0)
             assert len(views) == 2
@@ -310,6 +317,7 @@ def main():
             page.keyboard.press("Escape")
             page.get_by_role("button", name="网格", exact=True).click()
             page.get_by_role("button", name=f"查看内容信息：{source['title']}", exact=True).click()
+            drawer.get_by_role("button", name="阅读 阅读测试作者 的回答", exact=True).click()
             expect(drawer.locator(".reader-body")).to_be_visible()
             page.keyboard.press("Escape")
             page.get_by_role("button", name="列表", exact=True).click()

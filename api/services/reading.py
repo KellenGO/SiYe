@@ -7,6 +7,7 @@
 
 import asyncio
 import time
+import secrets
 from collections import OrderedDict
 
 from .accounts import ensure_session_snapshot, get_account_generation, operation_coordinator
@@ -17,6 +18,8 @@ from .reading_platforms import fetch_platform_reading, platform_reference
 from .acquisition_diagnostics import classify
 from aggregate_search.adapters.zhihu import search_reading_payload
 from .result_hydration import ResultHydrator
+from .reading_zhihu_questions import question_reference, result_question, fetch_question_page, question_page
+from aggregate_search.models import clean_title
 
 MESSAGES = {
     "busy": "搜索、研究或账号操作正在进行，请结束后重试读取正文。",
@@ -103,6 +106,7 @@ class ReadingService:
     def __init__(self):
         self.cache = OrderedDict()
         self.search_bodies = OrderedDict()
+        self.questions = {}
         self.tasks = set()
 
     def remember_search_body(self, payload, generation):
@@ -119,13 +123,91 @@ class ReadingService:
             return
         if not any(block["type"] != "unsupported" for block in value["blocks"]):
             return
-        value["limited"] = True
-        value["notices"].append("当前展示搜索接口已返回的正文，可能不完整，请结合原文查看。")
         key = ("zhihu", generation, kind, identity)
         self.search_bodies[key] = (time.monotonic(), value)
         self.search_bodies.move_to_end(key)
-        while len(self.search_bodies) > 40:
-            self.search_bodies.popitem(last=False)
+
+    def remember_search_result(self, result, generation):
+        if generation != get_account_generation("zhihu"):
+            return
+        try:
+            question = result_question(result)
+        except ValueError:
+            return
+        if not question:
+            return
+        state = self._question_state(generation, question["id"], question["title"])
+        if result.content_id in state["answers"] or len(state["answers"]) < 100:
+            state["answers"][result.content_id] = result
+
+    def _question_state(self, generation, identity, title):
+        key = (generation, identity)
+        return self.questions.setdefault(key, {"title": title, "answers": OrderedDict(),
+            "pages": {}, "latest": None, "cursor": None, "offset": 0, "requests": 0})
+
+    async def question_answers(self, identity, title, url, cursor=None):
+        question_reference(identity, url)
+        title = clean_title(title)
+        if not title or len(title) > 500:
+            raise ValueError("问题标题无效")
+        generation = get_account_generation("zhihu")
+        state = self._question_state(generation, identity, title)
+        if cursor in state["pages"]:
+            return {**state["latest"], "answers": [r.model_dump() for r in state["answers"].values()]}
+        if cursor != state["cursor"]:
+            raise ValueError("回答分页已失效，请重新打开问题")
+        if state["requests"] >= 20 or len(state["answers"]) >= 100:
+            return {"question_id": identity, "answers": [r.model_dump() for r in state["answers"].values()],
+                    "next_cursor": None, "exhausted": False, "limit_reached": True}
+        if not await operation_coordinator.acquire_exclusive("reading"):
+            raise ReadingError("busy")
+        task = None
+        try:
+            await prepare_reading("zhihu")
+            snapshot = await ensure_session_snapshot("zhihu", raise_on_error=True)
+            if not snapshot or not snapshot.get("d_c0"):
+                raise ReadingError("login_required")
+            # 冷启动恢复会话会推进代数；没有种子记录时可以在新代数下开始。
+            current = get_account_generation("zhihu")
+            if current != generation:
+                if state["answers"] or cursor:
+                    raise ReadingError("session_expired")
+                generation = current
+                state = self._question_state(generation, identity, title)
+            task = asyncio.create_task(fetch_question_page(snapshot, state["title"], state["offset"]))
+            self.tasks.add(task)
+            raw = await task
+            if generation != get_account_generation("zhihu"):
+                raise ReadingError("session_expired")
+            try:
+                answers, bodies, offset, exhausted = question_page(raw, identity, state["offset"])
+            except ValueError:
+                raise ReadingError("unavailable") from None
+            for answer in answers:
+                self.remember_search_result(answer, generation)
+            accepted = set(state["answers"])
+            for body in bodies:
+                if body["content_id"] in accepted:
+                    self.remember_search_body(body, generation)
+            state["requests"] += 1
+            state["offset"] = offset
+            limited = state["requests"] >= 20 or len(state["answers"]) >= 100
+            next_cursor = None if exhausted or limited else secrets.token_urlsafe(24)
+            state["pages"][cursor] = {"question_id": identity, "next_cursor": next_cursor,
+                                     "exhausted": exhausted, "limit_reached": limited}
+            state["latest"] = state["pages"][cursor]
+            state["cursor"] = next_cursor
+            return {**state["pages"][cursor], "answers": [r.model_dump() for r in state["answers"].values()]}
+        except (ReadingError, ValueError):
+            raise
+        except Exception as error:
+            code, _ = classify(error)
+            logger.info("reader platform=zhihu stage=question_search outcome=%s", code)
+            raise ReadingError(code) from None
+        finally:
+            if task is not None:
+                self.tasks.discard(task)
+            await operation_coordinator.release_exclusive("reading")
 
     async def read(self, kind, identity, url, refresh=False, platform="zhihu"):
         canonical = reading_reference(kind, identity, url) if platform == "zhihu" else platform_reference(platform, kind, identity, url)
@@ -143,7 +225,7 @@ class ReadingService:
             self.cache.move_to_end(key)
             return cached[1]
         search_body = self.search_bodies.get(key)
-        if not refresh and search_body and time.monotonic() - search_body[0] < 120:
+        if not refresh and search_body:
             self.search_bodies.move_to_end(key)
             logger.info("reader platform=zhihu stage=search_body outcome=ok")
             return search_body[1]
@@ -165,6 +247,8 @@ class ReadingService:
             # Restoring the session can advance its generation during the read.
             key = (platform, get_account_generation(platform), kind, identity)
             self.cache[key] = (time.monotonic(), value)
+            if platform == "zhihu":
+                self.search_bodies[key] = (time.monotonic(), value)
             self.cache.move_to_end(key)
             while len(self.cache) > 6:
                 self.cache.popitem(last=False)
@@ -180,6 +264,14 @@ class ReadingService:
                 self.tasks.discard(task)
             await operation_coordinator.release_exclusive("reading")
 
+    def invalidate(self, platform):
+        for cache in (self.cache, self.search_bodies):
+            for key in list(cache):
+                if key[0] == platform:
+                    del cache[key]
+        if platform == "zhihu":
+            self.questions.clear()
+
     async def cleanup(self):
         tasks = list(self.tasks)
         for task in tasks:
@@ -187,6 +279,7 @@ class ReadingService:
         await asyncio.gather(*tasks, return_exceptions=True)
         self.cache.clear()
         self.search_bodies.clear()
+        self.questions.clear()
         reading_media.clear()
 
     async def comments(self, kind, identity, url, platform="zhihu"):

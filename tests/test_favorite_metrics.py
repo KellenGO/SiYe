@@ -69,6 +69,21 @@ async def test_zhihu_raw_detail_does_not_use_question_views():
 
 
 @pytest.mark.asyncio
+async def test_zhihu_old_cached_answer_views_are_not_reintroduced(tmp_path, monkeypatch):
+    monkeypatch.setattr(metrics, "_read_cache", lambda *_: {
+        "metrics": {"view_count": 112424515, "like_count": 4, "comment_count": 5, "collect_count": 0},
+        "at": 100, "approximate": ["view_count"]})
+    client = SimpleNamespace(get=AsyncMock())
+    updates = []
+    await metrics.enrich_favorites("zhihu", client, [{"type": "answer", "id": "42"}],
+                                   updates.extend, cache_dir=tmp_path)
+    assert updates[0]["_favorite_metrics"] == {"like_count": 4, "comment_count": 5, "collect_count": 0}
+    assert updates[0]["_metrics_approximate"] == []
+    assert updates[0]["_metrics_cached"] is True
+    client.get.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_failure_stops_detail_requests_and_does_not_cache(tmp_path):
     from base.exceptions import RateLimitError
     client = SimpleNamespace(get_video_info=AsyncMock(side_effect=RateLimitError("bilibili")))

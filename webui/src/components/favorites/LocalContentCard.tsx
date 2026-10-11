@@ -4,10 +4,11 @@ import { BilibiliCoinIcon } from "@/components/icons/BilibiliCoinIcon";
 import type { UnifiedSearchResult } from "@/types/search";
 import { highlightSegments, orderedMetrics } from "@/lib/resultTools";
 import { xhsCoverFallback } from "@/lib/localContentCover";
+import { answerMetrics } from "@/lib/zhihuQuestions";
 
 const CONTENT_TYPES: Record<string, string> = {
   video: "视频", short_video: "短视频", zvideo: "视频", note: "图文笔记",
-  answer: "回答", article: "文章", post: "帖子",
+  answer: "回答", article: "文章", post: "帖子", question: "问题",
 };
 
 const METRIC_ICONS: Record<string, ComponentType<{ className?: string }>> = {
@@ -57,7 +58,7 @@ export function LocalContentCover({ result, showMetric = false }: { result: Unif
   const cover = [result.cover_url, fallback].find((url) => url && !failedUrls.includes(url));
   const video = ["video", "short_video", "zvideo"].includes(result.content_type);
   const duration = video ? durationLabel(result.duration_seconds) : null;
-  const metric = showMetric ? orderedMetrics(result.metrics, 1)[0] : undefined;
+  const metric = showMetric ? orderedMetrics(answerMetrics(result), 1)[0] : undefined;
   return <span className={`local-content-cover ${cover ? "has-image" : ""}`}>
     {cover ? <img src={cover} alt="" loading="lazy" referrerPolicy="no-referrer"
       onError={() => setFailedUrls((urls) => [...urls, cover])} />

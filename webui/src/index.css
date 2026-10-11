@@ -2458,6 +2458,17 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
 }
 
 /* Optional extension management follows the existing settings theme. */
+.zhihu-question-heading { padding-bottom: 20px; border-bottom: 1px solid var(--siye-line); }
+.zhihu-question-heading h3 { font-size: 22px; line-height: 1.5; margin: 8px 0; overflow-wrap: anywhere; }
+.zhihu-question-card .result-content { min-width: 0; }
+.zhihu-answer-toggle { margin-bottom: 12px; }
+.zhihu-question-more { flex-wrap: wrap; }
+.zhihu-question-more .reader-notice { flex-basis: 100%; }
+.zhihu-answer-selection { font-size: 12px; color: var(--siye-muted); width: 100%; }
+.zhihu-answer-selection summary { cursor: pointer; padding: 6px 0; }
+.zhihu-answer-selection label { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
+.zhihu-answer-selection input { accent-color: var(--siye-brand); }
+
 .extension-card { margin-top: 24px; padding: 24px; border: 1px solid var(--siye-line); border-radius: 16px; background: var(--siye-bg); }
 .extension-card-heading { display: flex; align-items: flex-start; gap: 14px; }
 .extension-card-heading > svg { width: 28px; height: 28px; flex-shrink: 0; color: var(--siye-brand); }

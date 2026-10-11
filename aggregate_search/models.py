@@ -99,6 +99,15 @@ OverallStatus = Literal["running", "completed", "partial", "failed", "cancelling
 
 # ── Unified search result ──────────────────────────────────────────────
 
+class ZhihuQuestion(BaseModel):
+    """Public question metadata, separate from the matched answer's counters."""
+
+    id: str = Field(pattern=r"^[0-9]{1,30}$")
+    title: str
+    url: str
+    metrics: Dict[str, int] = Field(default_factory=dict)
+
+
 class GroupedSource(BaseModel):
     """Public fields for one platform version of a grouped result."""
 
@@ -116,6 +125,7 @@ class GroupedSource(BaseModel):
     # Kept for stable reconstruction of a single-platform tab.  It is the
     # existing platform rank, not a new grouping score.
     rank: int = 0
+    question: Optional[ZhihuQuestion] = None
 
     @classmethod
     def from_result(cls, result: "UnifiedSearchResult") -> "GroupedSource":
@@ -132,6 +142,7 @@ class GroupedSource(BaseModel):
             cover_url=result.cover_url,
             duration_seconds=result.duration_seconds,
             rank=result.rank,
+            question=result.question,
         )
 
 class UnifiedSearchResult(BaseModel):
@@ -150,6 +161,7 @@ class UnifiedSearchResult(BaseModel):
     metrics: Dict[str, int] = Field(default_factory=dict)
     rank: int = 0  # original platform rank (0-based)
     grouped_sources: Optional[List[GroupedSource]] = None
+    question: Optional[ZhihuQuestion] = None
     # Remote favourites may belong to one or more platform folders. Search
     # results leave this empty; it is public display metadata only.
     collection_names: List[str] = Field(default_factory=list)

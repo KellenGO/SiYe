@@ -70,15 +70,15 @@ async def test_parent_consumes_body_but_public_search_and_pagination_remain_ligh
     assert await manager._read_worker_output(job, "zhihu", "job", SimpleNamespace(stdout=stream))
     detail = await service.read("answer", "42", "https://www.zhihu.com/answer/42")
     assert detail["blocks"][0]["text"] == "搜索返回的正文"
-    assert detail["blocks"][1]["type"] == "image" and detail["limited"]
-    assert "搜索接口" in "".join(detail["notices"])
+    assert detail["blocks"][1]["type"] == "image" and not detail["limited"]
+    assert not detail["notices"]
     assert "private" not in json.dumps(detail)
     assert "搜索返回的正文" not in job.to_response().model_dump_json()
     assert "搜索返回的正文" not in job.page_states["zhihu"].model_dump_json()
 
 
 @pytest.mark.asyncio
-async def test_search_cache_expiry_generation_refresh_and_capacity(cached_reader, monkeypatch):
+async def test_search_cache_survives_time_and_many_results_but_refresh_and_generation_still_apply(cached_reader, monkeypatch):
     service, clock = cached_reader
     calls = []
     async def unavailable(*args):
@@ -88,12 +88,13 @@ async def test_search_cache_expiry_generation_refresh_and_capacity(cached_reader
     service.remember_search_body(search_reading_payload(answer()), 7)
     assert (await service.read("answer", "42", "https://www.zhihu.com/answer/42"))["blocks"]
     assert not calls
-    for refresh in (True, False):
-        if not refresh:
-            clock[0] += 121
-        with pytest.raises(reading.ReadingError):
-            await service.read("answer", "42", "https://www.zhihu.com/answer/42", refresh=refresh)
-    service.remember_search_body(search_reading_payload(answer()), 7)
+    with pytest.raises(reading.ReadingError):
+        await service.read("answer", "42", "https://www.zhihu.com/answer/42", refresh=True)
+    clock[0] += 86400
+    for identity in range(100, 180):
+        service.remember_search_body(search_reading_payload(answer(str(identity))), 7)
+    assert (await service.read("answer", "42", "https://www.zhihu.com/answer/42"))["blocks"]
+    assert len(calls) == 1 and len(service.search_bodies) == 81
     monkeypatch.setattr(reading, "get_account_generation", lambda _: 8)
     with pytest.raises(reading.ReadingError):
         await service.read("answer", "42", "https://www.zhihu.com/answer/42")
@@ -101,7 +102,7 @@ async def test_search_cache_expiry_generation_refresh_and_capacity(cached_reader
     assert not any(key[3] == "99" for key in service.search_bodies)
     for identity in range(100, 145):
         service.remember_search_body(search_reading_payload(answer(str(identity))), 8)
-    assert len(service.search_bodies) == 40
+    assert len(service.search_bodies) == 126
     await service.cleanup()
     assert not service.search_bodies
 

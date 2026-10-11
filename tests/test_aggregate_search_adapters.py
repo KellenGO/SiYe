@@ -411,8 +411,8 @@ class TestZhihuAdapter:
         assert r.cover_url == "https://pic1.zhimg.com/80/thumb_abc.jpg"
         assert r.metrics["like_count"] == 3200
         assert r.metrics["comment_count"] == 180
-        # 浏览量走 visits_count，收藏走 favorites_count。
-        assert r.metrics["view_count"] == 52000
+        # 回答浏览量口径不明；收藏仍走 favorites_count。
+        assert "view_count" not in r.metrics
         assert r.metrics["collect_count"] == 640
 
     def test_title_html_highlight_is_cleaned(self):

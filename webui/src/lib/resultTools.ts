@@ -14,12 +14,14 @@ export function resultKey(result: Pick<UnifiedSearchResult, "platform" | "conten
 }
 
 export function resultSources(result: UnifiedSearchResult): UnifiedSearchResult[] {
+  if (result.question_answers) return result.question_answers;
   const sources = result.grouped_sources;
   return (sources && sources.length >= 2 ? sources : [result])
     .map((source) => ({ ...source, metrics: { ...source.metrics }, grouped_sources: null }));
 }
 
 export function groupKey(result: UnifiedSearchResult): string {
+  if (result.question_answers) return `zhihu-question:${result.question?.id}`;
   return JSON.stringify(resultSources(result).map(resultKey).sort());
 }
 

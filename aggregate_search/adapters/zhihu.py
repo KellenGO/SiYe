@@ -48,7 +48,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from aggregate_search.models import UnifiedSearchResult, _parse_timestamp, clean_snippet, clean_title
+from aggregate_search.models import UnifiedSearchResult, ZhihuQuestion, _parse_timestamp, clean_snippet, clean_title
 
 from .base import BasePlatformAdapter
 
@@ -137,6 +137,7 @@ class ZhihuAdapter(BasePlatformAdapter):
                     cover_url=cover_url,
                     duration_seconds=self._extract_duration(item),
                     metrics=metrics,
+                    question=self._extract_question(item) if content_type == "answer" else None,
                     rank=rank,
                     collection_names=[str(item["_collection_name"])] if item.get("_collection_name") else [],
                 )
@@ -214,16 +215,34 @@ class ZhihuAdapter(BasePlatformAdapter):
 
     def _extract_metrics(self, raw_item: Dict) -> Dict[str, int]:
         metrics: Dict[str, int] = {}
-        # 知乎搜索/收藏返回的对象同时带浏览量与收藏数：visits_count 是
-        # 阅读/浏览量（回答、文章、视频通用），favorites_count 是收藏数。
+        # 搜索回答的 visits_count 可在不同回答上重复，不能当作回答阅读量。
         mapping = [
             ("voteup_count", "like_count"),
             ("comment_count", "comment_count"),
             ("favorites_count", "collect_count"),
-            ("visits_count", "view_count"),
         ]
+        if raw_item.get("type") != "answer":
+            mapping.append(("visits_count", "view_count"))
         for src, dst in mapping:
-            val = self._safe_int(raw_item.get(src), 0)
-            if val > 0:
+            raw = raw_item.get(src)
+            val = self._safe_int(raw, -1)
+            if raw is not None and not isinstance(raw, bool) and val >= 0:
                 metrics[dst] = val
         return metrics
+
+    def _extract_question(self, item: Dict) -> Optional[ZhihuQuestion]:
+        question = item.get("question")
+        if not isinstance(question, dict):
+            return None
+        identity = str(question.get("id") or "")
+        if not identity.isascii() or not identity.isdigit() or len(identity) > 30:
+            return None
+        metrics = {}
+        for source, target in (("visit_count", "view_count"), ("answer_count", "answer_count")):
+            raw = question.get(source)
+            count = self._safe_int(raw, -1)
+            # search_v3 的 answer_count=0 是未提供总量的占位，不当作真实总数。
+            if raw is not None and not isinstance(raw, bool) and count > 0:
+                metrics[target] = count
+        return ZhihuQuestion(id=identity, title=clean_title(self._safe_str(question.get("title") or item.get("title"))),
+                             url=f"{ZHIHU_URL}/question/{identity}", metrics=metrics)

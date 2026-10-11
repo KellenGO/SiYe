@@ -126,7 +126,7 @@ async def test_cache_refresh_generation_ttl_and_capacity(service, monkeypatch):
     assert len(calls) == 3
     now += 121
     await service.read("answer", "42", url)
-    assert len(calls) == 4
+    assert len(calls) == 3  # 已获取知乎正文在本次运行持续可读。
     for identity in range(50, 58):
         await service.read("article", str(identity), f"https://zhuanlan.zhihu.com/p/{identity}")
     assert len(service.cache) == 6

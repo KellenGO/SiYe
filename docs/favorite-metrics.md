@@ -8,10 +8,10 @@
 | --- | --- | --- |
 | B站 | 现有 `get_video_info`，读取 `View.stat` | view / like / reply / favorite / coin，另带 share |
 | 小红书 | 现有 `get_note_by_id`，携带收藏条目的 xsec_token / xsec_source | interact_info.liked_count / comment_count / collected_count / share_count |
-| 知乎 | `/api/v4/answers/{id}`、`articles/{id}`、`zvideos/{id}` 原始 JSON | voteup_count / comment_count / favlists_count；阅读字段仅取内容对象顶层，视频仅取 play_count |
+| 知乎 | `/api/v4/answers/{id}`、`articles/{id}`、`zvideos/{id}` 原始 JSON | voteup_count / comment_count / favlists_count；回答不补阅读量，文章取内容对象顶层阅读字段，视频仅取 play_count |
 | 抖音 | 原收藏列表 | 点赞、评论、收藏、分享；不额外请求尚未证实能补播放量的接口 |
 
-知乎不经过旧的 ZhihuContent 模型，避免丢掉阅读量和收藏数。禁止把回答所属问题的浏览量填到回答上。不同内容类型和账号能获取的字段可能不同。
+知乎不经过旧的 ZhihuContent 模型，避免丢掉收藏数等指标。回答的阅读字段口径未确认，因此不采纳；旧指标缓存命中时也去掉该字段，旧收藏界面不再展示。问题浏览量只能在问题区域展示。不同内容类型和账号能获取的字段可能不同。
 
 小红书缺少访问令牌时跳过详情；没有用其他内容的令牌替代。未返回、非法数值不填零；接口明确返回的零保留并显示。中文单位或带 `+` 的计数换算为整数，同时在 `metrics_approximate` 中标注近似字段。“10万+”不代表精确十万。
 
@@ -35,6 +35,7 @@
 | 抖音 | 点赞 3418、评论 29、收藏 5368、分享 519；列表未返回播放量 |
 
 每个平台只探测一条；这些样本不代表所有收藏或所有知乎内容类型。没有宣称能获取小红书浏览量或抖音他人作品播放量。
+上述知乎阅读计数为当时的历史探测结果，当前回答展示已停用此口径。
 
 可复验命令：`.venv/Scripts/python.exe scripts/favorite_metrics_probe.py xhs bilibili zhihu douyin`。使用现有登录会话，每平台只读取一条，输出计数和状态，不打印令牌或原始响应。
 

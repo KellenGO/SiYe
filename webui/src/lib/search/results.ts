@@ -20,6 +20,7 @@ function groupedSourceToResult(source: GroupedSource): UnifiedSearchResult {
     cover_url: source.cover_url,
     duration_seconds: source.duration_seconds,
     metrics: { ...source.metrics },
+    question: source.question,
     rank: source.rank,
     grouped_sources: null,
   };
@@ -225,6 +226,7 @@ export function deduplicateCrossPlatformResults(
       ...representative,
       grouped_sources: sourceIndexes.map((index): GroupedSource => ({
         platform: results[index].platform,
+        question: results[index].question,
         content_id: results[index].content_id,
         content_type: results[index].content_type,
         title: results[index].title,

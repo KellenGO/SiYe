@@ -642,7 +642,11 @@ class SearchJobManager:
                 rd = event.data
                 if isinstance(rd, dict) and rd.get("platform") == platform:
                     try:
-                        job.add_result(platform, UnifiedSearchResult(**rd))
+                        result = UnifiedSearchResult(**rd)
+                        job.add_result(platform, result)
+                        if platform == "zhihu" and not job._cancelled and not job._cancelling:
+                            from .reading import reading_service
+                            reading_service.remember_search_result(result, job.account_generations[platform])
                     except Exception:
                         pass
             elif event.event == "reading_body":

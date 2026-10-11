@@ -308,6 +308,16 @@ def _clear_snapshot_sync(platform: str) -> None:
     """清除快照并推进账号代数（同步调用点也走这里，保证代数一致）。"""
     _session_snapshots.pop(platform, None)
     _account_generation[platform] = _account_generation.get(platform, 0) + 1
+    _invalidate_reading(platform)
+
+
+def _invalidate_reading(platform: str) -> None:
+    # 清理已加载的阅读服务，不为账号操作提前创建阅读/媒体对象。
+    import sys
+    module = sys.modules.get("api.services.reading")
+    service = getattr(module, "reading_service", None)
+    if service is not None:
+        service.invalidate(platform)
 
 
 def _capture_cookie_dict(cookies: List[Dict[str, Any]]) -> Dict[str, str]:
@@ -369,6 +379,7 @@ async def set_session_snapshot(platform: str, cookie_dict: Dict[str, str]) -> No
         return
     _session_snapshots[platform] = dict(cookie_dict)
     _account_generation[platform] = _account_generation.get(platform, 0) + 1
+    _invalidate_reading(platform)
 
 
 async def clear_session_snapshot(platform: str) -> None:

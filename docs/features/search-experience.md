@@ -23,6 +23,7 @@
 | React 接线层 | `webui/src/hooks/useSearchExperience.ts`、`useAggregateSearch.ts` |
 | 内容视图偏好 | `webui/src/lib/contentView.ts` |
 | 两种视图共用封面与指标展示 | `webui/src/components/favorites/LocalContentCard.tsx` 的 `LocalContentCover` / `ContentMetric` |
+| 知乎问题卡片与回答选择 | `webui/src/lib/zhihuQuestions.ts` 的 `groupZhihuQuestions`、`questionOf`；`webui/src/components/search/ZhihuQuestionCard.tsx`；`aggregate_search/adapters/zhihu.py` 的 `ZhihuAdapter` |
 | 页面与卡片 | `webui/src/components/search/{SearchPage,SearchBar,ResultTabs,ResultCard,ResultTools,SearchPopover,PlatformStatus}.tsx` |
 | 结果缓存（90s，按平台+关键词+数量+账号代数） | `api/services/result_cache.py` |
 | 平台级冷却 | `api/services/search_metrics.py` 的 `PlatformCooldowns` |
@@ -34,7 +35,9 @@
 
 ## 关键决定
 
-- 可信且身份匹配的小红书、抖音、B站普通视频及知乎回答／文章支持[站内阅读与播放](content-reading.md)：列表标题与封面打开阅读详情，网格沿用详情入口；仍提供原平台链接。内容按需读取，不在搜索期间批量预抓。知乎搜索响应本来就有的正文经私有事件进入后端短时阅读缓存，正文及页面状态不进入公开搜索响应或分页快照，不新增平台请求。可展示正文取得或纯视频开始播放后才记录观看，失败不将摘要冒充全文。
+- 可信且身份匹配的小红书、抖音、B站普通视频及知乎回答／文章支持[站内阅读与播放](content-reading.md)：列表标题与封面打开阅读详情，网格沿用详情入口；仍提供原平台链接。内容按需读取，不在搜索期间批量预抓。知乎搜索响应本来就有的正文经私有事件在本次后端运行保留，正文及页面状态不进入公开搜索响应或分页快照，不新增平台请求。可展示正文取得或纯视频开始播放后才记录观看，失败不将摘要冒充全文。
+- 知乎回答在搜索综合页及知乎页按问题编号合成问题卡片，与跨平台内容版本合并分开处理，原始回答身份和搜索分页保持不变。卡片显示问题标题、注明作者的回答摘要和当前搜索已获取回答数；筛选作用于具体回答，展示位置沿用命中结果的既有排序。打开详情后补充的回答只在问题阅读列表中展示，不改变原搜索结果数量或顺序。
+- 问题卡片的收藏／稍后再看／空间入口先进入回答选择，批量工具按回答勾选、不默认全选问题下的回答；导出仍展开为回答来源。已保存内容及历史维持原有回答条目，不迁移成问题条目。口径不明的回答浏览量不再参与新结果指标补全或展示；问题浏览和总回答数缺失时不补造。
 
 - 搜索页可开启当前[研究空间](spaces.md)，在列表、网格和详情一键加入资料；加入不影响收藏或稍后再看。搜索旁可展开该空间的富文本总笔记，查看详情时继续在旁边编辑。空间名不绑定搜索词，切换空间不重置当前搜索结果。
 

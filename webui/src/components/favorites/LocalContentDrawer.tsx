@@ -11,6 +11,8 @@ import { LocalContentCover, localContentType } from "./LocalContentCard";
 import { useResearchWorkspace } from "@/components/spaces/WorkspaceContext";
 import { ReadingBody } from "@/components/reading/ReadingBody";
 import { supportsReading } from "@/lib/reading";
+import { answerMetrics } from "@/lib/zhihuQuestions";
+import { useZhihuAnswers } from "@/hooks/useZhihuAnswers";
 
 const METRIC_ICONS: Record<string, LucideIcon> = { view_count: Play, like_count: Heart, coin_count: Coins,
   comment_count: MessageCircle, collect_count: Bookmark, share_count: Share2 };
@@ -40,8 +42,12 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
   const [noteError, setNoteError] = useState("");
   const [membershipKeys, setMembershipKeys] = useState<string[] | null>(null);
   const closeMembership = useCallback(() => setMembershipKeys(null), []);
-  const keys = resultSources(result).map(resultKey);
-  const hasReader = resultSources(result).some(supportsReading);
+  const questionReading = useZhihuAnswers(result);
+  const isQuestion = !!result.question_answers;
+  const sources = isQuestion ? questionReading.answers : resultSources(result);
+  const [expandedAnswers, setExpandedAnswers] = useState<Set<string>>(new Set());
+  const keys = sources.map(resultKey);
+  const hasReader = isQuestion || sources.some(supportsReading);
   const items = keys.map((key) => library?.items.find((item) => item.key === key)).filter((item) => item !== undefined);
   const requestClose = () => {
     if (saving) return;
@@ -89,7 +95,7 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
     closeButton.current?.focus({ preventScroll: true });
     const escapeOutsidePanel = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !event.defaultPrevented && !panel.current?.contains(event.target as Node)
-        && !panel.current?.querySelector('.confirm-card, .membership-card, [aria-expanded="true"]:not(.reader-comment-toggle)')) escapeRequest.current();
+        && !panel.current?.querySelector('.confirm-card, .membership-card, [aria-expanded="true"]:not(.reader-comment-toggle):not(.zhihu-answer-toggle)')) escapeRequest.current();
     };
     document.addEventListener("keydown", escapeOutsidePanel);
     return () => {
@@ -116,7 +122,7 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
         const confirmation = panel.current?.querySelector<HTMLElement>('.confirm-card, .membership-card[role="dialog"]');
         if (event.key === "Escape") {
           // 嵌套确认和归属选择先处理 Escape，不能连抽屉一起退出。
-          if (confirmation || panel.current?.querySelector('.membership-card, [aria-expanded="true"]:not(.reader-comment-toggle)')) return;
+          if (confirmation || panel.current?.querySelector('.membership-card, [aria-expanded="true"]:not(.reader-comment-toggle):not(.zhihu-answer-toggle)')) return;
           event.preventDefault();
           event.stopPropagation();
           escapeRequest.current();
@@ -138,17 +144,25 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
         <button ref={closeButton} type="button" className="btn small" aria-label="关闭内容详情" disabled={saving} onClick={requestClose}><X aria-hidden="true" />关闭</button>
       </div></div>
       <div className={workspace?.hasNote ? "local-content-research-layout" : undefined}><div className="local-content-drawer-body">
-        {resultSources(result).map((snapshot) => {
+        {isQuestion && <section className="zhihu-question-heading">
+          <p className="local-content-detail-source">知乎 · 问题</p><h3>{result.question!.title}</h3>
+          <p className="local-content-detail-meta">已加载 {sources.length} 条回答 · 按已获取回答的赞数排序</p>
+          {result.question!.metrics.view_count !== undefined && <p className="local-content-detail-meta">问题浏览量：{result.question!.metrics.view_count.toLocaleString("zh-CN")}</p>}
+          {result.question!.metrics.answer_count !== undefined && <p className="local-content-detail-meta">问题回答总数：{result.question!.metrics.answer_count.toLocaleString("zh-CN")}</p>}
+          <a className="btn small" href={result.question!.url} target="_blank" rel="noreferrer">在知乎打开问题<ArrowUpRight aria-hidden="true" /></a>
+          <p className="local-content-detail-meta">选择具体回答阅读、收藏或加入研究空间。</p>
+        </section>}
+        {sources.map((snapshot) => {
           const item = items.find((item) => item.key === resultKey(snapshot));
           const source = savedView && item ? item.result : snapshot;
           const url = safeContentUrl(source.url);
           const published = source.published_at ? new Date(source.published_at) : null;
-          const metrics = orderedMetrics(source.metrics);
+          const metrics = orderedMetrics(answerMetrics(source));
           const metricMax = Math.max(1, ...metrics.map(({ key }) => source.metrics[key]));
           const header = <>
             {!supportsReading(source) && <LocalContentCover result={source} />}
             <p className="local-content-detail-source">{PLATFORM_LABELS[source.platform]} · {localContentType(source.content_type)}</p>
-            <h3>{source.title || "无标题内容"}</h3>
+            {!isQuestion && <h3>{source.title || "无标题内容"}</h3>}
             <p className="local-content-detail-meta">{source.author || "作者未提供"}{published && Number.isFinite(published.getTime()) ? ` · 发布于 ${published.toLocaleDateString("zh-CN")}` : ""}</p>
             {url && <a className="btn small local-content-original" href={url} target="_blank" rel="noreferrer" onClick={() => { void recordView(source); }}>在原平台打开<ArrowUpRight aria-hidden="true" /></a>}
           </>;
@@ -192,10 +206,19 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
             </>}
           </>;
           return <section className="local-content-detail" key={resultKey(source)} aria-label={`${PLATFORM_LABELS[source.platform]}内容详情`}>
-            {supportsReading(source) ? <ReadingBody key={`${source.platform}:${source.content_type}:${source.content_id}:${source.url}`} source={source} header={header} actions={actions} />
+            {isQuestion && <button type="button" className="btn small zhihu-answer-toggle" aria-expanded={expandedAnswers.has(source.content_id)} onClick={() => setExpandedAnswers(previous => {
+              const next = new Set(previous); if (next.has(source.content_id)) next.delete(source.content_id); else next.add(source.content_id); return next;
+            })}>{expandedAnswers.has(source.content_id) ? "收起回答" : `阅读 ${source.author || "此作者"} 的回答`}</button>}
+            {isQuestion && !expandedAnswers.has(source.content_id) ? <>{header}<p className="local-content-snippet">{source.snippet || "暂无摘要"}</p>{actions}</>
+              : supportsReading(source) ? <ReadingBody key={`${source.platform}:${source.content_type}:${source.content_id}:${source.url}`} source={source} header={header} actions={actions} />
               : <>{header}<h4>简介</h4><p className="local-content-snippet">{source.snippet || "暂无简介"}</p>{actions}</>}
           </section>;
         })}
+        {isQuestion && <div className="library-batch-bar zhihu-question-more">
+          <span>{questionReading.loading ? "正在加载回答…" : questionReading.page?.limit_reached ? "本次已达到 100 条回答或 20 页的加载上限。" : questionReading.page?.exhausted ? "当前搜索路径没有更多回答，完整讨论可在知乎查看。" : "可以继续加载同一问题的回答。"}</span>
+          {questionReading.error && <p className="reader-notice" role="alert">{questionReading.error}</p>}
+          {(!questionReading.page || questionReading.page.next_cursor) && <button type="button" className="btn small" disabled={questionReading.loading} onClick={() => void questionReading.loadMore()}>{questionReading.error ? "重试加载回答" : "加载更多回答"}</button>}
+        </div>}
         {membershipKeys && library && membershipKeys.some((key) => library.items.some((item) => item.key === key)) && <MembershipEditor
           keys={membershipKeys} library={library} modal defaultOpen onClose={closeMembership} />}
         {onDelete && <button type="button" className="btn danger" onClick={onDelete}><Trash2 aria-hidden="true" />从历史中移除</button>}

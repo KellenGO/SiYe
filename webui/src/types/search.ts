@@ -14,7 +14,15 @@ export type PlatformStatus =
 export type OverallStatus = "running" | "completed" | "partial" | "failed" | "cancelling" | "cancelled";
 export type HydrationStatus = "not_started" | "running" | "completed";
 
+export interface ZhihuQuestion {
+  id: string;
+  title: string;
+  url: string;
+  metrics: Record<string, number>;
+}
+
 export interface GroupedSource {
+  question?: ZhihuQuestion | null;
   platform: PlatformSlug;
   content_id: string;
   content_type: string;
@@ -31,6 +39,9 @@ export interface GroupedSource {
 }
 
 export interface UnifiedSearchResult {
+  question?: ZhihuQuestion | null;
+  /** Search presentation only; saving always uses an individual answer. */
+  question_answers?: UnifiedSearchResult[];
   platform: PlatformSlug;
   content_id: string;
   content_type: string;

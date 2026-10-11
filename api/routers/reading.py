@@ -40,6 +40,33 @@ def get_reading_service():
     return reading_service
 
 
+class QuestionAnswersInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    question_id: str = Field(pattern=r"^[0-9]{1,30}$")
+    title: str = Field(min_length=1, max_length=500)
+    url: str = Field(min_length=1, max_length=2000)
+    cursor: str | None = Field(default=None, min_length=32, max_length=32, pattern=r"^[A-Za-z0-9_-]+$")
+
+
+@reading_router.post("/zhihu/question/answers")
+async def read_question_answers(payload: QuestionAnswersInput, request: Request, service=Depends(get_reading_service)):
+    task = asyncio.create_task(service.question_answers(payload.question_id, payload.title, payload.url, payload.cursor))
+    try:
+        while not task.done():
+            await asyncio.wait({task}, timeout=0.25)
+            if not task.done() and await request.is_disconnected():
+                raise HTTPException(499, "回答请求已关闭")
+        return await task
+    except ReadingError as error:
+        raise HTTPException(409 if error.code == "busy" else 503, {"code": error.code, "message": str(error)}) from None
+    except ValueError:
+        raise HTTPException(422, "问题编号、标题、原文链接或分页信息无效") from None
+    finally:
+        if not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+
 @reading_router.post("/detail")
 async def read_detail(payload: ReadingInput, request: Request, service=Depends(get_reading_service)):
     task = asyncio.create_task(service.read(payload.content_type, payload.content_id, payload.url, payload.refresh, platform=payload.platform))

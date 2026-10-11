@@ -94,7 +94,7 @@ async def test_search_zhihu_raw_counters_and_cancellation(monkeypatch, tmp_path)
     monkeypatch.setattr(hydrator, "_get_zhihu", AsyncMock(return_value=client))
     row = item(platform="zhihu")
     await hydrator.hydrate_metrics([row], asyncio.Event(), lambda _: None)
-    assert row.metrics == {"like_count": 12, "comment_count": 0, "collect_count": 3, "view_count": 200}
+    assert row.metrics == {"like_count": 12, "comment_count": 0, "collect_count": 3}
     cancelled = asyncio.Event()
     cancelled.set()
     await hydrator.hydrate_metrics([item(2, "zhihu")], cancelled, lambda _: None)

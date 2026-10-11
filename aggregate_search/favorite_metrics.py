@@ -91,9 +91,10 @@ async def fetch_metrics(platform, client, row, approximate=None):
     })
     mapping = [("voteup_count", "like_count"), ("comment_count", "comment_count"),
                ("favlists_count", "collect_count"), ("favorites_count", "collect_count")]
-    # Never use question.visit_count as the reading count of an answer.
-    mapping += ([("play_count", "view_count")] if kind == "zvideo" else
-                [("read_count", "view_count"), ("visit_count", "view_count"), ("visits_count", "view_count")])
+    # Answer browsing counters have ambiguous scope; keep their interaction counts only.
+    if kind != "answer":
+        mapping += ([("play_count", "view_count")] if kind == "zvideo" else
+                    [("read_count", "view_count"), ("visit_count", "view_count"), ("visits_count", "view_count")])
     return _counts(detail, mapping, approximate)
 
 
@@ -142,6 +143,9 @@ def _save_cache(path, metrics, at, approximate):
 
 
 def _emit(sink, platform, row, metrics, at, approximate, cached):
+    if platform == "zhihu" and row.get("type") == "answer":
+        metrics = {key: value for key, value in metrics.items() if key != "view_count"}
+        approximate = [key for key in approximate if key != "view_count"]
     sink([{**row, "_favorite_metrics": metrics, "_metrics_updated_at": at,
            "_metrics_approximate": sorted(approximate), "_metrics_cached": cached,
            "_metrics_status": "complete" if TARGETS[platform] <= metrics.keys() else "partial"}])

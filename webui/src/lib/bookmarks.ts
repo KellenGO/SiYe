@@ -34,9 +34,11 @@ export function publicResult(value: unknown): UnifiedSearchResult {
   if (!isRecord(value) || !isPlatformSlug(value.platform)
       || typeof value.content_id !== "string" || !value.content_id || typeof value.title !== "string"
       || typeof value.url !== "string" || !safeContentUrl(value.url)) throw new Error("收藏内容格式或原文链接无效");
+  if (value.platform === "zhihu" && value.content_type === "question") throw new Error("请选择具体回答保存");
   const metrics: Record<string, number> = {};
   if (isRecord(value.metrics)) {
     for (const key of ["like_count", "view_count", "collect_count", "comment_count", "share_count", "coin_count", "danmaku_count"]) {
+      if (value.platform === "zhihu" && value.content_type === "answer" && key === "view_count") continue;
       const count = value.metrics[key];
       if (typeof count === "number" && Number.isFinite(count) && count >= 0) metrics[key] = count;
     }

@@ -16,6 +16,8 @@ import { DEFAULT_FILTERS, exportRows, filterResultGroups, groupKey, resultKey, r
 import { LocalContentCard } from "@/components/favorites/LocalContentCard";
 import { LocalContentDrawer } from "@/components/favorites/LocalContentDrawer";
 import { useSlidingIndicator } from "@/hooks/useSlidingIndicator";
+import { groupZhihuQuestions } from "@/lib/zhihuQuestions";
+import { ZhihuQuestionCard } from "./ZhihuQuestionCard";
 
 interface ResultTabsProps {
   active?: boolean;
@@ -98,6 +100,8 @@ export function ResultTabs({
   const [detailResult, setDetailResult] = useState<UnifiedSearchResult | null>(null);
   const currentDetail = useMemo(() => {
     if (!detailResult) return null;
+    if (detailResult.question_answers) return groupZhihuQuestions(results).find(result =>
+      result.question_answers && result.question?.id === detailResult.question?.id) ?? detailResult;
     const currentSources = new Map(results.flatMap(resultSources).map((source) => [resultKey(source), source]));
     const sources = resultSources(detailResult).map((source) => currentSources.get(resultKey(source)) ?? source);
     return sources.length > 1 ? { ...sources[0], grouped_sources: sources } : sources[0];
@@ -153,7 +157,7 @@ export function ResultTabs({
   useEffect(() => setExportOpen(false), [jobId]);
 
   // 先按当前标签筛选，再按所选模式排序（纯前端计算，不发任何请求）。
-  const filteredResults = useMemo(() => {
+  const rankedResults = useMemo(() => {
     const scoped = filterResultGroups(results, filters, nowMs, effectiveTab);
     const sorted = disableSort ? scoped : sortResults(scoped, sortMode, keyword);
     const resultKey = (r: UnifiedSearchResult) => `${r.platform}|${r.content_id}`;
@@ -178,9 +182,12 @@ export function ResultTabs({
       .map((key) => byKey.get(key))
       .filter((result): result is UnifiedSearchResult => Boolean(result));
   }, [results, effectiveTab, sortMode, keyword, hydrationStatus, jobId, filters, nowMs]);
+  const filteredResults = useMemo(() => viewScope === "search" ? groupZhihuQuestions(rankedResults) : rankedResults,
+    [viewScope, rankedResults]);
 
   const counts = useMemo(() => {
-    const matching = filterResultGroups(results, filters, nowMs);
+    const raw = filterResultGroups(results, filters, nowMs);
+    const matching = viewScope === "search" ? groupZhihuQuestions(raw) : raw;
     const c: Record<string, number> = { all: matching.length };
     for (const r of matching) {
       const sources = r.grouped_sources && r.grouped_sources.length >= 2
@@ -191,7 +198,7 @@ export function ResultTabs({
       }
     }
     return c;
-  }, [results, filters, nowMs]);
+  }, [results, filters, nowMs, viewScope]);
 
   // 一次只渲染前 N 条：收藏攒到几百上千条时，一次性铺完会卡。其余点「显示更多」逐步展开，
   // 勾选/导出仍然作用于筛选后的全部结果（不只是已渲染的那些）。
@@ -202,14 +209,17 @@ export function ResultTabs({
   const renderedResults = pageSize ? filteredResults.slice(0, Math.max(shown, pageSize)) : filteredResults;
   const hiddenCount = pageSize ? filteredResults.length - renderedResults.length : 0;
 
-  const selectedResults = filteredResults.filter((result) => selected.has(groupKey(result)));
+  const selectedResults = filteredResults.flatMap(result => result.question_answers ?? [result])
+    .filter(result => selected.has(groupKey(result)));
   const bookmarks = new Map((library?.items || []).map((item) => [resultKey(item.result), item]));
   const rows = exportRows(selectedResults.length ? selectedResults : filteredResults, (source) => {
     const saved = bookmarks.get(resultKey(source));
     return { fetchedAt: savedView ? saved?.fetchedAt ?? null : fetchedAt[source.platform] ?? null,
       savedAt: saved?.savedAt ?? null, note: saved?.note ?? "" };
   });
-  const allSelected = filteredResults.length > 0 && selectedResults.length === filteredResults.length;
+  const selectableResults = filteredResults.filter(result => !result.question_answers);
+  const hasQuestions = filteredResults.some(result => result.question_answers);
+  const allSelected = selectableResults.length > 0 && selectableResults.every(result => selected.has(groupKey(result)));
   const selectClass = "field select";
 
   return (
@@ -253,7 +263,11 @@ export function ResultTabs({
       {exportOpen && <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-cyber-border-subtle bg-cyber-bg-secondary p-3">
         <div className="flex flex-wrap items-center gap-3 text-xs text-cyber-text-muted">
           <label className="flex items-center gap-1.5"><input type="checkbox" aria-label="选择当前全部结果" checked={allSelected}
-            disabled={!filteredResults.length} onChange={() => setSelected(allSelected ? new Set() : new Set(filteredResults.map(groupKey)))} />全选当前结果</label>
+            disabled={!selectableResults.length} onChange={() => setSelected(previous => {
+              const next = new Set(previous); for (const result of selectableResults) {
+                if (allSelected) next.delete(groupKey(result)); else next.add(groupKey(result));
+              } return next;
+            })} />{hasQuestions ? "全选普通结果（问题回答请单独选择）" : "全选当前结果"}</label>
           <span>{selectedResults.length ? `已选 ${selectedResults.length} 条` : "未勾选时导出当前全部结果"} · 导出 {rows.length} 个来源</span>
         </div>
         <ExportActions rows={rows} keyword={savedView ? "本地收藏" : keyword} />
@@ -269,13 +283,18 @@ export function ResultTabs({
           return (
             <div key={key} className={`${gridView ? "local-content-card" : "result-list-item"} ${selected.has(key) ? "is-selected" : ""}`}>
               {exportOpen && <div className="mb-1.5 flex items-center gap-2 px-1">
-                <label className="flex min-w-0 items-center gap-1.5 text-xs text-cyber-text-muted">
+                {result.question_answers ? <details className="zhihu-answer-selection"><summary>选择回答（不默认全选）</summary>
+                  {result.question_answers.map(answer => <label key={resultKey(answer)}><input type="checkbox" aria-label={`选择 ${answer.author || "作者未提供"} 的回答`} checked={selected.has(groupKey(answer))} onChange={() => setSelected(previous => {
+                    const next = new Set(previous); const answerKey = groupKey(answer); if (next.has(answerKey)) next.delete(answerKey); else next.add(answerKey); return next;
+                  })} />{answer.author || "作者未提供"} · {answer.metrics.like_count ?? "未知"} 赞</label>)}
+                </details> : <label className="flex min-w-0 items-center gap-1.5 text-xs text-cyber-text-muted">
                   <input type="checkbox" aria-label={`选择 ${result.title}`} checked={selected.has(key)} onChange={() => setSelected((previous) => {
                     const next = new Set(previous); if (next.has(key)) next.delete(key); else next.add(key); return next;
                   })} />选择
-                </label>
+                </label>}
               </div>}
-              {gridView ? <>
+              {result.question_answers ? <ZhihuQuestionCard result={result} grid={gridView} query={filters.query || keyword}
+                onOpen={() => setDetailResult(result)} canSave={!!library} canAdd={!!renderExtraActions} /> : gridView ? <>
                 <LocalContentCard result={result} highlightQuery={filters.query || keyword} onOpen={() => setDetailResult(result)} />
                 <div className="content-card-actions">
                   <span className="content-card-platform" title={resultSources(result).map((source) => PLATFORM_LABELS[source.platform]).join(" / ")}>
