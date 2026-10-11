@@ -15,6 +15,7 @@ from .reading_browser import reading_page, zhihu_page_detail, logger
 from .reading_media import reading_media
 from .reading_platforms import fetch_platform_reading, platform_reference
 from .acquisition_diagnostics import classify
+from aggregate_search.adapters.zhihu import search_reading_payload
 from .result_hydration import ResultHydrator
 
 MESSAGES = {
@@ -101,7 +102,30 @@ async def fetch_comments(kind, identity, url, platform):
 class ReadingService:
     def __init__(self):
         self.cache = OrderedDict()
+        self.search_bodies = OrderedDict()
         self.tasks = set()
+
+    def remember_search_body(self, payload, generation):
+        if generation != get_account_generation("zhihu") or not isinstance(payload, dict):
+            return
+        kind, identity = payload.get("content_type"), payload.get("content_id")
+        detail = payload.get("detail")
+        projected = search_reading_payload({**detail, "type": kind}) if isinstance(detail, dict) else None
+        if projected is None or projected["content_id"] != identity:
+            return
+        try:
+            value = reading_detail(projected["detail"], kind, identity)
+        except (ValueError, TypeError, KeyError, PermissionError):
+            return
+        if not any(block["type"] != "unsupported" for block in value["blocks"]):
+            return
+        value["limited"] = True
+        value["notices"].append("当前展示搜索接口已返回的正文，可能不完整，请结合原文查看。")
+        key = ("zhihu", generation, kind, identity)
+        self.search_bodies[key] = (time.monotonic(), value)
+        self.search_bodies.move_to_end(key)
+        while len(self.search_bodies) > 40:
+            self.search_bodies.popitem(last=False)
 
     async def read(self, kind, identity, url, refresh=False, platform="zhihu"):
         canonical = reading_reference(kind, identity, url) if platform == "zhihu" else platform_reference(platform, kind, identity, url)
@@ -118,6 +142,11 @@ class ReadingService:
         if not refresh and cached and time.monotonic() - cached[0] < 120:
             self.cache.move_to_end(key)
             return cached[1]
+        search_body = self.search_bodies.get(key)
+        if not refresh and search_body and time.monotonic() - search_body[0] < 120:
+            self.search_bodies.move_to_end(key)
+            logger.info("reader platform=zhihu stage=search_body outcome=ok")
+            return search_body[1]
         if not await operation_coordinator.acquire_exclusive("reading"):
             raise ReadingError("busy")
         task = None
@@ -157,6 +186,7 @@ class ReadingService:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
         self.cache.clear()
+        self.search_bodies.clear()
         reading_media.clear()
 
     async def comments(self, kind, identity, url, platform="zhihu"):

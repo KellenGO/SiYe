@@ -593,6 +593,13 @@ async def _run_zhihu_search(
         if not raw_objects:
             return
         results = adapter.adapt(raw_objects, keyword)
+        from aggregate_search.adapters.zhihu import search_reading_payload
+        from aggregate_search.protocol import emit_event
+        from aggregate_search.models import WorkerEvent
+        for item in raw_objects:
+            body = search_reading_payload(item)
+            if body is not None:
+                emit_event(WorkerEvent(event="reading_body", job_id=job_id, platform=platform, data=body))
         for r in results:
             dedup_key = f"{platform}:{r.content_id}"
             if dedup_key in seen_ids:
@@ -1135,10 +1142,13 @@ async def _dispatch_worker(
 async def run_worker(job_id, mode, platform, keyword, limit, session_snapshot=None,
                      fast_path=False, pagination=None, seen_ids=None, sync_mode=None):
     from aggregate_search.pagination import PageState, PaginationRun, current_pagination
+    from aggregate_search.protocol import emit_event
+    from aggregate_search.models import WorkerEvent
     run = None if pagination is None else PaginationRun(
         platform, keyword, limit, PageState.model_validate(pagination), seen_ids or [],
         lambda result: emit_result(job_id, platform, result),
-        lambda metrics: emit_metrics(job_id, platform, metrics))
+        lambda metrics: emit_metrics(job_id, platform, metrics),
+        reading_emit=lambda body: emit_event(WorkerEvent(event="reading_body", job_id=job_id, platform=platform, data=body)))
     token = current_pagination.set(run)
     try:
         await _dispatch_worker(job_id, mode, platform, keyword, limit, session_snapshot, fast_path, sync_mode)

@@ -55,6 +55,35 @@ from .base import BasePlatformAdapter
 ZHIHU_URL = "https://www.zhihu.com"
 ZHIHU_ZHUANLAN_URL = "https://zhuanlan.zhihu.com"
 
+SEARCH_BODY_MAX_CHARS = 128000
+SEARCH_BODY_FLAGS = (
+    "is_visible", "is_public", "can_read", "is_deleted", "is_hidden",
+    "is_paid", "is_premium", "is_truncated", "truncated", "content_truncated",
+    "is_limited", "has_more_content", "is_content_hidden",
+)
+
+
+def search_reading_payload(item: Dict) -> Optional[Dict]:
+    """Project only an already-returned body and its access markers for the local pipe."""
+    if not isinstance(item, dict) or item.get("type") not in ("answer", "article"):
+        return None
+    identity = str(item.get("id") or "")
+    content = item.get("content")
+    if not identity.isascii() or not identity.isdigit() or len(identity) > 30:
+        return None
+    if not isinstance(content, str) or not content.strip() or len(content) > SEARCH_BODY_MAX_CHARS:
+        return None
+    detail = {"id": identity, "content": content}
+    for key in SEARCH_BODY_FLAGS:
+        value = item.get(key)
+        if isinstance(value, (bool, int)) or isinstance(value, str) and len(value) <= 16:
+            detail[key] = value
+    paid = item.get("paid_info")
+    if isinstance(paid, dict):
+        detail["paid_info"] = {key: value for key, value in paid.items() if key in SEARCH_BODY_FLAGS
+                               and (isinstance(value, (bool, int)) or isinstance(value, str) and len(value) <= 16)}
+    return {"content_type": item["type"], "content_id": identity, "detail": detail}
+
 
 class ZhihuAdapter(BasePlatformAdapter):
     PLATFORM = "zhihu"

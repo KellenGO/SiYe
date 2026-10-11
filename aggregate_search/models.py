@@ -268,7 +268,7 @@ class WorkerRequest(BaseModel):
 class WorkerEvent(BaseModel):
     """Event emitted by worker on stdout (NDJSON with prefix)."""
 
-    event: Literal["status", "result", "done", "error", "metrics"]
+    event: Literal["status", "result", "done", "error", "metrics", "reading_body"]
     job_id: str
     platform: PlatformSlug
     data: Any = None

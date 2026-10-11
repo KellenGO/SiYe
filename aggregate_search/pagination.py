@@ -28,11 +28,12 @@ class PaginationRun:
     MAX_REQUESTS = 4
 
     def __init__(self, platform: str, keyword: str, limit: int, state: PageState,
-                 seen: list[str], emit: Callable, checkpoint: Callable):
+                 seen: list[str], emit: Callable, checkpoint: Callable, reading_emit: Callable = None):
         self.platform, self.keyword, self.limit = platform, keyword, limit
         self.state = state.model_copy(deep=True)
         self.seen = set(seen)
         self.emit, self.checkpoint = emit, checkpoint
+        self.reading_emit = reading_emit
         self.emitted = self.requests = self.duplicates = 0
         self.fetching = False
         self.started_at = time.perf_counter()
@@ -87,6 +88,12 @@ class PaginationRun:
                 self.first_api_ms = int((time.perf_counter() - self.started_at) * 1000)
             items, exhausted, next_offset, search_id = self.unpack(data)
             results = adapter.adapt(items, self.keyword)
+            if self.platform == "zhihu" and self.reading_emit is not None:
+                from .adapters.zhihu import search_reading_payload
+                for item in items:
+                    body = search_reading_payload(item)
+                    if body is not None:
+                        self.reading_emit(body)
             self.state.page += 1
             self.state.offset = next_offset
             self.state.search_id = search_id

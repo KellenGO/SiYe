@@ -645,6 +645,10 @@ class SearchJobManager:
                         job.add_result(platform, UnifiedSearchResult(**rd))
                     except Exception:
                         pass
+            elif event.event == "reading_body":
+                if platform == "zhihu" and not job._cancelled and not job._cancelling:
+                    from .reading import reading_service
+                    reading_service.remember_search_body(event.data, job.account_generations[platform])
             elif event.event == "error":
                 ed = event.data or {}
                 error_type = ed.get("type", "failed")
