@@ -575,6 +575,7 @@ events = [{"type": "delta", "text": "先看资料"},
           {"type": "delta", "text": "，再回答"},
           {"type": "delta_reset"},
           {"type": "delta", "text": "最终答案"},
+          {"type": "usage", "usage": {"prompt_tokens": 1200, "completion_tokens": 80, "total_tokens": 1280}, "context_tokens": 1200, "cost_usd": None},
           {"type": "done", "result": {"document": {"type": "doc", "content": []}}}]
 for event in events:
     print(json.dumps(event, ensure_ascii=False), flush=True)
@@ -584,6 +585,7 @@ for event in events:
     manager.jobs["job"] = job_record()
     result = await manager.process(manager.jobs["job"], {"mode": "analyze"})
     assert manager.jobs["job"]["partial"] == "最终答案"
+    assert manager.jobs["job"]["context_tokens"] == 1200
     assert manager.public("job")["partial"] == "最终答案"
     assert result["document"] == {"type": "doc", "content": []}
     manager.persist("job")
@@ -617,6 +619,19 @@ async def test_cancel_drops_partial_text(config):
     manager.jobs["job"]["partial"] = "写到一半"
     await manager.cancel("job")
     assert manager.jobs["job"]["status"] == "cancelled" and manager.jobs["job"]["partial"] == ""
+
+
+def test_config_keeps_reasoning_effort_until_cleared(config):
+    config.save("https://example.com", "model", "secret", "openai", "high")
+    assert config.public()["reasoning_effort"] == "high"
+    assert config.credentials()["reasoning_effort"] == "high"
+    config.save("https://example.com", "model", None, "openai", "")
+    assert config.public()["reasoning_effort"] == ""
+    assert "reasoning_effort" not in config.credentials()
+    config.save("https://example.com", "model", None, "openai")
+    assert config.public()["reasoning_effort"] == ""
+    with pytest.raises(ValueError):
+        config.save("https://example.com", "model", None, "openai", "max")
 
 
 def test_conversation_archive_flag_is_persisted_and_scoped_to_space(config, tmp_path):

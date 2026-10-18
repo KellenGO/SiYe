@@ -203,7 +203,7 @@ class ResearchJobs:
             "question": question, "web_enabled": web_enabled, "status": "collecting", "phase": "collecting",
             "message": "正在获取空间资料", "materials": [], "elapsed": 0.0, "error": "",
             "document": None, "partial": "", "activity": [], "coverage": [], "external_sources": [], "web_errors": [],
-            "usage": None, "cost_usd": None}
+            "usage": None, "cost_usd": None, "context_tokens": 0}
         if latest:
             self.jobs[identity].update(materials=copy.deepcopy(latest["materials"]), status="analyzing", phase="analyzing", message="正在继续分析当前会话资料")
         self.persist(identity)
@@ -278,6 +278,8 @@ class ResearchJobs:
                         job["activity"] = records[-40:]
                     elif kind == "usage":
                         job.update(usage=event.get("usage"), cost_usd=event.get("cost_usd"))
+                        if isinstance(event.get("context_tokens"), int):
+                            job["context_tokens"] = event["context_tokens"]
                     elif kind == "delta":
                         text = event.get("text")
                         if isinstance(text, str) and text:

@@ -53,6 +53,7 @@ class ConfigInput(BaseModel):
     base_url: str = Field(max_length=500)
     model: str = Field(min_length=1, max_length=200)
     api_key: str | None = Field(default=None, max_length=4096)
+    reasoning_effort: Literal["", "low", "medium", "high"] | None = None
 
 
 class WebInput(BaseModel):
@@ -88,7 +89,7 @@ async def config_save(payload: ConfigInput, config=Depends(get_research_config),
     if manager.active:
         raise HTTPException(409, "研究正在运行或等待确认，请先完成或取消后修改 AI 配置")
     try:
-        return config.save(payload.base_url, payload.model, payload.api_key, payload.protocol)
+        return config.save(payload.base_url, payload.model, payload.api_key, payload.protocol, payload.reasoning_effort)
     except ValueError as error:
         translate(error)
 

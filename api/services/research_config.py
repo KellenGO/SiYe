@@ -75,10 +75,11 @@ class ResearchConfig:
         with self.lock:
             data = self._load()
             return {"protocol": data.get("protocol", "anthropic"), "base_url": data["base_url"], "model": data["model"],
+                    "reasoning_effort": data.get("reasoning_effort", ""),
                     "has_key": bool(data.get("key")), "key_mask": "••••••••" if data.get("key") else "",
                     "runtime": runtime_status()}
 
-    def save(self, base_url, model, api_key=None, protocol="openai"):
+    def save(self, base_url, model, api_key=None, protocol="openai", reasoning_effort=None):
         base_url, model = base_url.strip().rstrip("/"), model.strip()
         if protocol not in {"openai", "anthropic"}:
             raise ValueError("请选择支持的 AI 接口协议")
@@ -99,6 +100,13 @@ class ResearchConfig:
             if not data.get("key"):
                 raise ValueError("请先填写 API Key")
             data.update(protocol=protocol, base_url=base_url, model=model)
+            if reasoning_effort is not None:
+                if reasoning_effort not in {"", "low", "medium", "high"}:
+                    raise ValueError("请选择支持的推理等级")
+                if reasoning_effort:
+                    data["reasoning_effort"] = reasoning_effort
+                else:
+                    data.pop("reasoning_effort", None)
             data.pop("web_check", None)
             self._write(data)
             return self.public()
@@ -108,8 +116,11 @@ class ResearchConfig:
             data = self._load()
             if not data.get("key") or not data.get("model"):
                 raise ValueError("请先配置 AI 服务")
-            return {"protocol": data.get("protocol", "anthropic"), "base_url": data["base_url"], "model": data["model"],
-                    "api_key": self.cipher(data["key"], decrypt=True)}
+            row = {"protocol": data.get("protocol", "anthropic"), "base_url": data["base_url"], "model": data["model"],
+                   "api_key": self.cipher(data["key"], decrypt=True)}
+            if data.get("reasoning_effort"):
+                row["reasoning_effort"] = data["reasoning_effort"]
+            return row
 
     def delete(self):
         with self.lock:
