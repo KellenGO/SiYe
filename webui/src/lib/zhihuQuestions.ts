@@ -37,15 +37,22 @@ export function mergeAnswers(known: readonly UnifiedSearchResult[], incoming: re
   return sortAnswers([...merged.values()]).slice(0, 100);
 }
 
+/** 搜索响应里可能夹带独立的问题对象；它没有可保存的正文，也不是具体回答。 */
+function isStandaloneQuestion(result: UnifiedSearchResult): boolean {
+  return result.platform === "zhihu" && result.content_type === "question" && !result.question_answers;
+}
+
 /** Question cards are a view of raw answers, separate from cross-platform grouping. */
 export function groupZhihuQuestions(results: readonly UnifiedSearchResult[]): UnifiedSearchResult[] {
   const output: UnifiedSearchResult[] = [];
   const questions = new Map<string, UnifiedSearchResult>();
   for (const result of results) {
+    if (isStandaloneQuestion(result)) continue;
     const sources = result.grouped_sources?.length ? result.grouped_sources : [result];
     const remaining: UnifiedSearchResult[] = [];
     for (const snapshot of sources) {
       const source: UnifiedSearchResult = { ...snapshot, grouped_sources: null };
+      if (isStandaloneQuestion(source)) continue;
       const question = questionOf(source);
       if (!question) { remaining.push(source); continue; }
       let card = questions.get(question.id);

@@ -388,5 +388,10 @@
     "retrySave": "Retry saving note",
     "appendSaveFailed": "Content was inserted into the draft, but saving failed. Retry saving; the preview is kept.",
     "draftInserted": "Inserted into the current draft but not saved yet. Retrying the save will not insert it twice."
+  },
+  "appError": {
+    "title": "The page could not be displayed",
+    "description": "Something went wrong while rendering. Reloading usually recovers it; if it keeps happening, restart SiYe.",
+    "reload": "Reload"
   }
 }

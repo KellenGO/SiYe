@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Check, Layers, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
@@ -14,9 +14,13 @@ export function SpaceAddButton({ result, showLabel = false }: { result: UnifiedS
   const detail = useSpaceDetail(spaces.activeId);
   const [pending, setPending] = useState(false);
   const pendingRef = useRef(false);
-  if (!spaces.activeId || !detail.data || detail.data.archived) return null;
+  // 搜索响应里可能混入不能持久化的卡片（例如知乎问题对象）。校验失败时
+  // 只是不给这个操作入口，不能让一次渲染异常把整个页面卸载成白屏。
+  const sources = useMemo(() => {
+    try { return spaceSources(result); } catch { return null; }
+  }, [result]);
+  if (!spaces.activeId || !detail.data || detail.data.archived || !sources?.length) return null;
   const id = spaces.activeId;
-  const sources = spaceSources(result);
   const present = new Set(detail.data.items.map((item) => item.key));
   const added = sources.every((source) => present.has(resultKey(source)));
   const label = t(added ? sources.length > 1 ? "spaces.removeVersions" : "spaces.removeMaterial" : sources.length > 1 ? "spaces.addVersions" : "spaces.add");

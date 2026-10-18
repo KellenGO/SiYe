@@ -69,6 +69,19 @@ test("拆开跨平台组时保留问题级指标", () => {
   assert.deepEqual(groupZhihuQuestions(expanded)[1].question, zhihu.question);
 });
 
+test("搜索响应里的独立问题对象不当作内容卡片", () => {
+  const question: UnifiedSearchResult = {
+    platform: "zhihu", content_type: "question", content_id: "2093997001205445814",
+    title: "搜索命中的问题", url: "https://api.zhihu.com/questions/2093997001205445814",
+    author: null, snippet: "问题摘要", published_at: null, cover_url: null, metrics: {}, rank: 0,
+  };
+  const mixed = { ...answer(), grouped_sources: [question, answer()] };
+  const cards = groupZhihuQuestions([question, mixed]);
+  assert.equal(cards.length, 1);
+  assert.equal(cards[0].content_type, "question");
+  assert.deepEqual(cards[0].question_answers?.map(row => row.content_id), ["42"]);
+});
+
 test("回答分页解码核对问题与游标，仅保留公开回答字段", () => {
   const raw = { question_id: "1", answers: [{ ...answer(), cookie: "private", content: "private body" }, answer("99", "2")], next_cursor: "a".repeat(32), exhausted: false, limit_reached: false };
   const page = decodeQuestionAnswers(raw, "1");

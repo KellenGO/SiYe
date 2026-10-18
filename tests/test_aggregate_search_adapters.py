@@ -445,6 +445,22 @@ class TestZhihuAdapter:
         assert r.url == "https://www.zhihu.com/zvideo/55667788"
         assert r.author == "Vlogger小陈"
 
+    def test_question_and_unknown_search_objects_are_not_content(self):
+        """search_v3 mixes question/person cards into data[].object; only content is adapted."""
+        adapter = ZhihuAdapter()
+        question = {
+            "id": "2093997001205445814",
+            "type": "question",
+            "title": "搜索命中的问题",
+            "url": "https://api.zhihu.com/questions/2093997001205445814",
+            "comment_count": 60,
+            "visits_count": 3583123,
+        }
+        unknown = {"id": "person-1", "type": "people", "title": "某用户"}
+        results = adapter.adapt([question, unknown, ZHIHU_ANSWER_FIXTURE])
+        assert [r.content_type for r in results] == ["answer"]
+        assert results[0].content_id == "9876543210"
+
     def test_author_member_wrapper(self):
         """Zhihu sometimes wraps author in a 'member' sub-object."""
         adapter = ZhihuAdapter()

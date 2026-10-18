@@ -55,6 +55,10 @@ from .base import BasePlatformAdapter
 ZHIHU_URL = "https://www.zhihu.com"
 ZHIHU_ZHUANLAN_URL = "https://zhuanlan.zhihu.com"
 
+# search_v3 的 data[].object 里除了内容还会混入问题、话题、用户等卡片。
+# 这些对象没有可阅读或可收藏的正文，不能当作搜索结果。
+SUPPORTED_CONTENT_TYPES = frozenset({"answer", "article", "zvideo"})
+
 SEARCH_BODY_MAX_CHARS = 128000
 SEARCH_BODY_FLAGS = (
     "is_visible", "is_public", "can_read", "is_deleted", "is_hidden",
@@ -96,7 +100,7 @@ class ZhihuAdapter(BasePlatformAdapter):
 
             content_type = self._safe_str(item.get("type"))
             content_id = self._safe_str(item.get("id"))
-            if not content_id:
+            if not content_id or content_type not in SUPPORTED_CONTENT_TYPES:
                 continue
 
             title = clean_title(self._safe_str(item.get("title")))
