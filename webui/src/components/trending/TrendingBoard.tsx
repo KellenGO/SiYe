@@ -23,10 +23,12 @@ interface TrendingBoardProps {
 }
 
 function formatUpdatedAt(activeTime: string | null, fetchedAt: string | null): string | null {
-  if (activeTime) return activeTime;
-  if (!fetchedAt) return null;
+  const value = activeTime ?? fetchedAt;
+  if (!value) return null;
   try {
-    return new Date(fetchedAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return null;
+    return date.toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
   } catch {
     return null;
   }
@@ -46,11 +48,8 @@ export function TrendingBoard({ onPick }: TrendingBoardProps) {
 
   const activeTab = tabs.find((tab) => tab.platform === active) ?? tabs[0];
   const info = activeTab ? snapshot?.platforms[activeTab.platform] : undefined;
-  const words = topWords(activeTab?.platform === "xhs" ? [] : info?.words ?? []);
-  const activeTime = snapshot
-    ? Object.values(snapshot.platforms).find((item) => item?.activeTime)?.activeTime ?? null
-    : null;
-  const updatedAt = formatUpdatedAt(activeTime, snapshot?.fetchedAt ?? null);
+  const words = topWords(info?.words ?? []);
+  const updatedAt = formatUpdatedAt(info?.activeTime ?? null, snapshot?.fetchedAt ?? null);
 
   return (
     <section className="panel trending-panel" aria-label={t("trending.title")}>
@@ -84,9 +83,9 @@ export function TrendingBoard({ onPick }: TrendingBoardProps) {
       </div>
 
       <div id="trending-panel-content" role="tabpanel" aria-labelledby={`trending-tab-${activeTab?.platform ?? "xhs"}`} className="trending-panel-body">
-        {activeTab?.platform !== "xhs" && loading && !snapshot && <p className="secondary text-[13px]">{t("trending.loading")}</p>}
-        {activeTab?.platform !== "xhs" && !loading && error && !snapshot && <p className="secondary text-[13px]">{t("trending.failed")}</p>}
-        {activeTab?.platform === "xhs" ? (
+        {loading && !snapshot && <p className="secondary text-[13px]">{t("trending.loading")}</p>}
+        {!loading && error && !snapshot && <p className="secondary text-[13px]">{t("trending.failed")}</p>}
+        {activeTab?.platform === "xhs" && info?.status === "unavailable" ? (
           <p className="secondary text-[13px]">{t("trending.xhsUnavailable")}</p>
         ) : snapshot && words.length === 0 && (
           <p className="secondary text-[13px]">
@@ -109,6 +108,14 @@ export function TrendingBoard({ onPick }: TrendingBoardProps) {
       </div>
 
       <p className="panel-footnote">
+        {info?.sourceName && <>
+          {info.sourceUrl ? (
+            <a className="text-link" href={info.sourceUrl} target="_blank" rel="noreferrer">
+              {t("trending.source", { name: info.sourceName })}
+            </a>
+          ) : t("trending.source", { name: info.sourceName })}
+          {"　·　"}
+        </>}
         {updatedAt ? t("trending.updatedAt", { time: updatedAt }) : t("trending.subtitle")}
         {words.length > 0 && `　·　${t("trending.pickHint")}`}
         {`　·　${t("trending.manualOnly")}`}

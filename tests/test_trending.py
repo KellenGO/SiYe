@@ -6,7 +6,7 @@
 """热搜词服务的边界测试。
 
 守住的几件事：
-- 三个平台各自的上游结构都能正确取词（B站用 show_name、知乎没有热度值）；
+- 四个平台各自的上游结构都能正确取词（小红书使用匿名第三方榜单并保留来源）；
 - 空词跳过、热度不是整数就留空（不猜、不补零），条数有上限；
 - 单平台失败不影响其它平台，错误只给安全文案（绝不回显上游异常文本）；
 - 缓存**不过期**：命中不再打上游，``bypass_cache`` 只跳过读取；
@@ -19,8 +19,12 @@ from __future__ import annotations
 
 import asyncio
 
+import httpx
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
+from api.routers.trending import trending_router
 from api.services import trending as svc
 
 
@@ -122,11 +126,107 @@ def test_zhihu_payload_has_words_without_heat(monkeypatch):
     assert all(w["hot_value"] is None for w in words)
 
 
-def test_xhs_stays_unavailable():
-    """小红书没有可用的公开入口，必须保持 unavailable 而不是 failed。"""
-    assert "xhs" not in svc._FETCHERS
+def test_unregistered_fetcher_is_unavailable(monkeypatch):
+    monkeypatch.delitem(svc._FETCHERS, "xhs")
     result = asyncio.run(svc.get_trending(["xhs"]))
     assert result["platforms"]["xhs"]["status"] == "unavailable"
+
+
+def test_xhs_public_payload_and_source_survive_api_response(monkeypatch):
+    calls = []
+
+    async def fake_get(url, params=None, headers=None):
+        assert url == svc.XHS_TRENDING_URL
+        assert params == {"type": "xiaohongshu"}
+        assert not headers
+        calls.append(1)
+        return {"type": "xiaohongshu", "update_time": "2026-10-18T07:02:09.011Z", "list": [
+            {"title": "小红书热词", "hot_value": "947.5w", "url": "https://unused.example/note"},
+            {"title": "  ", "hot_value": "1w"},
+            {"title": "没有热度", "hot_value": "热"},
+            "invalid",
+        ]}
+
+    monkeypatch.setattr(svc, "_get_json", fake_get)
+    app = FastAPI()
+    app.include_router(trending_router)
+    with TestClient(app) as client:
+        first = client.get("/api/trending?platforms=xhs")
+        assert first.status_code == 200
+        item = first.json()["platforms"]["xhs"]
+        assert item["status"] == "ok"
+        assert item["words"] == [
+            {"rank": 1, "word": "小红书热词", "hot_value": 9475000},
+            {"rank": 2, "word": "没有热度", "hot_value": None},
+        ]
+        assert item["active_time"] == "2026-10-18T07:02:09.011Z"
+        assert item["source_name"] == "UApiPro"
+        assert item["source_url"] == svc._SOURCE_METADATA["xhs"]["source_url"]
+        second = client.get("/api/trending?platforms=xhs").json()
+        assert second["cached"] is True
+        assert second["platforms"]["xhs"] == item
+        assert len(calls) == 1
+        client.get("/api/trending?platforms=xhs&refresh=true")
+        assert len(calls) == 2
+
+
+@pytest.mark.parametrize("raw, expected", [
+    ("947.5w", 9475000), ("886W", 8860000), ("3.4万", 34000),
+    ("1.2亿", 120000000), ("12345", 12345), (" 0 ", 0), (123, 123),
+    ("热", None), ("1.2", None), ("-1", None), ("NaN", None),
+    (True, None), (-1, None), (1.5, None), (None, None), ("9" * 100, None),
+])
+def test_xhs_heat_handles_observed_units_without_inventing_values(raw, expected):
+    assert svc._xhs_heat(raw) == expected
+
+
+@pytest.mark.parametrize("payload", [
+    [], {}, {"type": "weibo", "list": [{"title": "别的平台"}]},
+    {"type": "xiaohongshu", "list": {}},
+    {"type": "xiaohongshu", "list": []},
+    {"type": "xiaohongshu", "list": [{"title": " "}]},
+    {"type": "xiaohongshu", "code": "UPSTREAM_ERROR", "message": "private upstream details"},
+])
+def test_xhs_rejects_wrong_platform_empty_or_malformed_payloads(monkeypatch, payload):
+    async def fake_get(*args, **kwargs):
+        return payload
+
+    monkeypatch.setattr(svc, "_get_json", fake_get)
+    result = asyncio.run(svc.get_trending(["xhs"]))["platforms"]["xhs"]
+    assert result["status"] == "failed"
+    assert result["words"] == []
+    assert result["message"] == svc.FAILED_MESSAGE
+    assert result["source_name"] == "UApiPro"
+
+
+def test_xhs_http_request_is_anonymous_and_only_selects_platform(monkeypatch):
+    def respond(request):
+        assert request.url == httpx.URL(svc.XHS_TRENDING_URL + "?type=xiaohongshu")
+        assert "cookie" not in request.headers
+        assert "authorization" not in request.headers
+        assert "referer" not in request.headers
+        assert request.content == b""
+        return httpx.Response(200, json={"type": "xiaohongshu", "list": [{"title": "匿名榜单"}]})
+
+    original_client = httpx.AsyncClient
+    monkeypatch.setattr(svc.httpx, "AsyncClient", lambda **kwargs:
+                        original_client(transport=httpx.MockTransport(respond), **kwargs))
+    words, _ = asyncio.run(svc._fetch_xhs())
+    assert words[0]["word"] == "匿名榜单"
+
+
+def test_xhs_network_failure_does_not_hide_other_platforms(monkeypatch):
+    async def failed_get(*args, **kwargs):
+        raise httpx.ReadTimeout("private upstream details")
+
+    monkeypatch.setattr(svc, "_get_json", failed_get)
+    monkeypatch.setitem(svc._FETCHERS, "bilibili",
+                        _fetcher_returning([{"rank": 1, "word": "B站热词", "hot_value": 1}]))
+    result = asyncio.run(svc.get_trending(["xhs", "bilibili"]))["platforms"]
+    assert result["xhs"]["status"] == "failed"
+    assert result["xhs"]["message"] == svc.FAILED_MESSAGE
+    assert result["xhs"]["source_name"] == "UApiPro"
+    assert result["bilibili"]["status"] == "ok"
 
 
 # ── 取数 ────────────────────────────────────────────────────────────────
@@ -160,13 +260,13 @@ def test_success_is_cached_and_can_be_bypassed(monkeypatch):
 def test_all_platforms_are_fetched_together(monkeypatch):
     """一次请求就把登记的平台的都取回来（进软件时只获取一次）。"""
     calls = []
-    for platform in ("douyin", "bilibili", "zhihu"):
+    for platform in ("xhs", "douyin", "bilibili", "zhihu"):
         monkeypatch.setitem(svc._FETCHERS, platform,
                             _fetcher_returning([{"rank": 1, "word": platform, "hot_value": 1}], calls=calls))
     result = asyncio.run(svc.get_trending())
     assert set(result["platforms"]) == {"douyin", "bilibili", "zhihu", "xhs"}
-    assert result["platforms"]["xhs"]["status"] == "unavailable"
-    assert len(calls) == 3
+    assert result["platforms"]["xhs"]["status"] == "ok"
+    assert len(calls) == 4
 
 
 def test_failure_is_isolated_and_message_is_safe(monkeypatch):
@@ -192,6 +292,7 @@ def test_empty_payload_is_treated_as_failure(monkeypatch):
     assert result["platforms"]["douyin"]["status"] == "failed"
 
 
-def test_unknown_slugs_are_dropped():
+def test_unknown_slugs_are_dropped(monkeypatch):
+    monkeypatch.setitem(svc._FETCHERS, "douyin", _fetcher_returning([]))
     result = asyncio.run(svc.get_trending(["douyin", "../etc/passwd", "weibo"]))
     assert set(result["platforms"]) == {"douyin"}

@@ -72,16 +72,42 @@ test("标签页：四个平台都在，并标出谁有词", () => {
   assert.deepEqual(tabs.map((tab) => tab.status), ["unavailable", "ok", "failed", "ok"]);
 });
 
-test("还没拿到数据时小红书仍标暂不可用，其余标签为 missing", () => {
+test("还没拿到数据时所有标签均等待实际状态", () => {
   const tabs = trendingTabs(undefined);
   assert.equal(tabs.length, 4);
-  assert.equal(tabs[0].status, "unavailable");
-  assert.ok(tabs.slice(1).every((tab) => tab.status === "missing" && !tab.hasWords));
+  assert.ok(tabs.every((tab) => tab.status === "missing" && !tab.hasWords));
 });
 
-test("小红书能力边界不依赖单次响应状态", () => {
+test("小红书失败显示实际失败状态", () => {
   const tabs = trendingTabs(toTrendingSnapshot({ platforms: { xhs: { status: "failed", words: [] } } }));
-  assert.equal(tabs[0].status, "unavailable");
+  assert.equal(tabs[0].status, "failed");
+});
+
+test("小红书成功后展示词条、来源并可成为默认平台", () => {
+  const snapshot = toTrendingSnapshot({ platforms: { xhs: {
+    status: "ok", words: [{ rank: 1, word: "小红书热词", hot_value: 9475000 }],
+    active_time: "2026-10-18T07:02:09.011Z",
+    source_name: "UApiPro", source_url: "https://uapis.cn/docs/api-reference/get-misc-hotboard",
+  } } });
+  const tabs = trendingTabs(snapshot);
+  assert.equal(tabs[0].status, "ok");
+  assert.equal(tabs[0].hasWords, true);
+  assert.equal(initialTab(snapshot), "xhs");
+  assert.equal(snapshot.platforms.xhs?.words[0].word, "小红书热词");
+  assert.equal(snapshot.platforms.xhs?.sourceName, "UApiPro");
+  assert.equal(snapshot.platforms.xhs?.sourceUrl, "https://uapis.cn/docs/api-reference/get-misc-hotboard");
+  assert.equal(snapshot.platforms.xhs?.activeTime, "2026-10-18T07:02:09.011Z");
+});
+
+test("没有来源的旧响应仍兼容，来源链接拒绝脚本协议", () => {
+  const snapshot = toTrendingSnapshot({ platforms: {
+    douyin: { status: "ok", words: [] },
+    xhs: { status: "failed", words: [], source_name: "UApiPro", source_url: "javascript:alert(1)" },
+  } });
+  assert.equal(snapshot.platforms.douyin?.sourceName, null);
+  assert.equal(snapshot.platforms.douyin?.sourceUrl, null);
+  assert.equal(snapshot.platforms.xhs?.sourceName, "UApiPro");
+  assert.equal(snapshot.platforms.xhs?.sourceUrl, null);
 });
 
 test("默认选中第一个有词的平台", () => {

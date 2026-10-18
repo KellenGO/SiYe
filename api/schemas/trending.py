@@ -41,6 +41,8 @@ class PlatformTrending(BaseModel):
     words: List[TrendingWord] = Field(default_factory=list)
     active_time: Optional[str] = None
     message: Optional[str] = None
+    source_name: Optional[str] = None
+    source_url: Optional[str] = None
 
 
 class TrendingResponse(BaseModel):

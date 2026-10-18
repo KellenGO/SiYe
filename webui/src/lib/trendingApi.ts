@@ -35,6 +35,8 @@ export interface PlatformTrending {
   words: TrendingWord[];
   activeTime: string | null;
   message: string | null;
+  sourceName: string | null;
+  sourceUrl: string | null;
 }
 
 export interface TrendingSnapshot {
@@ -75,7 +77,7 @@ export function toTrendingWords(raw: unknown): TrendingWord[] {
 
 export function toPlatformTrending(raw: unknown): PlatformTrending {
   if (!isRecord(raw)) {
-    return { status: "failed", words: [], activeTime: null, message: null };
+    return { status: "failed", words: [], activeTime: null, message: null, sourceName: null, sourceUrl: null };
   }
   const status = STATUSES.includes(raw.status as PlatformTrendingStatus)
     ? (raw.status as PlatformTrendingStatus)
@@ -85,6 +87,8 @@ export function toPlatformTrending(raw: unknown): PlatformTrending {
     words: toTrendingWords(raw.words),
     activeTime: typeof raw.active_time === "string" ? raw.active_time : null,
     message: typeof raw.message === "string" ? raw.message : null,
+    sourceName: typeof raw.source_name === "string" ? raw.source_name : null,
+    sourceUrl: typeof raw.source_url === "string" && raw.source_url.startsWith("https://") ? raw.source_url : null,
   };
 }
 
@@ -107,8 +111,8 @@ export function trendingTabs(snapshot: TrendingSnapshot | undefined): TrendingTa
     const info = snapshot?.platforms[platform];
     return {
       platform,
-      status: platform === "xhs" ? "unavailable" : info?.status ?? "missing",
-      hasWords: platform !== "xhs" && (info?.words.length ?? 0) > 0,
+      status: info?.status ?? "missing",
+      hasWords: (info?.words.length ?? 0) > 0,
     };
   });
 }
