@@ -2318,7 +2318,7 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
 
 .result-row > .row-actions > button, .result-row > .row-actions > .relative > button { min-width: 40px; min-height: 40px; height: 40px; }
 .result-row > .row-actions > button > svg, .result-row > .row-actions > .relative > button > svg { width: 18px; height: 18px; }
-.space-ai-trigger { position: fixed; top: 76px; right: 16px; z-index: 38; background: var(--siye-bg); box-shadow: 0 3px 12px #172b3d12; }
+.space-ai-trigger { position: fixed; top: 128px; right: 16px; z-index: 38; background: var(--siye-bg); box-shadow: 0 3px 12px #172b3d12; }
 .space-ai-trigger svg { width: 16px; height: 16px; }
 .space-research-dialog { position: fixed; inset: 0 0 0 auto; margin: 0; width: var(--research-panel-width, 560px); max-width: none; height: 100dvh; max-height: none; padding: 0; border: 0; border-left: 1px solid var(--siye-line-strong); border-radius: 0; color: var(--siye-ink); background: var(--siye-bg); box-shadow: -8px 0 24px #172b3d0a; overflow: hidden; z-index: 45; }
 .space-research-dialog[open] { display: flex; }
