@@ -617,3 +617,23 @@ async def test_cancel_drops_partial_text(config):
     manager.jobs["job"]["partial"] = "写到一半"
     await manager.cancel("job")
     assert manager.jobs["job"]["status"] == "cancelled" and manager.jobs["job"]["partial"] == ""
+
+
+def test_conversation_archive_flag_is_persisted_and_scoped_to_space(config, tmp_path):
+    from api.services.research_history import ResearchHistory
+    root = tmp_path / "history"
+    manager = ResearchJobs(config)
+    manager.history_store = ResearchHistory(root)
+    for identity in ("a", "b"):
+        job = job_record(identity)
+        job.update(conversation_id="conv", status="ready")
+        manager.jobs[identity] = job
+    summary = manager.conversations(1)[0]
+    assert summary["turns"] == 2 and summary["archived"] is False
+    assert manager.archive_conversation(1, "conv", True) == {"id": "conv", "archived": True}
+    assert manager.conversations(1)[0]["archived"] is True
+    assert ResearchHistory(root).flags() == {"conv": True}
+    manager.archive_conversation(1, "conv", False)
+    assert ResearchHistory(root).flags() == {}
+    with pytest.raises(ValueError):
+        manager.archive_conversation(2, "conv", True)

@@ -66,6 +66,11 @@ class TaskInput(WebInput):
     conversation_id: str | None = Field(default=None, max_length=64)
 
 
+class ArchiveInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    archived: bool = True
+
+
 def translate(error):
     raise HTTPException(404 if isinstance(error, SpaceMissing) else 400, str(error)) from None
 
@@ -152,6 +157,16 @@ def conversation(space_id: int, conversation_id: str, store: SpacesStore = Depen
     try:
         store.get_space(space_id)
         return [manager.public(job["job_id"], store, job=job) for job in manager.conversation_jobs(space_id, conversation_id)]
+    except ValueError as error:
+        translate(error)
+
+
+@research_router.post("/spaces/{space_id}/conversations/{conversation_id}/archive")
+def archive_conversation(space_id: int, conversation_id: str, payload: ArchiveInput,
+                         store: SpacesStore = Depends(get_spaces_store), manager=Depends(get_research_jobs)):
+    try:
+        store.get_space(space_id)
+        return manager.archive_conversation(space_id, conversation_id, payload.archived)
     except ValueError as error:
         translate(error)
 

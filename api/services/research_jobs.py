@@ -150,15 +150,22 @@ class ResearchJobs:
     def conversations(self, space_id):
         records = {row["job_id"]: row for row in self.history_store.records(space_id)}
         records.update({job["job_id"]: self.history_store.summary(job) for job in list(self.jobs.values()) if job["space_id"] == space_id})
+        archived = self.history_store.flags()
         groups = {}
         for job in sorted(records.values(), key=lambda row: row["created_at"]):
             identity = job["conversation_id"]
             if identity not in groups:
-                groups[identity] = {"id": identity, "title": job["title"], "turns": 0}
-            groups[identity].update(status=job["status"], latest_job_id=job["job_id"])
+                groups[identity] = {"id": identity, "title": job["title"], "turns": 0, "archived": bool(archived.get(identity))}
+            groups[identity].update(status=job["status"], latest_job_id=job["job_id"],
+                                    archived=bool(archived.get(identity)))
             groups[identity]["turns"] += 1
             groups[identity] = groups.pop(identity)
         return list(reversed(list(groups.values())))
+
+    def archive_conversation(self, space_id, conversation_id, archived):
+        self.conversation_jobs(space_id, conversation_id)
+        self.history_store.set_archived(conversation_id, archived)
+        return {"id": conversation_id, "archived": bool(archived)}
 
     def latest(self, space_id, store=None):
         groups = self.conversations(space_id)

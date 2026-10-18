@@ -72,3 +72,24 @@ class ResearchHistory:
             for row in self.records(space_id):
                 self.path(row["job_id"]).unlink(missing_ok=True)
                 self.index.pop(row["job_id"], None)
+
+    def flags(self):
+        """Conversation-level flags live beside the records, not inside a job."""
+        try:
+            value = json.loads((self.root / "conversations.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+        return value if isinstance(value, dict) else {}
+
+    def set_archived(self, conversation_id, archived):
+        with self.lock:
+            flags = self.flags()
+            if archived:
+                flags[conversation_id] = True
+            else:
+                flags.pop(conversation_id, None)
+            self.root.mkdir(parents=True, exist_ok=True)
+            target = self.root / "conversations.json"
+            temporary = target.with_suffix(".tmp")
+            temporary.write_text(json.dumps(flags, ensure_ascii=False), encoding="utf-8")
+            temporary.replace(target)
