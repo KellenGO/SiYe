@@ -29,6 +29,7 @@ MAX_MEDIA_BYTES = 96 * 1024 * 1024
 MAX_SECONDS = 1800
 MAX_ENTRIES = 10000
 MAX_TEXT = 256000
+ASR_SECONDS = 360
 CACHE_SECONDS = 30 * 86400
 CACHE_BYTES = 32 * 1024 * 1024
 CACHE_FILES = 64
@@ -154,30 +155,15 @@ async def run_asr(executable, media, models, progress):
             "language": None, "max_seconds": MAX_SECONDS}) + "\n").encode("utf-8"))
         await proc.stdin.drain()
         proc.stdin.close()
-        result = None
-        async with asyncio.timeout(360):
-            async for line in proc.stdout:
-                event = json.loads(line)
-                if event.get("type") == "progress":
-                    # Fixed public messages; never reflect arbitrary worker text.
-                    messages = {"model": "正在准备 small 转写模型（首次使用按需下载）",
-                        "download": "首次使用：正在下载 small 转写模型", "decode": "正在提取音轨",
-                        "transcribe": "正在本地 AI 转写"}
-                    stage = event.get("stage")
-                    if stage in messages:
-                        progress(messages[stage])
-                elif event.get("type") == "done":
-                    result = event
-                elif event.get("type") == "error":
-                    reasons = {"duration": "音频超过 30 分钟转写上限", "model": "转写模型准备失败，请检查网络或可选组件",
-                        "unavailable": "本地转写组件不完整，请重新安装可选组件", "decode": "本地转写无法解码媒体音轨",
-                        "no_audio": "媒体流没有可读取音轨，保留正文和评论",
-                        "transcript": "本地转写引擎未能完成语音识别"}
-                    code = event.get("code") if event.get("code") in reasons else "worker"
-                    raise TranscriptionError(code, "decode" if code in {"duration", "no_audio"} else code, reasons.get(code, "本地转写进程失败，可重试"))
-            await proc.wait()
-            if proc.returncode or result is None:
-                raise ValueError("本地转写进程未能完成")
+        partial = []
+        try:
+            async with asyncio.timeout(ASR_SECONDS):
+                result = await read_asr_output(proc, progress, partial)
+        except TimeoutError:
+            if not partial:
+                raise
+            return {"entries": [row["entry"] for row in partial], "duration": partial[-1]["duration"],
+                    "language": partial[-1]["language"], "incomplete": True}
         return result
     finally:
         if handle is not None:
@@ -185,6 +171,45 @@ async def run_asr(executable, media, models, progress):
         await terminate_worker(proc)
         if drain:
             await asyncio.gather(drain, return_exceptions=True)
+
+
+async def read_asr_output(proc, progress, partial):
+    result, size, next_progress = None, 0, 0
+    async for line in proc.stdout:
+        event = json.loads(line)
+        if event.get("type") == "segment":
+            entries, limited = normalize_segments([event.get("entry")])
+            duration = float(event.get("duration", 0))
+            if not entries or limited or not math.isfinite(duration) or not entries[0]["end"] <= duration <= MAX_SECONDS:
+                continue
+            size += len(entries[0]["text"])
+            if len(partial) >= MAX_ENTRIES or size > MAX_TEXT:
+                continue
+            partial.append({"entry": entries[0], "duration": duration, "language": str(event.get("language") or "unknown")[:20]})
+            end = entries[0]["end"]
+            if end >= next_progress:
+                progress(f"正在本地 AI 转写（已处理 {int(end) // 60:02d}:{int(end) % 60:02d} / {int(duration) // 60:02d}:{int(duration) % 60:02d}）")
+                next_progress = end + 30
+        elif event.get("type") == "progress":
+            messages = {"model": "正在准备 small 转写模型（首次使用按需下载）",
+                "download": "首次使用：正在下载 small 转写模型", "decode": "正在提取音轨",
+                "transcribe": "正在本地 AI 转写"}
+            stage = event.get("stage")
+            if stage in messages:
+                progress(messages[stage])
+        elif event.get("type") == "done":
+            result = event
+        elif event.get("type") == "error":
+            reasons = {"duration": "音频超过 30 分钟转写上限", "model": "转写模型准备失败，请检查网络或可选组件",
+                "unavailable": "本地转写组件不完整，请重新安装可选组件", "decode": "本地转写无法解码媒体音轨",
+                "no_audio": "媒体流没有可读取音轨，保留正文和评论",
+                "transcript": "本地转写引擎未能完成语音识别"}
+            code = event.get("code") if event.get("code") in reasons else "worker"
+            raise TranscriptionError(code, "decode" if code in {"duration", "no_audio"} else code, reasons.get(code, "本地转写进程失败，可重试"))
+    await proc.wait()
+    if proc.returncode or result is None:
+        raise ValueError("本地转写进程未能完成")
+    return result
 
 
 class TranscriptionService:
@@ -260,11 +285,15 @@ class TranscriptionService:
             duration = float(output.get("duration", entries[-1]["end"]))
             if not math.isfinite(duration) or not 0 <= duration <= MAX_SECONDS:
                 raise ValueError("音频超过 30 分钟转写上限")
-            result = {"state": "ok", "text": "", "entries": entries, "reason": "转写内容达到上限" if limited else "",
+            incomplete = bool(output.get("incomplete"))
+            result = {"state": "failed" if incomplete else "ok", "text": "", "entries": entries,
+                "reason": "本地转写达到 6 分钟上限，已保留部分字幕，可重试" if incomplete else "转写内容达到上限" if limited else "",
                 "diagnostics": {"component": "subtitles", "stage": "transcribe", "provider": "local_asr", "fallback_attempted": False},
-                "truncated": limited, "metadata": {"source": "local_asr", "engine": "faster-whisper", "model": MODEL,
+                "truncated": limited or incomplete, "metadata": {"source": "local_asr", "engine": "faster-whisper", "model": MODEL,
                     "language": str(output.get("language") or "unknown")[:20], "duration": duration, "cached": False}}
-            if not limited:
+            if incomplete:
+                result["diagnostics"].update(safe_error_code="timeout")
+            if not limited and not incomplete:
                 self.save(identity, result)
             return result
         except TranscriptionError as error:

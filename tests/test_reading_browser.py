@@ -94,6 +94,17 @@ def official_page(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_raw_douyin_detail_keeps_media_in_the_borrowed_page(official_page):
+    page, handlers, closed = official_page
+    detail = {"aweme_id": "42", "desc": "正文", "video": {"play_addr": {"url_list": ["https://v.douyinvod.com/video.mp4"]}}}
+    async def evaluate(script, *args):
+        return {} if script == browser.PAGE_SIGNALS else detail
+    page.evaluate = evaluate
+    result = await browser.douyin_page_detail({}, "42", "video", page.url, page=page, raw=True)
+    assert result == detail and not closed and not page.closed and handlers == {}
+
+
+@pytest.mark.asyncio
 async def test_response_capture_checks_ids_sizes_stale_routes_and_cancels(official_page):
     page, handlers, closed = official_page
     pending = asyncio.Event()

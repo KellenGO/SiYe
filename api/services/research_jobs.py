@@ -20,7 +20,7 @@ from pathlib import Path
 from base.runtime_paths import application_root, library_data_root
 from .accounts import operation_coordinator, get_session_snapshot, ensure_session_snapshot
 from .research_config import research_config, runtime_status
-from .platform_materials import material
+from .platform_materials import material, body_from_reading
 from .acquisition_diagnostics import classify
 from .research_history import ResearchHistory
 from .worker_process import terminate_worker, windows_process_job
@@ -315,7 +315,9 @@ class ResearchJobs:
             preparation_started = time.monotonic()
             sessions = {}
             session_errors = {}
+            from .search_job_manager import search_job_manager
             for platform in {item["result"]["platform"] for item in job["snapshot"]["items"]}:
+                await search_job_manager.stop_platform_worker(platform)
                 sessions[platform] = get_session_snapshot(platform)
                 if platform in {"xhs", "zhihu", "bilibili"} and (
                         not sessions[platform] or platform == "zhihu" and not sessions[platform].get("d_c0")):
@@ -327,6 +329,20 @@ class ResearchJobs:
             job["elapsed"] += time.monotonic() - preparation_started
             previous = {row["key"]: row for row in job["materials"]}
             items = job["snapshot"]["items"]
+            from .reading import reading_service
+            for item in items:
+                source = item["result"]
+                if source["platform"] != "zhihu" or source.get("content_type") not in {"answer", "article"}:
+                    continue
+                if previous.get(item["key"], {}).get("body", {}).get("state") == "ok":
+                    continue
+                try:
+                    cached = reading_service.cached_zhihu_body(source["content_type"], source["content_id"], source["url"])
+                except ValueError:
+                    continue
+                if cached:
+                    row = previous.setdefault(item["key"], material(item))
+                    row["body"] = body_from_reading(cached)
             if retry:
                 items = [item for item in items if item["key"] not in previous or any(
                     previous[item["key"]][name]["state"] in {"missing", "failed", "restricted"} for name in ("body", "comments", "subtitles"))]

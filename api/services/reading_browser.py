@@ -8,7 +8,7 @@
 import asyncio
 import json
 import logging
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from urllib.parse import urlsplit
 
 from .accounts import platform_session_context
@@ -96,11 +96,13 @@ def current_douyin_route(url, identity):
         return False
 
 
-async def douyin_page_detail(snapshot, identity, kind, url):
+async def douyin_page_detail(snapshot, identity, kind, url, *, page=None, raw=False):
     from .reading_platforms import platform_detail
     script = resource_path("libs", "reading_douyin.js").read_text(encoding="utf-8")
     observer = resource_path("libs", "reading_douyin_response.js").read_text(encoding="utf-8")
-    async with reading_page("douyin", snapshot) as page:
+    async with AsyncExitStack() as owner:
+        if page is None:
+            page = await owner.enter_async_context(reading_page("douyin", snapshot))
         await page.add_init_script(script=f"({observer})({json.dumps(identity)});")
         captured = best = None
         tasks = set()
@@ -124,9 +126,9 @@ async def douyin_page_detail(snapshot, identity, kind, url):
                 detail = json.loads(body).get("aweme_detail")
                 value = await asyncio.to_thread(platform_detail, "douyin", kind, identity, detail)
                 if current_douyin_route(page.url, identity) and (value["blocks"] or value["media"]):
-                    best = value
+                    best = detail if raw else value
                     if value["media"] or any(row["type"] == "image" for row in value["blocks"]):
-                        captured = value
+                        captured = best
             except (ValueError, TypeError, KeyError):
                 return
             except Exception:
@@ -152,10 +154,10 @@ async def douyin_page_detail(snapshot, identity, kind, url):
                             try:
                                 value = await asyncio.to_thread(platform_detail, "douyin", kind, identity, detail)
                                 if value["blocks"] or value["media"]:
-                                    best = value
+                                    best = detail if raw else value
                                     if value["media"] or any(row["type"] == "image" for row in value["blocks"]):
                                         logger.info("reader platform=douyin stage=page_state outcome=ok")
-                                        return value
+                                        return best
                             except (ValueError, TypeError, KeyError):
                                 pass
                     await asyncio.sleep(0.45)

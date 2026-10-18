@@ -274,22 +274,68 @@ def test_worker_uses_cpu_int8_vad_lazy_model_and_auto_language(monkeypatch):
             assert name == "small" and kwargs["device"] == "cpu" and kwargs["compute_type"] == "int8"
             if kwargs.get("local_files_only"):
                 raise RuntimeError("model not yet downloaded")
+    class Pipeline:
+        def __init__(self, model):
+            assert isinstance(model, Model)
         def transcribe(self, audio, **kwargs):
             assert kwargs["vad_filter"] and kwargs["language"] is None
+            assert kwargs["batch_size"] == 4 and kwargs["beam_size"] == 1 and kwargs["best_of"] == 1
             return iter([SimpleNamespace(start=0, end=1, text=" 中文 ")]), SimpleNamespace(language="zh")
-    monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=Model))
+    monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=Model, BatchedInferencePipeline=Pipeline))
     monkeypatch.setattr(worker, "decode_bounded", lambda *args: [0] * 16000)
     monkeypatch.setattr(worker, "emit", events.append)
     result = worker.run({"media": "temporary", "models": "local", "model": "small", "max_seconds": 1800})
     assert result["entries"] == [{"start": 0, "end": 1, "text": "中文"}]
     assert result["duration"] == 1 and len(calls) == 2
-    assert [event["stage"] for event in events] == ["decode", "model", "download", "transcribe"]
+    assert [event["stage"] for event in events if event["type"] == "progress"] == ["decode", "model", "download", "transcribe"]
+    assert events[-1]["type"] == "segment" and events[-1]["entry"]["text"] == "中文"
 
 
 def test_asr_worker_environment_never_inherits_keys_cookies_or_pythonpath(monkeypatch):
     for name in ("SIYE_RESEARCH_API_KEY", "ANTHROPIC_API_KEY", "COOKIE", "HF_TOKEN", "PYTHONPATH", "HTTPS_PROXY"):
         monkeypatch.setenv(name, "secret")
     assert "secret" not in json.dumps(module.worker_environment())
+
+
+@pytest.mark.asyncio
+async def test_asr_timeout_keeps_partial_segments_and_terminates_process(monkeypatch, tmp_path):
+    worker = tmp_path / "worker.py"
+    worker.write_text('''import json,sys,time
+sys.stdin.readline()
+print(json.dumps({"type":"segment", "entry":{"start":0,"end":31,"text":"已识别语音"}, "duration":831, "language":"zh"},ensure_ascii=False),flush=True)
+time.sleep(60)
+''', encoding="utf-8")
+    monkeypatch.setattr(module, "resource_path", lambda *args: worker)
+    monkeypatch.setattr(module, "ASR_SECONDS", 1)
+    updates = []
+    result = await module.run_asr(sys.executable, tmp_path / "media", tmp_path / "models", updates.append)
+    assert result["incomplete"] and result["entries"][0]["text"] == "已识别语音"
+    assert result["duration"] == 831 and "00:31 / 13:51" in updates[-1]
+
+
+@pytest.mark.asyncio
+async def test_partial_transcript_remains_retryable_and_is_not_cached(monkeypatch, tmp_path):
+    service = module.TranscriptionService(tmp_path)
+    monkeypatch.setattr(module, "asr_python", lambda: "python")
+    async def download(url, target, referer):
+        target.write_bytes(b"media")
+    async def run(*args):
+        return {"entries": transcript()["entries"], "duration": 831, "language": "zh", "incomplete": True}
+    monkeypatch.setattr(module, "download_media", download)
+    monkeypatch.setattr(module, "run_asr", run)
+    result = await service.transcribe("partial", "https://cdn.example", "https://example.com")
+    assert result["state"] == "failed" and result["truncated"] and result["entries"]
+    assert result["diagnostics"]["safe_error_code"] == "timeout" and service.cached("partial") is None
+
+
+@pytest.mark.asyncio
+async def test_audio_resource_accepts_backup_addresses_and_alternate_xhs_streams():
+    collector = materials.MaterialCollector()
+    detail = {"video": {"media": {"stream": {"h264": [{"master_url": "", "backup_urls": ["https://cdn.example/audio"]}]}}}}
+    assert await collector.audio_resource(None, {"platform": "xhs"}, detail) == "https://cdn.example/audio"
+    detail["video"]["media"]["stream"] = {"h265": [{"master_url": "https://cdn.example/hevc"}]}
+    assert await collector.audio_resource(None, {"platform": "xhs"}, detail) == "https://cdn.example/hevc"
+    await collector.close()
 
 
 def test_comment_metrics_are_kept_without_extra_requests():

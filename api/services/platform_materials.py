@@ -26,6 +26,17 @@ def component(state="missing", text="", entries=None, reason=""):
     return {"state": state, "text": text, "entries": entries or [], "reason": reason, "truncated": False}
 
 
+def body_from_reading(value, provider="search_cache"):
+    text = "\n\n".join(row["text"] for row in value.get("blocks", [])
+                       if row.get("type") not in {"image", "unsupported"} and row.get("text"))
+    result = component("ok" if text else "missing", text=text,
+                       reason="；".join(value.get("notices", [])))
+    result["truncated"] = bool(value.get("limited"))
+    stage = {"browser": "detail_page", "session_api": "detail_api", "search_cache": "cache"}.get(provider, "search_body")
+    result["diagnostics"] = diagnostic("zhihu", "body", stage, provider=provider)
+    return bound_component(result)
+
+
 def bound_component(value):
     used = len(value["text"])
     limited = used > MAX_SECTION_CHARS
@@ -128,6 +139,8 @@ class MaterialCollector(ResultHydrator):
         self.browser_provider = ResearchBrowserProvider(self.browser_sessions, self.sessions)
         self.fallback_diagnostics = {}
         self.douyin_error = None
+        self.zhihu_searches = set()
+        self.zhihu_bodies = {}
         self.emit = emit
         self.transcription = TranscriptionService(temporary_root=workdir)
 
@@ -206,6 +219,49 @@ class MaterialCollector(ResultHydrator):
             return await self._get_zhihu(snapshot)
         return await self.douyin_client()
 
+    async def zhihu_search_body(self, client, source):
+        from aggregate_search.adapters.zhihu import search_reading_payload
+        from aggregate_search.models import clean_title, clean_snippet
+        from aggregate_search.worker import _ZHIHU_USER_AGENT
+        from .reading_content import reading_detail, reading_reference
+
+        kind, identity = source["content_type"], str(source["content_id"])
+        canonical = reading_reference(kind, identity, source["url"])
+        parts = urlsplit(canonical).path.strip("/").split("/")
+        question = parts[1] if len(parts) == 4 else None
+        queries = [(clean_title(source.get("title") or "") or "")[:200],
+                   (clean_snippet(source.get("snippet") or "") or "")[:80]]
+        client.default_headers.update({"user-agent": _ZHIHU_USER_AGENT, "priority": "u=1, i"})
+        for query in queries:
+            if (kind, identity) not in self.zhihu_bodies and query and query not in self.zhihu_searches:
+                self.zhihu_searches.add(query)
+                response = await self.request(client.get, "/api/v4/search_v3", {
+                    "gk_version": "gz-gaokao", "t": "general", "q": query, "correction": 1,
+                    "offset": 0, "limit": 20, "filter_fields": "", "lc_idx": 0,
+                    "show_all_topics": 0, "search_source": "Normal", "sort": ""})
+                if not isinstance(response, dict) or not isinstance(response.get("data"), list):
+                    raise AcquisitionError("malformed_response")
+                for row in response["data"][:20]:
+                    obj = row.get("object") if isinstance(row, dict) else None
+                    payload = search_reading_payload(obj)
+                    if payload:
+                        question_info = obj.get("question")
+                        question_id = str(question_info.get("id") or "") if isinstance(question_info, dict) else ""
+                        self.zhihu_bodies[(payload["content_type"], payload["content_id"])] = (
+                            question_id, payload["detail"])
+                        while len(self.zhihu_bodies) > 40:
+                            self.zhihu_bodies.pop(next(iter(self.zhihu_bodies)))
+            found = self.zhihu_bodies.get((kind, identity))
+            if found:
+                question_id, detail = found
+                if question and question_id != question:
+                    raise AcquisitionError("invalid_identity")
+                try:
+                    return body_from_reading(reading_detail(detail, kind, identity), "search_api")
+                except PermissionError:
+                    raise AcquisitionError("restricted") from None
+        return None
+
     async def collect(self, item, previous=None):
         self.fallback_diagnostics = {}
         result = material(item) if previous is None else previous
@@ -241,34 +297,38 @@ class MaterialCollector(ResultHydrator):
                                             (query.get("xsec_source") or ["pc_search"])[0], (query.get("xsec_token") or [""])[0])
                 body = clean_text(detail.get("desc") or detail.get("description"))
             elif platform == "douyin":
-                params = {"aweme_id": source["content_id"]}
-                try:
-                    response = await self.request(client.get, "/aweme/v1/web/aweme/detail/", dict(params))
-                except Exception as error:
-                    if classify(error)[0] not in {"malformed_response", "restricted"}:
-                        raise
-                    response = await self.browser_fallback(platform, "body", "detail_api", self.browser_provider.douyin_detail, client, params)
-                    result["body"]["diagnostics"] = diagnostic(platform, "body", "detail_api", provider="browser",
-                        fallback_attempted=True, fallback_outcome="succeeded")
-                self.check_douyin(response)
-                detail = response.get("aweme_detail")
-                if not isinstance(detail, dict) or not detail.get("aweme_id"):
+                detail = await self.browser_provider.douyin_detail(client, source)
+                if not isinstance(detail, dict) or str(detail.get("aweme_id")) != str(source["content_id"]):
                     raise AcquisitionError("malformed_response")
                 body = clean_text(detail.get("desc"))
+                result["body"]["diagnostics"] = diagnostic(platform, "body", "detail_page", provider="browser")
+            elif platform == "zhihu" and result["body"]["state"] == "ok":
+                body = result["body"]["text"]
             else:
                 kind, identity = source.get("content_type"), source["content_id"]
                 if kind not in {"answer", "article", "zvideo"} or not str(identity).isdigit():
                     raise AcquisitionError("invalid_identity")
+                if kind in {"answer", "article"}:
+                    from .reading_content import reading_reference
+                    try:
+                        reading_reference(kind, str(identity), source["url"])
+                    except ValueError:
+                        raise AcquisitionError("invalid_identity") from None
                 if kind == "answer":
                     parts = urlsplit(source["url"]).path.strip("/").split("/")
-                    if len(parts) != 4 or parts[0] != "question" or parts[-2] != "answer" or parts[-1] != str(identity) or not parts[1].isdigit():
-                        raise AcquisitionError("invalid_identity")
-                    detail = await self.request(client.get_answer_info, parts[-3], identity)
+                    if len(parts) == 4:
+                        detail = await self.request(client.get_answer_info, parts[1], identity)
+                    else:
+                        from .reading_content import reading_detail
+                        raw = await self.request(client.get, f"/api/v4/answers/{identity}", {"include": "content"})
+                        result["body"] = body_from_reading(reading_detail(raw, kind, str(identity)), "session_api")
+                        body = result["body"]["text"]
                 else:
                     detail = await self.request(client.get_article_info if kind == "article" else client.get_video_info, identity)
-                if detail is None:
+                if detail is None and result["body"]["state"] != "ok":
                     raise AcquisitionError("malformed_response")
-                body = clean_text(detail.content_text or detail.desc) if detail else ""
+                if detail:
+                    body = clean_text(detail.content_text or detail.desc)
             if result["body"]["state"] != "ok":
                 diagnostics = result["body"].get("diagnostics")
                 result["body"] = component("ok" if body else "missing", text=body, reason="" if body else "原帖未返回正文")
@@ -278,13 +338,21 @@ class MaterialCollector(ResultHydrator):
                 result["body"] = failure(error, platform, "body", "detail_api")
                 if platform == "zhihu" and classify(error)[0] in {"restricted", "malformed_response"}:
                     try:
-                        detail = await self.browser_fallback(platform, "body", "detail_page", self.browser_provider.zhihu_detail, client, source)
-                        body = clean_text(detail.content_text or detail.desc)
-                        result["body"] = component("ok" if body else "missing", text=body)
+                        recovered = await self.zhihu_search_body(client, source) if source["content_type"] in {"answer", "article"} else None
+                        if recovered and recovered["state"] == "ok":
+                            result["body"] = recovered
+                        else:
+                            detail = await self.browser_fallback(platform, "body", "detail_page", self.browser_provider.zhihu_detail, client, source)
+                            if isinstance(detail, dict):
+                                result["body"] = body_from_reading(detail, "browser")
+                            else:
+                                body = clean_text(detail.content_text or detail.desc)
+                                result["body"] = component("ok" if body else "missing", text=body)
                     except Exception as fallback_error:
                         result["body"] = failure(fallback_error, platform, "body", "detail_page")
                     result["body"]["diagnostics"] = {**result["body"].get("diagnostics", {}),
-                        **diagnostic(platform, "body", "detail_page", provider="browser", fallback_attempted=True,
+                        **diagnostic(platform, "body", result["body"].get("diagnostics", {}).get("stage", "detail_page"),
+                            provider=result["body"].get("diagnostics", {}).get("provider", "browser"), fallback_attempted=True,
                             fallback_outcome="succeeded" if result["body"]["state"] == "ok" else "failed")}
         previous_components = {name: result[name] for name in ("comments", "subtitles")}
         if result["comments"]["state"] != "ok":
@@ -308,7 +376,9 @@ class MaterialCollector(ResultHydrator):
             for name in ("body", "comments", "subtitles"):
                 bound_component(result[name])
             self.emit({"type": "material", "material": result})
-            if not result["subtitles"]["entries"] and not previous_components["subtitles"]["entries"]:
+            previous_native = (previous_components["subtitles"]["entries"] and
+                               previous_components["subtitles"].get("metadata", {}).get("source") != "local_asr")
+            if not result["subtitles"]["entries"] and not previous_native:
                 native = dict(result["subtitles"])
                 try:
                     result["subtitles"] = await self.transcribe_subtitles(client, source, detail, result)
@@ -387,7 +457,7 @@ class MaterialCollector(ResultHydrator):
             rows = sorted((row for row in rows if isinstance(row, dict)), key=lambda row: row.get("bandwidth") or 0)
         elif platform == "xhs" and isinstance(video, dict):
             streams = ((video.get("media") or {}).get("stream") or {})
-            rows = streams.get("audio") or streams.get("h264") or []
+            rows = [row for codec in ("audio", "h264", "h265", "av1") for row in streams.get(codec) or []]
             rows = sorted((row for row in rows if isinstance(row, dict)), key=lambda row: row.get("avg_bitrate") or 0)
         elif platform == "douyin" and isinstance(video, dict):
             # music.play_url is background music, not the speech track of the post.
@@ -397,9 +467,16 @@ class MaterialCollector(ResultHydrator):
                 row.get("bit_rate") if isinstance(row.get("bit_rate"), (int, float)) else math.inf))
             rows = [video.get("audio") or {}] + [row["play_addr"] for row in variants] + [video.get("play_addr") or {}]
         for row in rows:
-            url = row.get("baseUrl") or row.get("base_url") or row.get("master_url") or next(iter(row.get("url_list") or []), None)
-            if isinstance(url, str) and url:
-                return "https:" + url if url.startswith("//") else url
+            candidates = [row.get(key) for key in ("baseUrl", "base_url", "master_url")]
+            for key in ("url_list", "backup_urls", "backupUrl", "backup_url"):
+                urls = row.get(key)
+                if isinstance(urls, str):
+                    candidates.append(urls)
+                elif isinstance(urls, list):
+                    candidates.extend(urls)
+            for url in candidates:
+                if isinstance(url, str) and url:
+                    return "https:" + url if url.startswith("//") else url
         return None
 
     async def bilibili_player(self, client, uri, params):

@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -52,18 +53,19 @@ def run(payload):
     emit({"type": "progress", "stage": "model"})
     try:
         model = engine.WhisperModel(payload["model"], device="cpu", compute_type="int8",
-            cpu_threads=4, num_workers=1, download_root=payload["models"], local_files_only=True)
+            cpu_threads=min(8, os.cpu_count() or 4), num_workers=1, download_root=payload["models"], local_files_only=True)
     except Exception:
         emit({"type": "progress", "stage": "download"})
         try:
             model = engine.WhisperModel(payload["model"], device="cpu", compute_type="int8",
-                cpu_threads=4, num_workers=1, download_root=payload["models"])
+                cpu_threads=min(8, os.cpu_count() or 4), num_workers=1, download_root=payload["models"])
         except Exception:
             raise ValueError("model") from None
     emit({"type": "progress", "stage": "transcribe"})
     try:
-        segments, info = model.transcribe(audio, language=payload.get("language"), vad_filter=True,
-            initial_prompt="以下可能包含中文语音。", beam_size=5)
+        pipeline = engine.BatchedInferencePipeline(model=model)
+        segments, info = pipeline.transcribe(audio, language=payload.get("language"), vad_filter=True,
+            initial_prompt="以下可能包含中文语音。", beam_size=1, best_of=1, batch_size=4)
         entries, size = [], 0
         for segment in segments:
             text = segment.text.strip()
@@ -73,6 +75,8 @@ def run(payload):
             if len(entries) >= 10000 or size > 256000:
                 raise ValueError("transcript_limit")
             entries.append({"start": segment.start, "end": segment.end, "text": text})
+            emit({"type": "segment", "entry": entries[-1], "duration": len(audio) / 16000,
+                  "language": info.language})
     except Exception:
         raise ValueError("transcript") from None
     return {"type": "done", "entries": entries, "language": info.language, "duration": len(audio) / 16000}

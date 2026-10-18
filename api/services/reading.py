@@ -109,6 +109,11 @@ class ReadingService:
         self.questions = {}
         self.tasks = set()
 
+    def cached_zhihu_body(self, kind, identity, url):
+        reading_reference(kind, identity, url)
+        row = self.search_bodies.get(("zhihu", get_account_generation("zhihu"), kind, identity))
+        return row[1] if row else None
+
     def remember_search_body(self, payload, generation):
         if generation != get_account_generation("zhihu") or not isinstance(payload, dict):
             return

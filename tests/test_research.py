@@ -138,6 +138,40 @@ async def test_jobs_gap_confirmation_retry_cancel_and_snapshot(config, monkeypat
     assert manager.get(next_job["job_id"])["status"] == "cancelled" and manager.active is None
 
 
+@pytest.mark.asyncio
+async def test_collection_receives_account_scoped_reading_body_and_releases_idle_worker(config, monkeypatch):
+    from unittest.mock import AsyncMock
+    from api.services import research_jobs as jobs, reading
+    from api.services.search_job_manager import search_job_manager
+    service = reading.ReadingService()
+    payload = {"content_type": "answer", "content_id": "42", "detail": {"id": "42", "content": "<p>搜索已取得正文</p>"}}
+    service.remember_search_body(payload, reading.get_account_generation("zhihu"))
+    monkeypatch.setattr(reading, "reading_service", service)
+    monkeypatch.setattr(jobs, "get_session_snapshot", lambda _: {"d_c0": "fake"})
+    stopped = AsyncMock()
+    monkeypatch.setattr(search_job_manager, "stop_platform_worker", stopped)
+    item = {"key": "zhihu|42", "result": {"platform": "zhihu", "content_type": "answer", "content_id": "42",
+        "title": "问题", "url": "https://www.zhihu.com/question/1/answer/42"}}
+    manager = ResearchJobs(config)
+    monkeypatch.setattr(manager, "require_runtime", lambda: None)
+    captured = []
+    async def process(job, request, credentials=None):
+        captured.append(request)
+        job["materials"] = list(request["previous"].values())
+    monkeypatch.setattr(manager, "process", process)
+    job = await manager.create({"id": 1, "name": "问题", "description": "", "archived": False, "items": [item]}, "", False)
+    await manager.tasks[job["job_id"]]
+    body = captured[0]["previous"]["zhihu|42"]["body"]
+    assert body["text"] == "搜索已取得正文" and body["diagnostics"]["provider"] == "search_cache"
+    stopped.assert_awaited_once_with("zhihu")
+    generation = reading.get_account_generation("zhihu")
+    monkeypatch.setattr(reading, "get_account_generation", lambda _: generation + 1)
+    assert service.cached_zhihu_body("answer", "42", item["result"]["url"]) is None
+    service.invalidate("zhihu")
+    assert service.cached_zhihu_body("answer", "42", item["result"]["url"]) is None
+    await manager.cancel(job["job_id"])
+
+
 def test_task_environment_does_not_inherit_claude_settings(monkeypatch, tmp_path):
     monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "subscription-secret")
     monkeypatch.setenv("CLAUDE_CODE_USE_BEDROCK", "1")

@@ -10,6 +10,7 @@
 |---|---|
 | 本机阅读接口、关闭请求取消 | `api/routers/reading.py` 的 `read_detail` |
 | 会话复用、获取与运行期／短时缓存 | `api/services/reading.py` 的 `ReadingService`、`fetch_reading` |
+| AI 采集复用本次已取得的知乎正文 | `api/services/reading.py` 的 `ReadingService.cached_zhihu_body`；`api/services/research_jobs.py` 的 `ResearchJobs.collect` |
 | 知乎搜索已返回正文的私有传递与复用 | `aggregate_search/adapters/zhihu.py` 的 `search_reading_payload`；`aggregate_search/pagination.py` 的 `PaginationRun.run`；`aggregate_search/worker.py` 的 `_run_zhihu_search`、`run_worker`；`api/services/search_job_manager.py` 的 `_read_worker_output`；`api/services/reading.py` 的 `ReadingService.remember_search_body` |
 | 知乎问题下的回答发现与选择 | `api/services/reading_zhihu_questions.py` 的 `fetch_question_page`、`question_page`；`api/services/reading.py` 的 `ReadingService.question_answers`；`webui/src/hooks/useZhihuAnswers.ts`；`webui/src/components/favorites/LocalContentDrawer.tsx` |
 | 正文分块、受限状态与图片来源检查 | `api/services/reading_content.py` 的 `reading_detail`、`detail_from_page` |
@@ -25,6 +26,7 @@
 ## 关键决定
 
 - 平台资料、浏览器会话和公开地址检查属于基础程序的共享能力，未安装或关闭 AI 扩展仍可站内阅读。
+- 研究采集可读取同账号本次运行已保留的知乎正文，不额外触发阅读请求或启动第二个浏览器；抖音研究与阅读共用匹配内容的官方页面取数。阅读入口仍按需加载，不因共享能力而自动抓取评论或启动语音识别。
 
 - 参照 [OpenScope](https://github.com/metaMMY07/OpenScope) 的「平台取数与自身展示分离」思路，在现有 React 详情面板增加阅读能力，不引入 Flutter、播放器框架或新的依赖。取舍见[站内阅读从知乎开始](../decisions/2026-10-10-站内阅读从知乎开始.md)。
 - 可信且身份匹配的上述内容在列表中点击标题或封面进入阅读；网格沿用详情入口。搜索、收藏、历史及空间资料共用同一详情面板。其它内容保持已有信息展示与原文入口。

@@ -39,7 +39,7 @@ class ResearchBrowserProvider:
         self.xhs_error = None
         self.xhs_presence = {}
 
-    async def page(self, platform, client):
+    async def page(self, platform, client, *, navigate=True):
         if platform in self.page_errors:
             raise self.page_errors[platform]
         if platform not in self.pages:
@@ -49,7 +49,7 @@ class ResearchBrowserProvider:
                 context = await owner.enter_async_context(platform_session_context(platform, self.sessions.get(platform)))
                 await install_light_page_routes(context)
                 page = await context.new_page()
-                response = await page.goto(PLATFORM_HOME_URLS[platform], **light_goto_kwargs())
+                response = await page.goto(PLATFORM_HOME_URLS[platform], **light_goto_kwargs()) if navigate else None
                 if response is not None and response.status in {401, 403, 429, 461, 471}:
                     raise AcquisitionError("session_expired" if response.status == 401 else
                         "restricted" if response.status == 403 else "rate_limited", response.status)
@@ -136,27 +136,27 @@ class ResearchBrowserProvider:
             if status is not None:
                 result["diagnostics"]["primary_http_status"] = status
 
-    async def douyin_detail(self, client, params):
-        # The client supplies the same bounded signing path used by Search.
-        return await browser_json(client.playwright_page, await client.prepare_browser_detail(params), {})
+    async def douyin_detail(self, client, source):
+        from .reading_browser import douyin_page_detail
+        from .reading_platforms import platform_reference
+        identity, kind = str(source["content_id"]), source["content_type"]
+        url = platform_reference("douyin", kind, identity, source["url"])
+        return await douyin_page_detail(self.sessions.get("douyin"), identity, kind, url,
+                                       page=client.playwright_page, raw=True)
 
     async def zhihu_detail(self, client, source):
-        page = await self.page("zhihu", client)
+        from .reading_browser import zhihu_page_detail
+        from .reading_content import reading_reference
         kind, identity = source["content_type"], str(source["content_id"])
         if not identity.isdigit() or kind not in {"answer", "article", "zvideo"}:
             raise AcquisitionError("malformed_response")
-        if kind == "answer":
-            parts = urlsplit(source["url"]).path.strip("/").split("/")
-            if len(parts) != 4 or parts[0] != "question" or not parts[1].isdigit() or parts[2:] != ["answer", identity]:
-                raise AcquisitionError("malformed_response")
-            url = "https://www.zhihu.com/question/" + parts[1] + "/answer/" + identity
-            extract = client._extractor.extract_answer_content_from_html
-        elif kind == "article":
-            url = "https://zhuanlan.zhihu.com/p/" + identity
-            extract = client._extractor.extract_article_content_from_html
-        else:
-            url = "https://www.zhihu.com/zvideo/" + identity
-            extract = client._extractor.extract_zvideo_content_from_html
+        if kind in {"answer", "article"}:
+            url = reading_reference(kind, identity, source["url"])
+            page = await self.page("zhihu", client, navigate=False)
+            return await zhihu_page_detail(page, kind, identity, url)
+        page = await self.page("zhihu", client, navigate=False)
+        url = "https://www.zhihu.com/zvideo/" + identity
+        extract = client._extractor.extract_zvideo_content_from_html
         response = await page.goto(url, wait_until="domcontentloaded", timeout=20000)
         if response is not None and response.status in {401, 403, 429}:
             raise AcquisitionError("session_expired" if response.status == 401 else "restricted", response.status)

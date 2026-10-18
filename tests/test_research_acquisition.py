@@ -268,3 +268,125 @@ async def test_expired_douyin_profile_is_closed_before_next_material(monkeypatch
         assert context.closed and not accounts._profile_lock("douyin").locked()
     await collector.close()
     assert calls == ["douyin"] and context.close_count == 1
+
+
+@pytest.mark.asyncio
+async def test_zhihu_search_fallback_requires_exact_identity_and_access_flags(monkeypatch):
+    collector = materials.MaterialCollector()
+    calls = []
+    source = {"content_type": "answer", "content_id": "42", "title": "原问题", "snippet": "独特摘要",
+              "url": "https://www.zhihu.com/question/1/answer/42"}
+    class Client:
+        default_headers = {}
+        async def get(self, path, params):
+            calls.append(params)
+            assert path == "/api/v4/search_v3" and params["sort"] == ""
+            obj = {"id": "99" if len(calls) == 1 else "42", "type": "answer", "question": {"id": "1"},
+                   "content": "<p>原回答正文</p><script>秘密脚本</script>", "is_truncated": True}
+            return {"data": [{"object": obj}]}
+    async def direct(method, *args, **kwargs):
+        return await method(*args, **kwargs)
+    monkeypatch.setattr(collector, "request", direct)
+    result = await collector.zhihu_search_body(Client(), source)
+    assert result["text"] == "原回答正文" and result["truncated"]
+    assert result["diagnostics"]["provider"] == "search_api"
+    assert [p["q"] for p in calls] == ["原问题", "独特摘要"]
+    assert await collector.zhihu_search_body(Client(), source) == result and len(calls) == 2
+    collector.zhihu_bodies[("answer", "42")][1]["can_read"] = False
+    with pytest.raises(AcquisitionError) as error:
+        await collector.zhihu_search_body(Client(), source)
+    assert error.value.safe_code == "restricted"
+    source["url"] = "https://www.zhihu.com/question/2/answer/42"
+    with pytest.raises(AcquisitionError) as error:
+        await collector.zhihu_search_body(Client(), source)
+    assert error.value.safe_code == "invalid_identity"
+    await collector.close()
+
+
+@pytest.mark.asyncio
+async def test_zhihu_search_excerpt_never_becomes_body(monkeypatch):
+    collector = materials.MaterialCollector()
+    class Client:
+        default_headers = {}
+        async def get(self, *args):
+            return {"data": [{"object": {"type": "answer", "id": "42", "excerpt": "只有摘要"}}]}
+    async def direct(method, *args):
+        return await method(*args)
+    monkeypatch.setattr(collector, "request", direct)
+    result = await collector.zhihu_search_body(Client(), {"content_type": "answer", "content_id": "42",
+        "title": "问题", "url": "https://www.zhihu.com/answer/42"})
+    assert result is None
+    await collector.close()
+
+
+@pytest.mark.asyncio
+async def test_collector_recovers_restricted_zhihu_body_then_reuses_it(monkeypatch):
+    collector = materials.MaterialCollector()
+    requests = []
+    class Client:
+        default_headers = {}
+        async def get_answer_info(self, *args):
+            requests.append("detail")
+            raise AcquisitionError("restricted", 403)
+        async def get(self, *args):
+            requests.append("search")
+            return {"data": [{"object": {"type": "answer", "id": "42", "question": {"id": "1"}, "content": "<p>精确回答</p>"}}]}
+    async def client(_):
+        return Client()
+    async def comments(*args):
+        return materials.component("ok")
+    async def direct(method, *args):
+        return await method(*args)
+    monkeypatch.setattr(collector, "client", client)
+    monkeypatch.setattr(collector, "comments", comments)
+    monkeypatch.setattr(collector, "request", direct)
+    item = {"key": "zhihu|42", "result": {"platform": "zhihu", "content_type": "answer", "content_id": "42",
+        "title": "问题", "url": "https://www.zhihu.com/question/1/answer/42"}}
+    result = await collector.collect(item)
+    assert result["body"]["text"] == "精确回答" and result["body"]["diagnostics"]["fallback_outcome"] == "succeeded"
+    assert requests == ["detail", "search"]
+    await collector.collect(item, result)
+    assert requests == ["detail", "search"]
+    await collector.close()
+
+
+@pytest.mark.asyncio
+async def test_douyin_collector_uses_official_page_detail_for_body_and_audio(monkeypatch):
+    collector = materials.MaterialCollector()
+    source = {"key": "douyin|42", "result": {"platform": "douyin", "content_type": "video", "content_id": "42",
+        "title": "视频", "url": "https://www.douyin.com/video/42"}}
+    calls = []
+    client = object()
+    async def get_client(platform):
+        return client
+    async def page_detail(actual_client, actual_source):
+        assert actual_client is client and actual_source == source["result"]
+        calls.append("page")
+        return {"aweme_id": "42", "desc": "官方页面正文", "video": {"play_addr": {"url_list": ["https://cdn.example/speech"]}}}
+    async def comments(*args):
+        return materials.component("ok")
+    async def subtitles(actual_client, actual_source, detail):
+        assert await collector.audio_resource(actual_client, actual_source, detail) == "https://cdn.example/speech"
+        return materials.component("ok", entries=[{"start": 0, "end": 1, "text": "字幕"}])
+    monkeypatch.setattr(collector, "client", get_client)
+    monkeypatch.setattr(collector.browser_provider, "douyin_detail", page_detail)
+    monkeypatch.setattr(collector, "comments", comments)
+    monkeypatch.setattr(collector, "subtitles", subtitles)
+    result = await collector.collect(source)
+    assert result["body"]["text"] == "官方页面正文" and calls == ["page"]
+    assert result["subtitles"]["state"] == "ok"
+    await collector.close()
+
+
+@pytest.mark.asyncio
+async def test_douyin_adapter_reuses_current_page_instead_of_opening_profile(monkeypatch):
+    from api.services import reading_browser
+    provider = ResearchBrowserProvider(AsyncExitStack(), {})
+    page = FakePage()
+    async def detail(snapshot, identity, kind, url, **kwargs):
+        assert kwargs == {"page": page, "raw": True} and identity == "42"
+        return {"aweme_id": "42"}
+    monkeypatch.setattr(reading_browser, "douyin_page_detail", detail)
+    result = await provider.douyin_detail(SimpleNamespace(playwright_page=page),
+        {"content_type": "video", "content_id": "42", "url": "https://www.douyin.com/video/42"})
+    assert result["aweme_id"] == "42"
