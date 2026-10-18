@@ -1164,11 +1164,14 @@ class _WorkerExit(Exception):
 def main() -> None:
     """Worker entry: one-shot (default) or resident loop (--resident).
 
-    Resident mode (Round 16 supervisor): reads NDJSON requests from stdin in a
+    Resident mode: reads NDJSON requests from stdin in a
     loop — one request per line — until stdin closes (graceful stop) or the
     request cap is reached (max-requests restart). Cookies/URLs never enter
     argv; only the ``--resident`` flag does.
     """
+    from base.browser_runtime import configure_browser_temp
+
+    configure_browser_temp()
     resident = "--resident" in sys.argv
     max_requests = 1
     if resident:

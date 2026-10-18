@@ -51,6 +51,13 @@ app = FastAPI(
 
 
 @app.on_event("startup")
+async def _prepare_browser_runtime():
+    from base.browser_runtime import configure_browser_temp
+
+    configure_browser_temp()
+
+
+@app.on_event("startup")
 async def _prepare_library_storage():
     """Merge legacy per-folder databases before the API starts serving data."""
     import asyncio

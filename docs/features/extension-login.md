@@ -16,6 +16,7 @@
 | 账号 / 登录 HTTP 路由（前缀 `/api/search`） | `api/routers/search.py`：`POST /login`、`GET /login/{job_id}`、`GET /accounts`、`POST /accounts/sync-ticket`、`POST /accounts/{platform}/sync`、`POST /accounts/{platform}/verify`、`DELETE /accounts/{platform}/session` |
 | 扫码登录实现（可见窗口 + 二维码） | `aggregate_search/worker.py` 的 `_run_login`；二维码只走 `tools/crawler_util.py` 的 `show_qrcode`（`aggregate_search/login.py` 只是转发 shim） |
 | 浏览器选择（自定义 > Chrome > Edge > 内置 Chromium） | `tools/browser_launcher.py`（`resolve_playwright_browser`） |
+| Windows 浏览器进程临时目录 | `base/browser_runtime.py` 的 `configure_browser_temp`；`api/main.py` 的 `_prepare_browser_runtime`、`aggregate_search/worker.py` 的 `main` |
 | profile 与登录态配置 | `config/base_config.py`：`USER_DATA_DIR`、`SAVE_LOGIN_STATE` |
 | 前端账号页 | `webui/src/components/accounts/AccountsPage.tsx`、`useAccounts.ts`、`useAutoAccountSync.ts`；主结论与动作提示在 `webui/src/lib/accounts.ts` 的 `accountSearchVerdict` / `accountActionHint` |
 | 扫码任务状态和跨页面搜索避让 | `webui/src/lib/scanLogin.ts`、`webui/src/App.tsx` |
@@ -45,8 +46,9 @@ profile 目录：`browser_data/{xhs,dy,bili,zhihu}_user_data_dir`。
 
 ## 已知坑 / 边界
 
+- Windows 的系统 Temp 即使能由 Python 创建目录，也可能被 Playwright 自带 Node 的 `mkdtemp` 拒绝（`EPERM ... playwright-artifacts`），此时验证和扫码都会在浏览器启动前失败，不能据此认定账号已过期。API 与独立 worker 启动时把进程内的 `TEMP` / `TMP` 指向应用所在目录的 `.cache/browser-temp`，子进程继承；测试指定数据隔离目录时，缓存也放在隔离目录内。不修改系统环境变量、权限或已有登录 profile。修改后需重启后端，原登录态仍须重新验证。
 - 账号操作在停止常驻搜索 worker 异常或取消时也释放协调槽位；导入转为后台验证后则继续持有槽位，直到验证结束。
-- 自动化验证使用模拟平台响应和浏览器交互；尚未使用真实账号复现用户的小红书状态，平台页面标记变化仍可能导致「暂未确认」。
+- 自动化验证使用模拟平台响应和浏览器交互；平台页面标记变化仍可能导致「暂未确认」。本机登录验证通过只确认当时的会话身份，不保证搜索、收藏与阅读均不受平台限制。
 
 - 扩展仍固定连接 8080；开发实例改端口时使用扫码登录。
 - 扫码结果仍需四平台真实账号验收；自动化验证生命周期和界面交互，不能替代手机扫码。
