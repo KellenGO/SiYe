@@ -12,7 +12,7 @@
 | 前端 hook（拉取 + 手动刷新） | `webui/src/hooks/useTrending.ts` |
 | 前端 API 与纯函数（规整 / 标签页 / 取前 N / 热度格式化） | `webui/src/lib/trendingApi.ts` |
 | 后端路由 | `api/routers/trending.py` |
-| 后端取数与缓存（含小红书匿名聚合榜单） | `api/services/trending.py` 的 `_fetch_xhs`、`_load`、`get_trending` |
+| 后端取数与缓存（含小红书匿名聚合榜单、知乎首页问题热榜） | `api/services/trending.py` 的 `_fetch_xhs`、`_fetch_zhihu`、`_load`、`get_trending` |
 | 响应模型 | `api/schemas/trending.py` |
 | 首页挂载点与点击行为 | `webui/src/components/search/SearchPage.tsx` 的 `handleTrendingPick` |
 
@@ -43,7 +43,12 @@
 - 抖音、B站、知乎走各自公开入口，小红书经 UApiPro 聚合。四个平台均不需要本机登录态、签名或浏览器。
   小红书按照实际返回状态展示，加载中不提前标「暂不可用」；来源超时、空榜、异常结构或返回其他平台时只影响小红书，仍保留来源标注，其余平台可继续切换。
 - 各平台热度口径不同，不跨平台比较或相加。小红书聚合源常用 `w`／万／亿表示热度，按单位转换后沿用现有展示；
-  未知热度标签留空。知乎只有词、没有热度值，不补占位数字。
+  未知热度标签留空。知乎识别来源明确标出的「万／亿热度」，缺失或未知文案留空，不补占位数字。
+- 知乎以用户指定的**首页问题热榜**为基准，取官方 App 域名匿名入口返回的问题标题与原始顺序，
+  标题仍交给聚合搜索，不额外抓取问题内容。2026-10-18 复核发现旧 `top_search` 绕过本机缓存仍返回旧词；
+  网页问题热榜需要登录，但 App 域名的同类入口可匿名取到 30 条问题。
+  不回退搜索框关键词榜或旧入口；具体手机排名仍可能随更新时间、账号、地区或实验分组变化。
+  取舍见 `docs/decisions/2026-10-18-知乎热搜以首页问题热榜为准.md`。
 - 上游结构随时可能变，第三方服务也可能限流或延迟；本机刷新只重新请求来源，不保证来源刚刚完成更新。
   界面显示当前所选平台提供的更新时间，缺少时显示本机获取时间。取不到只给安全文案
   （"热搜暂时取不到，稍后再试"），**不回显上游响应原文**；也不写库、不上传。
@@ -54,7 +59,7 @@
 ## 测试怎么跑
 
 - 后端：`.venv/Scripts/python.exe -m pytest -q tests/test_trending.py --basetemp=.tmp_pytest_xxx`
-  （模拟 HTTP／fetcher，不访问网络；覆盖四平台上游结构、小红书单位转换、匿名请求、来源穿过响应模型、缓存与失败隔离）。
+  （模拟 HTTP／fetcher，不访问网络；覆盖四平台上游结构、小红书单位转换、匿名请求、来源穿过响应模型、知乎新入口与刷新替换、缓存与失败隔离）。
 - 前端：`node node_modules/typescript/bin/tsc -p tsconfig.test.json` +
   `node run-compiled-tests.mjs`（`webui/tests/trending.test.ts` 覆盖规整、标签页与热度格式化）。
 - 构建前端后运行 `.venv/Scripts/python.exe scripts/getting_started_smoke.py`：隔离浏览器和模拟 API，

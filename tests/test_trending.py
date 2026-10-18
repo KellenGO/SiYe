@@ -110,20 +110,92 @@ def test_bilibili_payload_uses_show_name_and_heat_score(monkeypatch):
     assert words[1]["hot_value"] is None
 
 
-def test_zhihu_payload_has_words_without_heat(monkeypatch):
-    payload = {"top_search": {"words": [
-        {"query": "法考客观题成绩公布", "display_query": "法考客观题成绩公布"},
-        {"query": "只有 query"},
-    ]}}
+def test_zhihu_uses_home_hot_list_question_titles_in_source_order(monkeypatch):
+    payload = {"data": [
+        {"target": {"type": "question", "title": "当前热榜第一个问题？"}, "detail_text": "1091 万热度"},
+        {"target": {"type": "question", "title": "当前热榜第二个问题？"}, "detail_text": "0 热度"},
+        {"target": {"type": "question", "title": "缺少热度的问题？"}},
+        {"target": {"type": "question", "title": " "}, "detail_text": "123 万热度"},
+        {"target": {"type": "answer", "title": "不是问题热榜项"}},
+        {"target": "invalid"},
+        "not an item",
+    ], "top_search": {"words": [{"query": "旧入口残留词"}]},
+        "hot_search_queries": [{"query": "搜索框词榜也不应混入"}]}
 
     async def fake_get(url, params=None, headers=None):
-        assert url == svc.ZHIHU_TRENDING_URL
+        assert url == "https://api.zhihu.com/topstory/hot-lists/total"
+        assert params == {"limit": str(svc.MAX_WORDS), "reverse_order": "0"}
         return payload
 
     monkeypatch.setattr(svc, "_get_json", fake_get)
-    words, _ = asyncio.run(svc._fetch_zhihu())
-    assert [w["word"] for w in words] == ["法考客观题成绩公布", "只有 query"]
-    assert all(w["hot_value"] is None for w in words)
+    words, active_time = asyncio.run(svc._fetch_zhihu())
+    assert words == [
+        {"rank": 1, "word": "当前热榜第一个问题？", "hot_value": 10910000},
+        {"rank": 2, "word": "当前热榜第二个问题？", "hot_value": 0},
+        {"rank": 3, "word": "缺少热度的问题？", "hot_value": None},
+    ]
+    assert active_time is None
+
+
+@pytest.mark.parametrize("raw, expected", [
+    ("1091 万热度", 10910000), ("1.2 亿热度", 120000000), (" 123 热度 ", 123),
+    ("0 热度", 0), ("上升中", None), ("-1 万热度", None),
+    ("619万", None), ("1.5 热度", None), (True, None), (None, None),
+])
+def test_zhihu_heat_uses_only_recognized_source_text(raw, expected):
+    assert svc._zhihu_heat(raw) == expected
+
+
+@pytest.mark.parametrize("payload", [
+    [], {}, {"data": {}}, {"data": []},
+    {"data": [{"target": {"type": "question", "title": " "}}]},
+    {"data": [{"target": {"type": "answer", "title": "不是问题热榜"}}]},
+    {"top_search": {"words": [{"query": "旧入口词不应冒充当前热搜"}]}},
+    {"hot_search_queries": [{"query": "不能以搜索框词榜替代问题热榜"}]},
+    {"data": [], "top_search": {"words": [{"query": "旧入口词"}]}},
+])
+def test_zhihu_failure_never_falls_back_to_old_words(monkeypatch, payload):
+    async def fake_get(*args, **kwargs):
+        return payload
+
+    monkeypatch.setattr(svc, "_get_json", fake_get)
+    result = asyncio.run(svc.get_trending(["zhihu"]))["platforms"]["zhihu"]
+    assert result["status"] == "failed"
+    assert result["words"] == []
+    assert result["message"] == svc.FAILED_MESSAGE
+
+
+def test_zhihu_api_refresh_replaces_cached_words_from_anonymous_official_endpoint(monkeypatch):
+    calls = []
+
+    def respond(request):
+        assert request.url == httpx.URL("https://api.zhihu.com/topstory/hot-lists/total?limit=50&reverse_order=0")
+        assert "cookie" not in request.headers
+        assert "authorization" not in request.headers
+        calls.append(1)
+        return httpx.Response(200, json={"data": [
+            {"target": {"type": "question", "title": f"当前热榜问题{len(calls)}？"}, "detail_text": "1091 万热度"},
+        ]})
+
+    original_client = httpx.AsyncClient
+    monkeypatch.setattr(svc.httpx, "AsyncClient", lambda **kwargs:
+                        original_client(transport=httpx.MockTransport(respond), **kwargs))
+    app = FastAPI()
+    app.include_router(trending_router)
+    with TestClient(app) as client:
+        first_response = client.get("/api/trending?platforms=zhihu")
+        assert first_response.status_code == 200
+        first = first_response.json()
+        words = first["platforms"]["zhihu"]["words"]
+        assert words == [{"rank": 1, "word": "当前热榜问题1？", "hot_value": 10910000}]
+        cached = client.get("/api/trending?platforms=zhihu").json()
+        assert cached["cached"] is True
+        assert cached["platforms"]["zhihu"]["words"] == words
+        assert len(calls) == 1
+        fresh = client.get("/api/trending?platforms=zhihu&refresh=true").json()
+        assert fresh["cached"] is False
+        assert fresh["platforms"]["zhihu"]["words"][0]["word"] == "当前热榜问题2？"
+        assert len(calls) == 2
 
 
 def test_unregistered_fetcher_is_unavailable(monkeypatch):

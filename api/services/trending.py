@@ -52,8 +52,8 @@ _USER_AGENT = (
 DOUYIN_TRENDING_URL = "https://www.iesdouyin.com/web/api/v2/hotsearch/billboard/word/"
 #: B站搜索热搜：`data.trending.list[]`，带 heat_score。
 BILIBILI_TRENDING_URL = "https://api.bilibili.com/x/web-interface/search/square"
-#: 知乎热搜词：`top_search.words[]`，没有热度值（只有词）。
-ZHIHU_TRENDING_URL = "https://www.zhihu.com/api/v4/search/top_search"
+#: 知乎首页问题热榜；搜索页关键词榜不作为此入口的回退来源。
+ZHIHU_TRENDING_URL = "https://api.zhihu.com/topstory/hot-lists/total"
 #: 小红书匿名第三方榜单；不向聚合服务发送登录态。
 XHS_TRENDING_URL = "https://uapis.cn/api/v1/misc/hotboard"
 
@@ -157,18 +157,31 @@ async def _fetch_bilibili() -> Tuple[List[Dict[str, Any]], Optional[str]]:
     return _build_words(pairs), None
 
 
+def _zhihu_heat(value: Any) -> Optional[int]:
+    """首页热榜用「1091 万热度」展示指数；未知文案不补数字。"""
+    if not isinstance(value, str) or len(value) > 32:
+        return None
+    match = re.fullmatch(r"\s*([0-9]+(?:\.[0-9]+)?)\s*([万亿]?)\s*热度\s*", value)
+    if not match:
+        return None
+    heat = Decimal(match[1]) * {"万": 10000, "亿": 100000000}.get(match[2], 1)
+    return int(heat) if heat == heat.to_integral_value() else None
+
+
 async def _fetch_zhihu() -> Tuple[List[Dict[str, Any]], Optional[str]]:
-    payload = await _get_json(ZHIHU_TRENDING_URL, headers={"Referer": "https://www.zhihu.com/"})
+    payload = await _get_json(ZHIHU_TRENDING_URL,
+                              params={"limit": str(MAX_WORDS), "reverse_order": "0"},
+                              headers={"Referer": "https://www.zhihu.com/"})
     if not isinstance(payload, dict):
         raise ValueError("unexpected zhihu payload")
-    top = payload.get("top_search")
-    items = top.get("words") if isinstance(top, dict) else None
+    items = payload.get("data")
+    if not isinstance(items, list):
+        raise ValueError("unexpected zhihu hot list")
     pairs = []
-    if isinstance(items, list):
-        for item in items:
-            if isinstance(item, dict):
-                # 知乎热搜只有词，没有热度值。
-                pairs.append((_pick(item, "display_query", "query"), None))
+    for item in items:
+        target = item.get("target") if isinstance(item, dict) else None
+        if isinstance(target, dict) and target.get("type") == "question":
+            pairs.append((_pick(target, "title"), _zhihu_heat(item.get("detail_text"))))
     return _build_words(pairs), None
 
 
