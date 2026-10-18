@@ -553,3 +553,67 @@ async def test_history_reads_do_not_block_other_requests(url):
             release.set()
             response = await pending
         assert response.status_code == 200 and response.json() == []
+
+
+def job_record(identity="job"):
+    return {"job_id": identity, "conversation_id": identity, "space_id": 1, "created_at": 0, "question": "路线",
+            "snapshot": {"id": 1, "name": "攻略", "description": "", "items": [], "archived": False},
+            "materials": [], "status": "analyzing", "phase": "analyzing", "elapsed": 0.0, "document": None,
+            "web_enabled": False, "history": [], "research_focus": "路线",
+            "partial": "", "activity": [], "coverage": [], "external_sources": [], "web_errors": [], "usage": None,
+            "cost_usd": None, "error": "", "message": ""}
+
+
+@pytest.mark.asyncio
+async def test_stream_deltas_fill_partial_and_reset_between_turns(config, monkeypatch, tmp_path):
+    import sys
+    from api.services import research_jobs as module
+    worker = tmp_path / "stream_worker.py"
+    worker.write_text('''import json, sys
+sys.stdin.readline()
+events = [{"type": "delta", "text": "先看资料"},
+          {"type": "delta", "text": "，再回答"},
+          {"type": "delta_reset"},
+          {"type": "delta", "text": "最终答案"},
+          {"type": "done", "result": {"document": {"type": "doc", "content": []}}}]
+for event in events:
+    print(json.dumps(event, ensure_ascii=False), flush=True)
+''', encoding="utf-8")
+    monkeypatch.setattr(module, "task_command", lambda mode: [sys.executable, str(worker)])
+    manager = ResearchJobs(config)
+    manager.jobs["job"] = job_record()
+    result = await manager.process(manager.jobs["job"], {"mode": "analyze"})
+    assert manager.jobs["job"]["partial"] == "最终答案"
+    assert manager.public("job")["partial"] == "最终答案"
+    assert result["document"] == {"type": "doc", "content": []}
+    manager.persist("job")
+    saved = json.loads((config.path.parent / "research-history" / "job.json").read_text(encoding="utf-8"))
+    assert "partial" not in saved
+
+
+@pytest.mark.asyncio
+async def test_analysis_requests_streaming_and_clears_partial_when_ready(config, monkeypatch):
+    manager = ResearchJobs(config)
+    manager.jobs["job"] = job_record()
+    seen = {}
+
+    async def process(job, payload, credentials=None):
+        seen.update(payload)
+        job["partial"] = "只写了一半"
+        return {"document": {"type": "doc", "content": [{"type": "paragraph"}]}, "coverage": []}
+
+    monkeypatch.setattr(manager, "process", process)
+    monkeypatch.setattr(manager.config, "credentials", lambda: {"protocol": "openai", "model": "m",
+        "base_url": "https://example.com", "api_key": "k"})
+    await manager.analyze("job")
+    assert seen["stream"] is True
+    assert manager.jobs["job"]["status"] == "ready" and manager.jobs["job"]["partial"] == ""
+
+
+@pytest.mark.asyncio
+async def test_cancel_drops_partial_text(config):
+    manager = ResearchJobs(config)
+    manager.jobs["job"] = job_record()
+    manager.jobs["job"]["partial"] = "写到一半"
+    await manager.cancel("job")
+    assert manager.jobs["job"]["status"] == "cancelled" and manager.jobs["job"]["partial"] == ""

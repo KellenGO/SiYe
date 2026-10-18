@@ -28,6 +28,7 @@ from .worker_process import terminate_worker, windows_process_job
 ACTIVE_SECONDS = 600
 MAX_FINISHED_JOBS = 10
 MAX_RETAINED_BYTES = 32 * 1024 * 1024
+MAX_PARTIAL_CHARS = 40000
 
 
 def task_command(mode="collect"):
@@ -194,7 +195,8 @@ class ResearchJobs:
             "research_focus": (latest.get("research_focus") or previous[0]["question"]) if latest else question,
             "question": question, "web_enabled": web_enabled, "status": "collecting", "phase": "collecting",
             "message": "正在获取空间资料", "materials": [], "elapsed": 0.0, "error": "",
-            "document": None, "activity": [], "coverage": [], "external_sources": [], "web_errors": [], "usage": None, "cost_usd": None}
+            "document": None, "partial": "", "activity": [], "coverage": [], "external_sources": [], "web_errors": [],
+            "usage": None, "cost_usd": None}
         if latest:
             self.jobs[identity].update(materials=copy.deepcopy(latest["materials"]), status="analyzing", phase="analyzing", message="正在继续分析当前会话资料")
         self.persist(identity)
@@ -269,6 +271,14 @@ class ResearchJobs:
                         job["activity"] = records[-40:]
                     elif kind == "usage":
                         job.update(usage=event.get("usage"), cost_usd=event.get("cost_usd"))
+                    elif kind == "delta":
+                        text = event.get("text")
+                        if isinstance(text, str) and text:
+                            partial = job.get("partial") or ""
+                            if len(partial) < MAX_PARTIAL_CHARS:
+                                job["partial"] = partial + text[:MAX_PARTIAL_CHARS - len(partial)]
+                    elif kind == "delta_reset":
+                        job["partial"] = ""
                     elif kind == "done":
                         result = event["result"]
                     elif kind == "error":
@@ -377,7 +387,7 @@ class ResearchJobs:
             result = await self.process(job, {"mode": "analyze", "materials": copy.deepcopy(job["materials"]),
                 "space_name": job["snapshot"]["name"], "description": job["snapshot"]["description"],
                 "question": job["question"], "research_focus": job.get("research_focus", ""),
-                "web_enabled": job["web_enabled"], "conversation": job.get("history", [])}, self.config.credentials())
+                "web_enabled": job["web_enabled"], "conversation": job.get("history", []), "stream": True}, self.config.credentials())
             from .space_notes import validate_note
             if result.get("document") is not None:
                 validate_note(result["document"])
@@ -389,6 +399,7 @@ class ResearchJobs:
         except Exception as error:
             job.update(status="failed", phase="failed", error=self.safe_error(error))
         finally:
+            job["partial"] = ""
             for record in job.get("activity", []):
                 if record.get("status") == "running":
                     record.update(status="cancelled" if job["status"] == "cancelled" else "failed", summary="执行已中断")
@@ -403,6 +414,7 @@ class ResearchJobs:
             await asyncio.gather(task, return_exceptions=True)
         if job["status"] not in {"ready", "failed", "cancelled"}:
             job.update(status="cancelled", phase="cancelled", message="研究已取消")
+        job["partial"] = ""
         await self.release(identity)
         self.persist(identity)
         return self.public(identity)
