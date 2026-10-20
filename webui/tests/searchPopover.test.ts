@@ -5,7 +5,7 @@
  * 覆盖"最近搜索浮层的显示/关闭逻辑"：
  * - 输入框获得焦点 → open；
  * - 焦点完全离开（等价点击外部）→ closed；
- * - 开始搜索 / 点击历史项填词 / 点击推荐词填词 → closed；
+ * - 开始搜索 / 点击历史项填词 → closed；
  * - 事件幂等与非法事件不改变状态。
  */
 
@@ -14,7 +14,6 @@ import assert from "node:assert/strict";
 
 import {
   INITIAL_POPOVER_STATE,
-  RECOMMENDED_SEARCHES,
   searchPopoverReducer,
   type SearchPopoverEvent,
   type SearchPopoverState,
@@ -45,11 +44,6 @@ test("开始搜索后浮层关闭", () => {
 });
 
 test("点击历史项填词（picked）后浮层关闭", () => {
-  const closed = step(INITIAL_POPOVER_STATE, { type: "focus_within" }, { type: "picked" });
-  assert.equal(closed, "closed");
-});
-
-test("点击推荐词填词（picked）后浮层关闭", () => {
   const closed = step(INITIAL_POPOVER_STATE, { type: "focus_within" }, { type: "picked" });
   assert.equal(closed, "closed");
 });
@@ -103,9 +97,4 @@ test("outside_pointer / escape 后重新聚焦可再次打开", () => {
   assert.equal(step(afterOutside, { type: "focus_within" }), "open");
   const afterEscape = step(INITIAL_POPOVER_STATE, { type: "focus_within" }, { type: "escape" });
   assert.equal(step(afterEscape, { type: "focus_within" }), "open");
-});
-
-test("推荐搜索词为固定五项", () => {
-  assert.equal(RECOMMENDED_SEARCHES.length, 5);
-  assert.ok(RECOMMENDED_SEARCHES.every((w) => typeof w === "string" && w.length > 0));
 });

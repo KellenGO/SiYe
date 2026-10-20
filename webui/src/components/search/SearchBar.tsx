@@ -23,7 +23,7 @@ interface SearchBarProps {
   onCancel?: () => void;
   isCancelling?: boolean;
   onReset: () => void;
-  // 下拉浮层：最近搜索 + 推荐搜索
+  // 下拉浮层：最近搜索
   history: SearchHistoryItem[];
   onKeywordPick: (keyword: string) => void;
   keywordPickRequest: number;
@@ -157,14 +157,6 @@ export function SearchBar({
     [onKeywordPick]
   );
 
-  // 推荐词与历史项一致：只填入，不自动搜索。
-  const handleRecommend = useCallback(
-    (word: string) => {
-      onKeywordPick(word);
-    },
-    [onKeywordPick]
-  );
-
   return (
     <form
       ref={searchPanelRef}
@@ -209,7 +201,7 @@ export function SearchBar({
             className="w-full h-[58px] rounded-none border-0 bg-transparent text-[16px] text-cyber-text-primary placeholder:text-cyber-text-muted focus:outline-none disabled:opacity-50"
           />
 
-          {/* 聚焦浮层：最近搜索 + 推荐搜索（必须 === "open"，"closed" 也是 truthy 字符串） */}
+          {/* 聚焦浮层：最近搜索（必须 === "open"，"closed" 也是 truthy 字符串） */}
           {popoverOpen === "open" && (
             <SearchPopover
               history={history}
@@ -217,7 +209,6 @@ export function SearchBar({
               onItemClick={handleHistoryItemClick}
               onRemove={onHistoryRemove}
               onClear={onHistoryClear}
-              onRecommend={handleRecommend}
             />
           )}
         </div>

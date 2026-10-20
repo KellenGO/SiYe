@@ -1,6 +1,5 @@
-import { Clock, History, X, Trash2, TrendingUp } from "lucide-react";
+import { Clock, History, X, Trash2 } from "lucide-react";
 import type { SearchHistoryItem } from "@/lib/searchExperience";
-import { RECOMMENDED_SEARCHES } from "@/lib/searchPopover";
 import { PLATFORM_LABELS } from "@/types/search";
 import { useTranslation } from "react-i18next";
 
@@ -10,7 +9,6 @@ interface SearchPopoverProps {
   onItemClick: (item: SearchHistoryItem) => void;
   onRemove: (index: number) => void;
   onClear: () => void;
-  onRecommend: (keyword: string) => void;
 }
 
 function formatTime(iso: string): string {
@@ -38,9 +36,8 @@ function platformInitials(platforms: string[]): string {
 }
 
 /**
- * 搜索下拉浮层：最近搜索 + 推荐搜索。
+ * 搜索下拉浮层：最近搜索。
  * - 点击历史项只填入关键词，旧平台组合仅作为历史信息展示；
- * - 点击推荐词同样只填入关键词；
  * - 关闭规则由 lib/searchPopover 的 reducer 驱动（focus_left / search_started / picked）。
  */
 export function SearchPopover({
@@ -49,7 +46,6 @@ export function SearchPopover({
   onItemClick,
   onRemove,
   onClear,
-  onRecommend,
 }: SearchPopoverProps) {
   const { t } = useTranslation();
   return (
@@ -105,29 +101,8 @@ export function SearchPopover({
               );
             })}
           </ul>
-          <div className="h-px bg-cyber-border-subtle my-2.5" />
         </>
       )}
-
-      <div className="mb-1.5">
-        <strong className="text-[12px] text-cyber-text-primary flex items-center gap-1.5">
-          <TrendingUp className="w-3.5 h-3.5 text-cyber-text-muted" />
-          {t("search.recommended")}
-        </strong>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {RECOMMENDED_SEARCHES.map((word) => (
-          <button
-            key={word}
-            type="button"
-            disabled={disabled}
-            onClick={() => onRecommend(word)}
-            className="rounded-full border border-cyber-border-subtle px-3 py-1.5 text-[11.5px] text-cyber-text-secondary hover:border-brand hover:text-brand-strong transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {word}
-          </button>
-        ))}
-      </div>
     </div>
   );
 }

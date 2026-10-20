@@ -292,17 +292,11 @@ def main():
 
                 before_search = len([item for item in mutations if item[1] == "/api/search/jobs"])
                 search.focus()
-                page.get_by_role("button", name="效率工作流", exact=True).click()
-                expect(search).to_have_value("效率工作流")
-                expect(search).to_be_focused()
-                expect(page.get_by_role("button", name="效率工作流", exact=True)).to_have_count(0)
-                assert len([item for item in mutations if item[1] == "/api/search/jobs"]) == before_search
-                expect(xhs_button).to_have_attribute("aria-pressed", "true")
-                for button in (douyin_button, bilibili_button, zhihu_button):
-                    expect(button).to_have_attribute("aria-pressed", "false")
+                # 聚焦浮层只列最近搜索；此前的固定推荐词已移除。
+                expect(page.get_by_text("最近搜索", exact=True)).to_be_visible()
 
                 search.fill("剪辑入门")
-                assert before_search == 0, "Tutorial navigation and recommendation pick must not start a search"
+                assert before_search == 0, "Tutorial navigation must not start a search"
                 search.press("Enter")
                 expect(page.get_by_role("button", name="收藏 剪辑入门 PRIVATE_RESULT", exact=True)).to_be_visible()
 
