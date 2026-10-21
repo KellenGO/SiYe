@@ -11,6 +11,8 @@
   "github": "Visit GitHub Repository",
   "confirm": "I understand and agree to the above terms",
   "decline": "Disagree, Exit",
+  "declinedTitle": "Access declined",
+  "declinedHint": "You did not accept the terms. Please close this tab.",
   "author": {
     "name": "Relakkes (阿江)",
     "tagline": "40K+ Star Open Source Author",

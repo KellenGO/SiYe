@@ -27,14 +27,18 @@ export function ConfirmDialog({
 }) {
   const id = useId();
   const cancel = useRef<HTMLButtonElement>(null);
+  // 调用方普遍传内联箭头函数，onCancel 每次父渲染都是新引用。
+  // 放进依赖会让 effect 反复重跑、把焦点抢回「取消」，键盘用户 Tab 不走。
+  const onCancelRef = useRef(onCancel);
+  useEffect(() => { onCancelRef.current = onCancel; }, [onCancel]);
   useEffect(() => {
     if (!open) return;
     // 焦点默认给「取消」：破坏性操作不该让回车直接生效
     cancel.current?.focus();
-    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") onCancel(); };
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") onCancelRef.current(); };
     document.addEventListener("keydown", escape);
     return () => document.removeEventListener("keydown", escape);
-  }, [open, onCancel]);
+  }, [open]);
   if (!open) return null;
   return (
     <div className="confirm-overlay" onPointerDown={(event) => { if (event.target === event.currentTarget) onCancel(); }}>

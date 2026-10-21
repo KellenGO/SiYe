@@ -11,6 +11,8 @@
   "github": "访问 GitHub 仓库",
   "confirm": "我已知晓并同意上述条款",
   "decline": "不同意，退出",
+  "declinedTitle": "访问已拒绝",
+  "declinedHint": "您未同意使用条款，请关闭此标签页",
   "author": {
     "name": "程序员阿江-Relakkes",
     "tagline": "40K+ Star 开源项目作者",

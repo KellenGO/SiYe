@@ -163,7 +163,7 @@
     "license": "License"
   },
   "brand": {
-    "name": "四野",
+    "name": "SiYe",
     "subtitle": "Social media aggregate search"
   },
   "nav": {
@@ -183,12 +183,26 @@
     "staleHint": "Account refresh failed, showing last result",
     "goAccounts": "Account settings",
     "help": "Help",
+    "brandLabel": "SiYe, aggregated search",
+    "brandCaption": "Aggregated search",
+    "navHome": "Home",
+    "navFavorites": "Favorites",
+    "navHistory": "History",
+    "navSettings": "Settings",
+    "mainNav": "Main navigation",
+    "customize": "Customize",
+    "backHome": "Back to home",
     "helpTitle": "Terms & Disclaimer",
     "loginExpiredToast": "{{label}} login expired. Other platforms can still search.",
     "unverifiedWarningToast": "{{count}} platform(s) not confirmed logged in; others still work."
   },
   "search": {
     "recent": "Recent",
+    "emptyFirst": "Your exploration starts with the first search.",
+    "emptyContinue": "Pick up where your curiosity left off.",
+    "emptyHint": "Keywords you search will appear here.",
+    "homeNote": "Xiaohongshu, Douyin, Bilibili, Zhihu · one search, several angles.",
+    "homePanels": "Home shortcuts",
     "clear": "Clear",
     "placeholder": "Search a topic, person or product…",
     "submit": "Search",
@@ -245,6 +259,7 @@
   "footer": {
     "basedOn": "四野 · Local aggregate search built on MediaCrawler",
     "localFirst": "Local first · Open source",
+    "help": "Help",
     "author": "Author: Relakkes",
     "github": "GitHub repository",
     "disclaimer": "Terms & Disclaimer",

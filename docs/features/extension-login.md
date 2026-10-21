@@ -80,6 +80,9 @@ profile 目录：`browser_data/{xhs,dy,bili,zhihu}_user_data_dir`。
   （`webui/src/types/search.ts`），账号页拿不到，没有编造；冷却状态仍在搜索结果页体现。
   如需在账号页展示，需后端在 `GET /api/search/accounts` 增加冷却字段。
 
+- 扫码轮询加了 in-flight 守卫（2026-10-21）：同一 job 上一次 GET 没回来就跳过本轮。此前单次请求慢于 1.5 秒时，在途请求会随延迟线性堆叠，旧响应晚到还会把 `running` 写回 `pending`。
+
+
 ## 测试怎么跑
 
 - 后端：`tests/test_xhs_session_restore.py`、`tests/test_xhs_account_verification.py`、

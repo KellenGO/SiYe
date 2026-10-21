@@ -56,6 +56,9 @@
 - 小红书官方匿名入口在 2026-10-18 复核仍不可用；第三方榜单成功不代表官方匿名接口或登录态问题已解决。
   不用个性化推荐词冒充全站热榜，不携带第三方代码里公开的会话凭据。真实匿名 API 本次返回 20 条热词，来源与更新时间均通过本项目响应模型返回。
 
+- 「刷新」有 in-flight 守卫（2026-10-21）：一轮没回来之前连点不再叠请求；失败会进入 `error`，按钮回到可用态并显示"热搜暂时取不到"。此前 `loading` 只取 `query.isPending`，首屏之后恒为 false，`disabled` 等于没做。
+
+
 ## 测试怎么跑
 
 - 后端：`.venv/Scripts/python.exe -m pytest -q tests/test_trending.py --basetemp=.tmp_pytest_xxx`

@@ -32,6 +32,9 @@
 - 独立运行程序属于用户账号下的本机进程，并不是操作系统权限沙箱；第一版只接受官方发布资产。
 - 聊天、配置和模型协议的回归在独立仓库维护，主仓库负责管理与接口集成。两个仓库须分别发布；插件版本范围不兼容时必须拒绝启用。
 
+- 状态轮询在错误态降频（2026-10-21）：正常 3 秒一探，本机服务出错时降到 30 秒，避免常驻页面每 3 秒空转一次失败请求。
+
+
 ## 测试怎么跑
 
 - 后端：pytest tests/test_extensions.py tests/test_research.py tests/test_research_acquisition.py tests/test_reading.py tests/test_reading_platforms.py，使用每次新的项目内 --basetemp 子目录。所有安装、卸载和历史测试均使用临时目录。

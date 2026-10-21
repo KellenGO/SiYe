@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import {
   AlertTriangle, ArrowLeft, ArrowRight, Check, FolderHeart, FolderPlus, Loader2, MoreHorizontal, Pencil, RefreshCw, Trash2,
@@ -10,6 +10,7 @@ import { useBookmarks } from "@/hooks/useBookmarks";
 import { useFavorites } from "@/hooks/useFavorites";
 import { useSlidingIndicator } from "@/hooks/useSlidingIndicator";
 import { parseGroupKey, resultSources } from "@/lib/resultTools";
+import type { LibraryItem } from "@/lib/libraryApi";
 import type { PlatformSlug, UnifiedSearchResult } from "@/types/search";
 import { PLATFORM_COLORS, PLATFORM_LABELS, STATUS_LABELS } from "@/types/search";
 import { PLATFORM_SLUGS } from "@/lib/platformMeta";
@@ -84,6 +85,8 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
   const [remoteFolderView, setRemoteFolderView] = useState<RemoteFolder | null>(null);
   const [remoteFolderItems, setRemoteFolderItems] = useState<RemoteFolderItems | null>(null);
   const [remoteFolderLoading, setRemoteFolderLoading] = useState(false);
+  // 读取失败要单独记：否则会落到「这个平台收藏夹还是空的」那个空态，等于把失败说成没内容。
+  const [remoteFolderError, setRemoteFolderError] = useState(false);
   const folderRequest = useRef(0);
   const gridScrollY = useRef(0);
   const localGridScrollY = useRef(0);
@@ -113,7 +116,8 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
     : null;
   const editingCollection = editingCollectionId === null ? null
     : library.collections.find((item) => item.id === editingCollectionId) ?? null;
-  const localCardCover = (matches: typeof library.items, collectionId?: number) => {
+  // 纯函数（只用入参），包一层 useCallback 让下面那个 useMemo 能安全把它列进依赖。
+  const localCardCover = useCallback((matches: LibraryItem[], collectionId?: number) => {
     const ordered = [...matches].sort((left, right) => {
       const leftTag = collectionId === undefined ? null : left.collections.find((tag) => tag.id === collectionId);
       const rightTag = collectionId === undefined ? null : right.collections.find((tag) => tag.id === collectionId);
@@ -121,7 +125,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
       return stableTime(rightTag?.addedAt ?? right.savedAt) - stableTime(leftTag?.addedAt ?? left.savedAt);
     });
     return ordered.find((item) => item.result.cover_url)?.result.cover_url ?? null;
-  };
+  }, []);
   const localFolderCards = useMemo(() => ({
     all: { count: savedCount, cover: localCardCover(library.items.filter((item) => item.saved)) },
     default: { count: defaultCount, cover: localCardCover(library.items.filter((item) => item.inDefault)) },
@@ -130,7 +134,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
       ...collection,
       cover: collection.coverUrl ?? localCardCover(library.items.filter((item) => item.collections.some((tag) => tag.id === collection.id)), collection.id),
     })),
-  }), [library.items, library.collections, savedCount, defaultCount, watchLaterCount]);
+  }), [library.items, library.collections, savedCount, defaultCount, watchLaterCount, localCardCover]);
   const activeCover = activeCollection ? localFolderCards.collections.find((item) => item.id === activeCollection.id)?.cover : null;
   const editingFallbackCover = editingCollection
     ? localCardCover(library.items.filter((item) => item.collections.some((tag) => tag.id === editingCollection.id)), editingCollection.id)
@@ -184,15 +188,20 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
   }, [folderMenuOpenId]);
 
   const data = remote.data;
+  // 接口形状不完整时（旧后端 / 中间层返回空 JSON）不要把整页带崩：
+  // 统一兜底成空集合，下面各处直接用这两个值。
+  // 用 useMemo 保持引用稳定，否则下面依赖它们的 useMemo 每次渲染都会重算。
+  const results = useMemo(() => data?.results ?? [], [data]);
+  const platforms = useMemo(() => data?.platforms ?? {}, [data]);
   const retainedCounts = useMemo(() => Object.fromEntries(PLATFORMS.map((platform) => [
     platform,
-    data?.counts?.[platform] ?? new Set((data?.results ?? []).flatMap(resultSources)
+    data?.counts?.[platform] ?? new Set(results.flatMap(resultSources)
       .filter((result) => result.platform === platform)
       .map((result) => result.content_id)).size,
-  ])) as Record<PlatformSlug, number>, [data]);
+  ])) as Record<PlatformSlug, number>, [data, results]);
   const fetchedAt = useMemo(
-    () => Object.fromEntries(PLATFORMS.map((platform) => [platform, data?.platforms[platform]?.synced_at ?? null])),
-    [data],
+    () => Object.fromEntries(PLATFORMS.map((platform) => [platform, platforms[platform]?.synced_at ?? null])),
+    [platforms],
   );
 
   useEffect(() => {
@@ -207,6 +216,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
   const loadRemoteFolder = async (folder: RemoteFolder, offset = 0) => {
     const request = ++folderRequest.current;
     setRemoteFolderLoading(true);
+    setRemoteFolderError(false);
     try {
       const { data: page } = await axios.get<RemoteFolderItems>(
         `/api/search/favorites/folders/${encodeURIComponent(folder.account)}/${encodeURIComponent(folder.folder)}`,
@@ -216,6 +226,9 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
       setRemoteFolderItems((previous) => offset && previous
         ? { ...page, items: [...previous.items, ...page.items] }
         : page);
+    } catch {
+      if (request !== folderRequest.current) return;
+      setRemoteFolderError(true);
     } finally {
       if (request === folderRequest.current) setRemoteFolderLoading(false);
     }
@@ -552,27 +565,28 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
             )}
           </div>
         </div>
-      ) : remote.busy && !data?.results.length ? (
+      ) : remote.busy && results.length === 0 ? (
         <div className="empty" role="status"><div className="empty-symbol"><Loader2 className="spinner" /></div><h2>正在整理你的收藏</h2><p>先获取列表，再补充内容信息。</p></div>
       ) : data ? (
         <>
-          <p className="collection-count">已保存 {data.results.length} 条收藏 · 已有内容会继续保留</p>
+          <p className="collection-count">已保存 {results.length} 条收藏 · 已有内容会继续保留</p>
           <div className="progress-strip" aria-live="polite">
-            {Object.entries(data.platforms).map(([platform, info]) => info && <span key={platform} className="progress-item">
+            {Object.entries(platforms).map(([platform, info]) => info && <span key={platform} className="progress-item">
               {PLATFORM_LABELS[platform as PlatformSlug]}：{info.status === "running" ? "同步中" : STATUS_LABELS[info.status]} · 本次同步 {info.result_count} 条 · 已保存 {retainedCounts[platform as PlatformSlug]} 条
               {info.synced_at && <small>同步于 {new Date(info.synced_at).toLocaleString("zh-CN")}</small>}
               {info.phase && <small>{info.phase}</small>}
             </span>)}
           </div>
-          {!remote.busy && Object.values(data.platforms).some(info => info?.status === "cancelled") && <p className="collection-count" role="status">同步已取消，已获取的内容和历史收藏仍会保留。</p>}
-          {Object.entries(data.platforms).some(([, info]) => info && !["succeeded", "empty", "running", "pending", "cancelled"].includes(info.status)) && <div className="status-line"><span className="status-message"><AlertTriangle />部分平台没有完成：{Object.entries(data.platforms).filter(([, info]) => info && !["succeeded", "empty", "running", "pending", "cancelled"].includes(info.status)).map(([platform, info]) => `${PLATFORM_LABELS[platform as PlatformSlug]} ${info?.error_summary || STATUS_LABELS[info!.status]}`).join("；")}</span><button type="button" className="text-link" onClick={onNavigateAccounts}>检查账号</button></div>}
+          {!remote.busy && Object.values(platforms).some(info => info?.status === "cancelled") && <p className="collection-count" role="status">同步已取消，已获取的内容和历史收藏仍会保留。</p>}
+          {Object.entries(platforms).some(([, info]) => info && !["succeeded", "empty", "running", "pending", "cancelled"].includes(info.status)) && <div className="status-line"><span className="status-message"><AlertTriangle />部分平台没有完成：{Object.entries(platforms).filter(([, info]) => info && !["succeeded", "empty", "running", "pending", "cancelled"].includes(info.status)).map(([platform, info]) => `${PLATFORM_LABELS[platform as PlatformSlug]} ${info?.error_summary || STATUS_LABELS[info!.status]}`).join("；")}</span><button type="button" className="text-link" onClick={onNavigateAccounts}>检查账号</button></div>}
           {remoteFolderView ? (
             <section className="remote-folder-detail" aria-label={`平台收藏夹 ${remoteFolderView.name}`}>
               <button type="button" className="remote-folder-back" onClick={closeRemoteFolder}><ArrowLeft aria-hidden="true" />返回收藏夹</button>
               <div className="remote-folder-title"><div><span className="remote-readonly">平台只读</span><h2>{remoteFolderView.name}</h2><p>{PLATFORM_LABELS[remoteFolderView.platform]} · 本机已同步 {remoteFolderView.item_count} 条</p></div></div>
-              {remoteFolderLoading && !remoteFolderItems ? <div className="empty"><Loader2 className="spinner" /><p>正在读取收藏…</p></div> : remoteFolderItems?.items.length ? <>
+              {remoteFolderLoading && !remoteFolderItems ? <div className="empty"><Loader2 className="spinner" /><p>正在读取收藏…</p></div> : remoteFolderError && !remoteFolderItems ? <div className="empty"><div className="empty-symbol"><AlertTriangle /></div><h2>收藏夹读取失败</h2><p>没有取到「{remoteFolderView.name}」里的内容，可能是本机服务暂时不可用。</p><button type="button" className="btn small" onClick={() => void loadRemoteFolder(remoteFolderView)}>重试</button></div> : remoteFolderItems?.items.length ? <>
                 <p className="collection-count">已显示 {remoteFolderItems.items.length} / {remoteFolderItems.total} 条。加载更多后，可搜索和导出更多内容。</p>
                 <ResultTabs viewScope="remote-folder" key={`${remoteFolderView.account}-${remoteFolderView.folder}-${remoteFolderItems.items.length}`} results={remoteFolderItems.items} overall="completed" jobId="remote-folder" platforms={[remoteFolderView.platform]} library={library} pageSize={remoteFolderItems.items.length} renderExtraActions={(result, showLabel) => <SpaceAddButton result={result} showLabel={showLabel} />} />
+                {remoteFolderError && <div className="status-line"><span className="status-message"><AlertTriangle />加载更多失败，已有内容不受影响。</span><button type="button" className="text-link" onClick={() => void loadRemoteFolder(remoteFolderView, remoteFolderItems.items.length)}>重试</button></div>}
                 {remoteFolderItems.items.length < remoteFolderItems.total && <div className="library-batch-bar"><span>还有 {remoteFolderItems.total - remoteFolderItems.items.length} 条收藏</span><button type="button" className="btn small" disabled={remoteFolderLoading} onClick={() => void loadRemoteFolder(remoteFolderView, remoteFolderItems.items.length)}>{remoteFolderLoading ? "正在读取" : "显示更多"}</button></div>}
               </> : <div className="empty"><div className="empty-symbol"><FolderHeart /></div><h2>这个平台收藏夹还是空的</h2><p>{remoteFolderView.last_content_complete_at ? "已完成读取，平台当前没有可保存内容。" : "目录已同步，内容仍待下一次手动同步读取。"}</p></div>}
             </section>
@@ -588,7 +602,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
               </div>
             </section>}
             {/* 保留 V0.3 的平台页签和全部内容入口；它不冒充一个真实平台收藏夹。 */}
-            <section className="remote-all-section"><h2>全部内容</h2><p className="collection-count">汇总已同步的跨平台收藏；继续显示更多后，可搜索和导出更多内容。</p><ResultTabs viewScope="remote-all" results={data.results} overall={data.overall} jobId={data.job_id} platforms={Object.keys(data.platforms) as PlatformSlug[]} library={library} fetchedAt={fetchedAt} pageSize={100} renderExtraActions={(result, showLabel) => <SpaceAddButton result={result} showLabel={showLabel} />} /></section>
+            <section className="remote-all-section"><h2>全部内容</h2><p className="collection-count">汇总已同步的跨平台收藏；继续显示更多后，可搜索和导出更多内容。</p><ResultTabs viewScope="remote-all" results={results} overall={data.overall} jobId={data.job_id} platforms={Object.keys(platforms) as PlatformSlug[]} library={library} fetchedAt={fetchedAt} pageSize={100} renderExtraActions={(result, showLabel) => <SpaceAddButton result={result} showLabel={showLabel} />} /></section>
           </>}
         </>
       ) : (

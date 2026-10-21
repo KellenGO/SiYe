@@ -23,6 +23,7 @@
 | 许可与免责声明（首次启动接受门） | [features/license-disclaimer.md](features/license-disclaimer.md) | `webui/src/components/license/LicenseDisclaimer.tsx`、`webui/src/App.tsx` |
 | 观看历史（自动记录点开看过的内容） | [features/watch-history.md](features/watch-history.md) | `api/services/watch_history_store.py`、`webui/src/components/history/HistoryPage.tsx` |
 | 外观与主题色（8 种色 × 深浅） | [features/appearance-themes.md](features/appearance-themes.md) | `webui/src/store/themeStore.ts`、`webui/src/index.css` |
+| 界面语言（中英双语、`<html lang>` 与标签页标题跟随） | [features/i18n.md](features/i18n.md) | `webui/src/i18n/index.ts`、`webui/src/components/layout/LanguageSwitch.tsx` |
 | 热搜卡片（各平台热词 → 一键聚合搜索） | [features/trending-board.md](features/trending-board.md) | `api/services/trending.py`、`webui/src/components/trending/TrendingBoard.tsx` |
 | 返回首页（首页 / 结果页两个视图） | [features/back-to-home.md](features/back-to-home.md) | `webui/src/components/search/SearchPage.tsx`、`webui/src/index.css` |
 | 长列表的「显示更多」与「返回顶部」 | [features/long-list-navigation.md](features/long-list-navigation.md) | `webui/src/components/search/ResultTabs.tsx`、`webui/src/components/layout/ScrollToTopButton.tsx`、`webui/src/index.css` |

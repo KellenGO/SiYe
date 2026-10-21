@@ -208,25 +208,25 @@ export function Header({ viewMode, settingsSection, onNavigate }: HeaderProps) {
   }, [accountOpen])
 
   const navItems: { key: ViewMode; label: string; section?: SettingsSection }[] = [
-    { key: 'search', label: '首页' },
-    { key: 'favorites', label: '收藏' },
+    { key: 'search', label: t('header.navHome') },
+    { key: 'favorites', label: t('header.navFavorites') },
     { key: 'spaces', label: t('spaces.title') },
-    { key: 'history', label: '历史' },
-    { key: 'accounts', label: '设置', section: 'search' },
+    { key: 'history', label: t('header.navHistory') },
+    { key: 'accounts', label: t('header.navSettings'), section: 'search' },
   ]
 
   return (
     <header className="app-header site-header bg-cyber-bg-primary">
       <div className="header-inner">
         {/* 字标：应用 icon + 文字，品牌色只出现在交互状态 */}
-        <div className="brand-link" aria-label="四野，聚合搜索">
+        <div className="brand-link" aria-label={t('header.brandLabel')}>
           <img className="brand-mark" src="/siye-icon.png" alt="" width={30} height={30} />
           <strong className="brand-name">{t('brand.name')}</strong>
-          <span className="brand-caption">聚合搜索</span>
+          <span className="brand-caption">{t('header.brandCaption')}</span>
         </div>
 
         {/* 导航 */}
-        <nav className="nav main-nav" aria-label="主导航" ref={navRef}>
+        <nav className="nav main-nav" aria-label={t('header.mainNav')} ref={navRef}>
           {navIndicator && <span className="main-nav-indicator" aria-hidden="true" style={{ width: navIndicator.width, transform: `translateX(${navIndicator.left}px)` }} />}
           {navItems.map(({ key, label, section }) => (
             <button
@@ -278,7 +278,7 @@ export function Header({ viewMode, settingsSection, onNavigate }: HeaderProps) {
             onClick={() => onNavigate('accounts', 'appearance')}
             className="customize-link"
           >
-            自定义
+            {t('header.customize')}
           </button>}
 
           {viewMode === 'accounts' && settingsSection === 'appearance' && <button
@@ -286,7 +286,7 @@ export function Header({ viewMode, settingsSection, onNavigate }: HeaderProps) {
             onClick={() => onNavigate('search')}
             className="customize-link"
           >
-            回首页
+            {t('header.backHome')}
           </button>}
 
           <ThemeToggle />

@@ -37,6 +37,9 @@ localStorage，之后不再打扰；点「不同意」会尝试关闭当前标�
   2026-09-14 补上。修改免责文案时请同时改 `LICENSE`、`site/` 落地页与两个语言的
   `license.json` —— 四处口径必须一致。
 
+- 拒绝路径改成就地渲染（2026-10-21）：原来在 200ms 定时器里覆盖 `document.body.innerHTML`，会把 React 根节点一起抹掉（返回 / 回退后整页不可用），而且 100ms 的 `about:blank` 跳转基本让它跑不到。现在 `window.close()` 被浏览器拦下时就地渲染拒绝页，文案走 `license.json`。
+
+
 ## 测试怎么跑
 
 暂无专门用例（前端组件零渲染测试）。相关间接覆盖：`tests/test_webui_ui_contract.py`

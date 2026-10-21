@@ -4,7 +4,7 @@ import * as jsx from "react/jsx-runtime";
 import * as i18n from "react-i18next";
 import * as query from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { useEffect, useState, type ComponentType } from "react";
+import { useEffect, useRef, useState, type ComponentType } from "react";
 import type { Editor } from "@tiptap/react";
 import { fetchSpace } from "@/lib/spacesApi";
 import { spaceError, type NoteDocument, type NoteSession } from "@/lib/spaceNotes";
@@ -39,10 +39,14 @@ function usePlugin(active: boolean) {
   const [module, setModule] = useState<PluginModule | null>(null);
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
+  // 用 ref 读"是否已经加载过"，而不是把 module 放进依赖：
+  // 加载完成本身会 setModule，写进依赖会让这个 effect 自己触发自己。
+  const moduleRef = useRef<PluginModule | null>(null);
+  useEffect(() => { moduleRef.current = module; }, [module]);
   useEffect(() => {
     let disposed = false;
     if (!extension.data?.enabled) { setModule(null); return; }
-    if (!active && !module) return;
+    if (!active && !moduleRef.current) return;
     setError("");
     void loadPlugin(extension.data.version!).then((next) => { if (!disposed) setModule(next); }).catch((cause) => { if (!disposed) setError(spaceError(cause)); });
     return () => { disposed = true; };

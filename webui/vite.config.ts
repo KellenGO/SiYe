@@ -17,6 +17,16 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        // 框架层单独成块：主 chunk 之前是 676 kB（gzip 220 kB），
+        // 拆出来之后业务代码改动也不会让这些依赖的 hash 变。
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'i18next', 'react-i18next', 'i18next-browser-languagedetector'],
+          'vendor-query': ['@tanstack/react-query'],
+        },
+      },
+    },
   },
   server: {
     port: 5173,

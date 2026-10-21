@@ -137,6 +137,8 @@ export function AccountsPage({ activeSection, onSectionChange, onNavigateHelp }:
   loginJobsRef.current = loginJobs;
   /** 已汇报过终态的任务（同一次轮询可能重复读到终态，toast 只出一次）。 */
   const reportedLoginJobsRef = useRef<Set<string>>(new Set());
+  // 正在请求中的扫码登录任务：同一任务上一轮没回来时跳过本轮。
+  const scanLoginInFlight = useRef<Set<string>>(new Set());
   const [extensionVersion, setExtensionVersion] = useState("");
 
   // ── 扩展检测（content script ping/pong，协议实现在 lib/extensionSync）──
@@ -492,14 +494,21 @@ export function AccountsPage({ activeSection, onSectionChange, onNavigateHelp }:
       const active = Object.values(loginJobsRef.current)
         .filter((job) => job.job_id && isScanLoginActive(job.status));
       for (const job of active) {
+        const jobId = job.job_id as string;
+        // 上一次还没回来就跳过：慢请求不能靠"每 1.5 秒再开一个"去追，
+        // 否则在途请求数会随延迟线性堆叠，旧响应晚到还会把状态写回去。
+        if (scanLoginInFlight.current.has(jobId)) continue;
+        scanLoginInFlight.current.add(jobId);
         void (async () => {
           let next: ScanLoginJob;
           try {
-            const { data } = await axios.get(`${SCAN_LOGIN_API_BASE}/${job.job_id}`);
+            const { data } = await axios.get(`${SCAN_LOGIN_API_BASE}/${jobId}`);
             next = data as ScanLoginJob;
           } catch {
             // 单轮失败（网络抖动 / 后端重启）不改变状态，下一轮继续。
             return;
+          } finally {
+            scanLoginInFlight.current.delete(jobId);
           }
           setLoginJobs((prev) => ({ ...prev, [job.platform]: next }));
           if (!isScanLoginTerminal(next.status)) return;

@@ -7,7 +7,7 @@
  * 后端那边也是取一次就缓存住，不再自动更新。
  */
 
-import { useCallback } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { fetchTrending, type TrendingSnapshot } from "@/lib/trendingApi";
@@ -16,6 +16,10 @@ const TRENDING_QUERY_KEY = ["trending"];
 
 export function useTrending() {
   const client = useQueryClient();
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshFailed, setRefreshFailed] = useState(false);
+  // 连点「刷新」不再叠请求：一轮没回来之前直接忽略后续点击。
+  const inFlight = useRef(false);
   const query = useQuery({
     queryKey: TRENDING_QUERY_KEY,
     queryFn: () => fetchTrending(false),
@@ -29,14 +33,26 @@ export function useTrending() {
   });
 
   const refresh = useCallback(async () => {
-    const fresh = await fetchTrending(true);
-    client.setQueryData(TRENDING_QUERY_KEY, fresh);
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setRefreshing(true);
+    setRefreshFailed(false);
+    try {
+      const fresh = await fetchTrending(true);
+      client.setQueryData(TRENDING_QUERY_KEY, fresh);
+    } catch {
+      // 失败要能被界面看见（TrendingBoard 用 error 是否为空决定显示提示）。
+      setRefreshFailed(true);
+    } finally {
+      inFlight.current = false;
+      setRefreshing(false);
+    }
   }, [client]);
 
   return {
     snapshot: query.data as TrendingSnapshot | undefined,
-    loading: query.isPending,
-    error: query.error ? "热搜暂时取不到，稍后再试" : null,
+    loading: query.isPending || refreshing,
+    error: query.error || refreshFailed ? "热搜暂时取不到，稍后再试" : null,
     refresh,
   };
 }

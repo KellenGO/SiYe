@@ -45,6 +45,9 @@
   结构约束由 `tests/test_webui_ui_contract.py` 盯着（按钮在 `<SearchBar>` 之前、
   用主题色类、`right: calc(100% + 12px)` 存在、`goHome` 不得调用 `handleResetLocal`）。
 
+- 顶栏「首页」在结果页也能回首页（2026-10-21）：结果页的 hash 同样是 `/search`，只比较 hash 会走"已在该路由"分支、`homeRoute` 翻不过来，表现为点了没反应。现在 `navigate('search')` 只在"当前不在搜索板块"时才复用上次视图，已经在搜索板块内点击一律回 `/`。
+
+
 ## 测试怎么跑
 
 - `pytest -q tests/test_webui_ui_contract.py`（按钮位置 / 不清结果 / i18n 键）

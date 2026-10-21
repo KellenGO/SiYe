@@ -137,6 +137,7 @@ export default function SpaceNoteController({ spaceId, open, onClose, researchOp
     },
     onUpdate: ({ editor: current }) => { sessionRef.current?.change(current.getJSON() as NoteDocument, current.view.composing); },
   }, [spaceId, Boolean(session)]);
+  const editorReady = Boolean(editor);
   useEffect(() => {
     if (!modal) return;
     const previous = document.activeElement as HTMLElement | null;
@@ -164,7 +165,7 @@ export default function SpaceNoteController({ spaceId, open, onClose, researchOp
       document.removeEventListener("focusin", focus);
       if (previous?.isConnected) previous.focus();
     };
-  }, [container, modal, onClose, Boolean(editor)]);
+  }, [container, modal, onClose, editorReady]);
   useEffect(() => { editor?.setEditable(Boolean(session) && !detail.data?.archived, false); }, [editor, session, detail.data?.archived]);
   useEffect(() => {
     if (session && detail.data && session.sync(detail.data.note_document, detail.data.note_revision)) editor?.commands.setContent(session.document, { emitUpdate: false });

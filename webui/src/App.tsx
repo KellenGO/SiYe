@@ -121,6 +121,8 @@ function AppContent() {
   }, [])
 
   const navigate = (mode: ViewMode, section?: SettingsSection) => {
+    // 已经在搜索板块里再点「搜索」= 回首页。结果页的 hash 也是 /search，
+    // 只比较 hash 会走进"已在该路由"分支，homeRoute 永远翻不过来。
     const nextHash = mode === 'accounts'
       ? `/settings/${section || settingsSection}`
       : mode === 'favorites'
@@ -131,7 +133,9 @@ function AppContent() {
           ? '/history'
           : mode === 'help'
             ? '/help'
-            : lastSearchHome.current ? '/' : '/search'
+            : mode === 'search' && viewMode === 'search'
+              ? '/'
+              : lastSearchHome.current ? '/' : '/search'
     if (window.location.hash === `#${nextHash}`) {
       const route = routeFromHash()
       setViewMode(route.view)

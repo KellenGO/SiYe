@@ -164,7 +164,11 @@ export function useAggregateSearch() {
       }
     },
     enabled: !!jobId,
-    refetchInterval: (query) => query.state.error ? 800 : searchPollInterval(query.state.data),
+    // 出错时按失败次数指数退避（0.8s → 1.6s → … → 封顶 15s），
+    // 而不是固定 0.8 秒一直撞 —— 后端重启/5xx 时那是每秒一次的风暴。
+    refetchInterval: (query) => (query.state.error
+      ? Math.min(800 * 2 ** query.state.fetchFailureCount, 15000)
+      : searchPollInterval(query.state.data)),
     staleTime: 200,
     retry: (count, err) => {
       const status = (err as { response?: { status?: number } })?.response?.status;

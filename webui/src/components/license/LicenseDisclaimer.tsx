@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ShieldAlert, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -15,6 +16,7 @@ interface LicenseDisclaimerProps {
 
 export function LicenseDisclaimer({ onAccept }: LicenseDisclaimerProps) {
   const { t } = useTranslation('license')
+  const [declined, setDeclined] = useState(false)
 
   const handleConfirm = () => {
     localStorage.setItem(LICENSE_KEY, 'true')
@@ -22,40 +24,28 @@ export function LicenseDisclaimer({ onAccept }: LicenseDisclaimerProps) {
   }
 
   const handleDecline = () => {
-    // 尝试关闭当前标签页（不会关闭整个浏览器，只关闭当前tab）
+    // 脚本打开的窗口才能被 close() 关掉；浏览器拦下时就地渲染拒绝页。
+    // 以前这里是 setTimeout 里覆盖 document.body.innerHTML —— 那会把 React
+    // 根节点一起抹掉，返回/回退后整页不可用；而且 100ms 的 about:blank 跳转
+    // 会让 200ms 的渲染基本跑不到。
     try {
-      // 方式1: 直接关闭当前标签页
       window.close()
-
-      // 方式2: 将当前标签页导航到空白页
-      setTimeout(() => {
-        window.location.href = 'about:blank'
-      }, 100)
     } catch {
-      // 忽略错误
+      // 被安全策略拦下是正常情况，继续显示拒绝页。
     }
+    setDeclined(true)
+  }
 
-    // 如果无法关闭（浏览器安全限制），显示拒绝访问页面
-    setTimeout(() => {
-      document.body.innerHTML = `
-        <div style="
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          height: 100vh;
-          background: #0d1117;
-          color: #f85149;
-          font-family: 'JetBrains Mono', monospace;
-          text-align: center;
-          padding: 20px;
-        ">
-          <div style="font-size: 48px; margin-bottom: 20px;">⛔</div>
-          <div style="font-size: 24px; font-weight: bold; margin-bottom: 10px;">访问已拒绝</div>
-          <div style="font-size: 14px; color: #8b949e;">您未同意使用条款，请关闭此标签页</div>
+  if (declined) {
+    return (
+      <div className="fixed inset-0 z-[100] grid place-items-center bg-[#0d1117] p-6 text-center text-[#f85149]">
+        <div>
+          <div className="mb-5 text-5xl" aria-hidden="true">⛔</div>
+          <h2 className="mb-2 text-2xl font-bold">{t('declinedTitle')}</h2>
+          <p className="text-sm text-[#8b949e]">{t('declinedHint')}</p>
         </div>
-      `
-    }, 200)
+      </div>
+    )
   }
 
   return (

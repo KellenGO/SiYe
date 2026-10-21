@@ -126,6 +126,9 @@ export function ResultTabs({
   useEffect(() => {
     if (!active) { setDetailResult(null); setMembershipPrompt(null); }
   }, [active]);
+  // 这里的依赖是"触发器"而不是参数：结果或筛选变了就重新取一次当前时间，
+  // 供"多久以前"这类判断用。Date.now 本身不读这两个值，规则看不出来。
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const nowMs = useMemo(() => Date.now(), [results, filters]);
 
   // 把勾选结果同步给外部（收藏夹页据此做批量加入 / 移出）
@@ -153,7 +156,10 @@ export function ResultTabs({
   }, [activeTab, effectiveTab]);
 
   const hydrationOrderRef = useRef<{ signature: string; keys: string[] } | null>(null);
-  useEffect(() => setSelected(new Set()), [jobId, effectiveTab, filters, selectionResetKey]);
+  // 只在换任务/换平台/外部要求重置时清空勾选。筛选条件不参与：
+  // filters 是每次按键都新建的对象，放进来会让"勾选后打字筛选"把选择清空。
+  // 被筛掉但已勾选的项本来就不计入 selectedResults，不会误伤批量操作。
+  useEffect(() => setSelected(new Set()), [jobId, effectiveTab, selectionResetKey]);
   useEffect(() => setExportOpen(false), [jobId]);
 
   // 先按当前标签筛选，再按所选模式排序（纯前端计算，不发任何请求）。
@@ -181,7 +187,7 @@ export function ResultTabs({
     return hydrationOrderRef.current.keys
       .map((key) => byKey.get(key))
       .filter((result): result is UnifiedSearchResult => Boolean(result));
-  }, [results, effectiveTab, sortMode, keyword, hydrationStatus, jobId, filters, nowMs]);
+  }, [results, effectiveTab, sortMode, keyword, hydrationStatus, jobId, filters, nowMs, disableSort]);
   const filteredResults = useMemo(() => viewScope === "search" ? groupZhihuQuestions(rankedResults) : rankedResults,
     [viewScope, rankedResults]);
 

@@ -35,7 +35,7 @@ export function AuthorFooter({ onShowDisclaimer, onNavigateHelp }: AuthorFooterP
           </a>
         </span>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          <button type="button" onClick={onNavigateHelp} className="hover:text-brand-strong transition-colors">使用帮助</button>
+          <button type="button" onClick={onNavigateHelp} className="hover:text-brand-strong transition-colors">{t('footer.help')}</button>
           <span className="hidden sm:inline">{t('footer.localFirst')}</span>
           <a
             href={ORIGINAL_PROJECT_URL}

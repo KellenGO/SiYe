@@ -93,9 +93,14 @@ export function SearchPage({ active = true, homeRequested = false, onViewChange,
   useEffect(() => setSelectedRound(null), [latestJobResponse?.job_id]);
   const exploration = latestJobResponse?.exploration;
   const previousBatch = exploration?.previous_batches.find((batch) => batch.number === selectedRound);
-  const displayJobResponse = previousBatch && latestJobResponse
-    ? { ...latestJobResponse, ...previousBatch, hydration_status: "completed" as const }
-    : latestJobResponse;
+  // 合并历史轮次要稳定引用：下游 useMemo/useEffect 直接依赖它，
+  // 每渲染新建对象会让它们白跑一遍（失败提示另有去重，不会重复弹）。
+  const displayJobResponse = useMemo(
+    () => (previousBatch && latestJobResponse
+      ? { ...latestJobResponse, ...previousBatch, hydration_status: "completed" as const }
+      : latestJobResponse),
+    [previousBatch, latestJobResponse],
+  );
   const hasMore = Object.values(exploration?.platforms ?? {}).some((info) => info.has_more);
   const fetchedAt = useMemo(() => Object.fromEntries(Object.entries(displayJobResponse?.platforms || {})
     .map(([platform, info]) => [platform, info.fetched_at ?? null])), [displayJobResponse]);
@@ -246,7 +251,7 @@ export function SearchPage({ active = true, homeRequested = false, onViewChange,
   return (
     <SpaceWorkspace spaceId={spaces.activeId} selector active={active}>
     <div className={isHome ? `home ${homePreferences.mode === "min" ? "minimal" : ""}` : "preview-container search-shell"}>
-      {isHome && <div className="hero"><div className="wordmark" aria-label="四野"><b>四野</b><svg className="swoosh" viewBox="0 0 120 12" aria-hidden="true"><defs><linearGradient id="wordmark-gradient"><stop stopColor="#6677fb"/><stop offset="1" stopColor="#29ddcc"/></linearGradient></defs><path d="M3 9Q60 0 117 9" stroke="url(#wordmark-gradient)" strokeWidth="3.5" fill="none" strokeLinecap="round"/></svg></div></div>}
+      {isHome && <div className="hero"><div className="wordmark" aria-label={t("brand.name")}><b>{t("brand.name")}</b><svg className="swoosh" viewBox="0 0 120 12" aria-hidden="true"><defs><linearGradient id="wordmark-gradient"><stop stopColor="#6677fb"/><stop offset="1" stopColor="#29ddcc"/></linearGradient></defs><path d="M3 9Q60 0 117 9" stroke="url(#wordmark-gradient)" strokeWidth="3.5" fill="none" strokeLinecap="round"/></svg></div></div>}
       {/* 搜索区：结果页在搜索框**左侧**放一个主题色圆角「返回首页」按钮；首页只有搜索框。 */}
       <div className="search-zone">
         {!isHome && (
@@ -292,9 +297,9 @@ export function SearchPage({ active = true, homeRequested = false, onViewChange,
       )}
 
       {isHome && homePreferences.mode === "full" && (homePreferences.history || homePreferences.trending) && (
-        <div className="home-panels" style={!homePreferences.history || !homePreferences.trending ? { gridTemplateColumns: "1fr" } : undefined} aria-label="首页快捷内容">
+        <div className="home-panels" style={!homePreferences.history || !homePreferences.trending ? { gridTemplateColumns: "1fr" } : undefined} aria-label={t("search.homePanels")}>
           {homePreferences.history && <section className="panel">
-            <div className="panel-heading"><h2>最近搜索</h2>{history.length ? <button type="button" className="text-link" onClick={clearHistory}>清空</button> : <Clock3 />}</div>
+            <div className="panel-heading"><h2>{t("search.recent")}</h2>{history.length ? <button type="button" className="text-link" onClick={clearHistory}>{t("search.clear")}</button> : <Clock3 />}</div>
             {history.length > 0 ? (
               <div className="words">
                 {history.slice(0, 10).map((item) => (
@@ -304,16 +309,16 @@ export function SearchPage({ active = true, homeRequested = false, onViewChange,
                 ))}
               </div>
             ) : (
-              <p className="secondary text-[13px]">你的探索，从第一次搜索开始。</p>
+              <p className="secondary text-[13px]">{t("search.emptyFirst")}</p>
             )}
-            <p className="panel-footnote">{history.length ? "从上次的好奇，继续探索。" : "搜索过的关键词会出现在这里。"}</p>
+            <p className="panel-footnote">{history.length ? t("search.emptyContinue") : t("search.emptyHint")}</p>
           </section>}
           {/* 热搜卡片取代了原来的「最近搜到」：那一块的内容在历史与搜索结果里都能看到，
               而"各平台在热什么"是这里唯一能提供的新信息。 */}
           {homePreferences.trending && <TrendingBoard onPick={handleTrendingPick} />}
         </div>
       )}
-      {isHome && homePreferences.mode === "full" && <p className="home-note">小红书、抖音、B站、知乎 · 一次搜索，几种视角。</p>}
+      {isHome && homePreferences.mode === "full" && <p className="home-note">{t("search.homeNote")}</p>}
 
       {!isHome && <div className="search-headline">
         <h1>{displayJobResponse?.keyword || keyword || "搜索结果"}</h1>
