@@ -415,8 +415,11 @@ class XiaoHongShuClient(ReusableHttpClientMixin, AbstractApiClient):
         }
         uri = "/api/sns/web/v1/feed"
         res = await self.post(uri, data)
-        if res and res.get("items"):
-            res_dict: Dict = res["items"][0]["note_card"]
+        # 失效/被风控的笔记仍会返回 items，但里面没有 note_card（或首项不是 dict）。
+        # 直接下标会抛 KeyError，而补全流程只捕超时 → 整批指标补全连同收藏任务一起失败。
+        item = res["items"][0] if res and isinstance(res.get("items"), list) and res["items"] else None
+        res_dict = item.get("note_card") if isinstance(item, dict) else None
+        if isinstance(res_dict, dict):
             return res_dict
         # When crawling frequently, some notes may have results while others don't
         utils.logger.error(

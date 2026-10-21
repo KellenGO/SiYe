@@ -383,7 +383,7 @@ class LibraryStore(SqliteStoreBase):
             return self._row_to_item(row, self._collections_of(conn, int(row["id"])))
 
     def set_note(self, platform: str, content_id: str, note: str) -> bool:
-        with self._conn() as conn:
+        with self._conn(write=True) as conn:
             cursor = conn.execute(
                 "UPDATE items SET note = ? WHERE platform = ? AND content_id = ?",
                 ((note or "")[:MAX_NOTE_LENGTH], platform, content_id),
@@ -395,7 +395,7 @@ class LibraryStore(SqliteStoreBase):
         if not keys:
             return 0
         removed = 0
-        with self._conn() as conn:
+        with self._conn(write=True) as conn:
             for platform, content_id in keys:
                 cursor = conn.execute(
                     "DELETE FROM items WHERE platform = ? AND content_id = ?",
@@ -486,7 +486,7 @@ class LibraryStore(SqliteStoreBase):
             raise ValueError("收藏夹名称最长 60 个字")
         if name.casefold() in {item.casefold() for item in RESERVED_COLLECTION_NAMES}:
             raise ValueError(f'「{name}」是系统收藏夹名称')
-        with self._conn() as conn:
+        with self._conn(write=True) as conn:
             if conn.execute("SELECT 1 FROM collections WHERE name = ?", (name,)).fetchone():
                 raise ValueError(f'收藏夹「{name}」已存在')
             position = conn.execute("SELECT COALESCE(MAX(position), 0) + 1 AS p FROM collections").fetchone()["p"]
@@ -584,7 +584,7 @@ class LibraryStore(SqliteStoreBase):
             raise ValueError("收藏夹名称最长 60 个字")
         if name.casefold() in {item.casefold() for item in RESERVED_COLLECTION_NAMES}:
             raise ValueError(f'「{name}」是系统收藏夹名称')
-        with self._conn() as conn:
+        with self._conn(write=True) as conn:
             conflict = conn.execute(
                 "SELECT id FROM collections WHERE name = ? AND id <> ?", (name, collection_id)
             ).fetchone()
@@ -600,7 +600,7 @@ class LibraryStore(SqliteStoreBase):
 
     def delete_collection(self, collection_id: int) -> Dict[str, Any]:
         """删除收藏夹但**保留**其中的内容（只解除归属）。"""
-        with self._conn() as conn:
+        with self._conn(write=True) as conn:
             row = conn.execute("SELECT name FROM collections WHERE id = ?", (collection_id,)).fetchone()
             if row is None:
                 raise ValueError("收藏夹不存在")
@@ -614,7 +614,7 @@ class LibraryStore(SqliteStoreBase):
         if not keys:
             return {"added": 0, "missing": 0}
         added = missing = 0
-        with self._conn() as conn:
+        with self._conn(write=True) as conn:
             row = conn.execute("SELECT 1 FROM collections WHERE id = ?", (collection_id,)).fetchone()
             if row is None:
                 raise ValueError("收藏夹不存在")
@@ -639,7 +639,7 @@ class LibraryStore(SqliteStoreBase):
         if not keys:
             return {"removed": 0}
         removed = 0
-        with self._conn() as conn:
+        with self._conn(write=True) as conn:
             for platform, content_id in keys:
                 cursor = conn.execute(
                     """

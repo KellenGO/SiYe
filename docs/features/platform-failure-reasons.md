@@ -45,6 +45,12 @@
   文案是「这次没有取到内容」而不是「已自动取消勾选」。
 - worker 的 `error_summary` 以前在 manager 侧被丢掉（只读 `status`）—— 新增状态字段时
   记得同时改 `_read_worker_output` 的透传，否则前端永远看不到原因。
+- **平台私有错误码不能直接进响应模型**：worker 会把 `session_expired` / `restricted` /
+  `malformed_response` 这类 `safe_code` 当作错误类型抛出来，而 `PlatformStatusInfo.status`
+  是 `Literal`。以前整条 job 查询会 500。现在 `aggregate_search/models.py` 的
+  `platform_error_status()` 统一收敛（登录类 → `login_required`，限流类 → `rate_limited`，
+  其余 → `failed`），worker 落状态和 `set_platform_status` 两处都过一遍；新增错误码时
+  先看映射表，别只在 worker 里加分支。
 - 平台状态条 `<small>` 显示的是原因，完整内容同时进 `title`；`tests/test_webui_ui_contract.py`
   有契约盯着这两点。
 

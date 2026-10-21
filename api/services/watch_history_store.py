@@ -196,7 +196,7 @@ class ViewHistoryStore(SqliteStoreBase):
 
     def delete_view(self, platform: str, content_id: str) -> int:
         """删除单条观看历史。"""
-        with self._conn() as conn:
+        with self._conn(write=True) as conn:
             cursor = conn.execute(
                 "DELETE FROM views WHERE platform = ? AND content_id = ?",
                 (platform, content_id),
@@ -205,7 +205,7 @@ class ViewHistoryStore(SqliteStoreBase):
 
     def clear(self) -> int:
         """清空全部观看历史。"""
-        with self._conn() as conn:
+        with self._conn(write=True) as conn:
             cursor = conn.execute("DELETE FROM views")
             return int(cursor.rowcount)
 

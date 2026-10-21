@@ -467,3 +467,37 @@ for event,data in [('status',{'status':'succeeded'}),('done',{})]:
     assert response.accounts[0]["account"] == "bilibili:1"
     assert response.results == []
     assert manager._recent.items["bilibili"] == []
+
+
+class _MixedClient:
+    """一页里混着视频与不受支持的内容（没有 bvid/aid 的条目）。"""
+
+    async def get(self, *_args, **_kwargs):
+        return {"mid": 7}
+
+    async def get_created_favorite_folders(self, _mid):
+        return {"count": 1, "list": [{"id": 10, "title": "混合夹", "media_count": 3}]}
+
+    async def get_favorite_folder_contents(self, _fid, page, _size):
+        if page > 1:
+            return {"medias": [], "has_more": False}
+        return {"medias": [
+            {"bvid": "BV1", "title": "视频一"},
+            {"id": 99, "title": "番剧（暂不支持）"},
+            {"bvid": "BV2", "title": "视频二"},
+        ], "has_more": False}
+
+
+@pytest.mark.asyncio
+async def test_unsupported_item_is_skipped_instead_of_aborting_the_folder(store):
+    """一条不支持的内容不能让整夹（以及 reset 替换）中止。"""
+    phases = []
+    source = BilibiliFavoritesSource(_MixedClient(), interval=0)
+    errors = await synchronize_favorites(source, store, "reset", lambda *args: phases.append(args[2]))
+
+    assert errors == []
+    assert {item["result"]["content_id"] for item in store.archive_page(platform="bilibili")["items"]} == {"BV1", "BV2"}
+    summary = store.archive_summary()
+    assert summary["accounts"][0]["status"] == "succeeded"
+    assert "1 条收藏类型暂不支持" in summary["platforms"]["bilibili"]["error_summary"]
+    assert any("1 条暂不支持" in phase for phase in phases)

@@ -141,7 +141,7 @@ class RemoteFavoritesStore(RemoteSyncStateMixin, SqliteStoreBase):
         """保存某个平台本次同步到的条目 + 本次运行状态。返回写入条数。"""
         now = utc_now()
         written = 0
-        with self._conn() as conn:
+        with self._conn(write=True) as conn:
             # 本次没拿到的指标要沿用本机已有的值（见 favorite_snapshot.merge_counts）：
             # 一次超时或只拿到列表字段的同步，不能把以前完整的指标覆盖成残缺版本。
             ids = [self._content_key(platform, row) for row in results]
@@ -270,7 +270,7 @@ class RemoteFavoritesStore(RemoteSyncStateMixin, SqliteStoreBase):
         }
 
     def clear(self, account_key: str = DEFAULT_ACCOUNT_KEY) -> int:
-        with self._conn() as conn:
+        with self._conn(write=True) as conn:
             removed = conn.execute(
                 "DELETE FROM remote_favorites WHERE account_key = ?", (account_key,)
             ).rowcount

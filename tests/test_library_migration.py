@@ -134,3 +134,64 @@ def test_partially_invalid_source_rolls_back_its_local_updates(tmp_path: Path, m
     assert preserved["result"]["title"] == "目标原标题"
     assert preserved["note"] == "目标备注"
     assert RemoteFavoritesStore(target_dir / "library.db").load() is None
+
+
+def test_legacy_remote_rows_for_same_platform_all_migrate(tmp_path: Path, monkeypatch) -> None:
+    """旧库同一平台有多条收藏时必须全部迁进来。
+
+    目标表唯一键是 (account_key, platform, content_key)。旧库没有 content_key，
+    迁移如果不补这一列，第二条就会撞唯一键，整个源被回滚。
+    """
+    app_root = tmp_path / "app"
+    source = app_root / "data" / "library.db"
+    source.parent.mkdir(parents=True)
+    with sqlite3.connect(source) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE remote_favorites (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_key TEXT NOT NULL DEFAULT 'default',
+                platform TEXT NOT NULL,
+                content_id TEXT NOT NULL,
+                content_type TEXT NOT NULL DEFAULT '',
+                title TEXT NOT NULL DEFAULT '',
+                snippet TEXT,
+                author TEXT NOT NULL DEFAULT '',
+                url TEXT NOT NULL DEFAULT '',
+                published_at TEXT,
+                cover_url TEXT,
+                metrics TEXT NOT NULL DEFAULT '{}',
+                collection_names TEXT NOT NULL DEFAULT '[]',
+                first_seen_at TEXT NOT NULL,
+                last_seen_at TEXT NOT NULL,
+                UNIQUE (account_key, platform, content_id)
+            );
+            """
+        )
+        for index in range(3):
+            conn.execute(
+                "INSERT INTO remote_favorites (account_key, platform, content_id, content_type,"
+                " title, url, first_seen_at, last_seen_at) VALUES (?,?,?,?,?,?,?,?)",
+                ("xhs:u1", "xhs", f"note{index}", "note", f"标题{index}",
+                 f"https://example.com/{index}",
+                 "2026-01-01T00:00:00+00:00", "2026-01-01T00:00:00+00:00"),
+            )
+
+    target_dir = tmp_path / "stable"
+    monkeypatch.setenv("SIYE_DATA_DIR", str(target_dir))
+    summary = migrate_legacy_libraries(app_root)
+
+    assert summary["warnings"] == []
+    assert summary["remote_items"] == 3
+    assert summary["source_count"] == 1
+    store = RemoteFavoritesStore(target_dir / "library.db")
+    assert store.archive_summary()["counts"].get("xhs") == 3
+    page = store.archive_page(account="xhs:u1", limit=10)
+    assert {item["result"]["content_id"] for item in page["items"]} == {"note0", "note1", "note2"}
+
+    # 迁移标记已写入 → 第二次启动不重跑、不再生成备份。
+    backups = list((target_dir / "migration-backups").glob("*.db"))
+    repeated = migrate_legacy_libraries(app_root)
+    assert repeated["source_count"] == 0
+    assert len(list((target_dir / "migration-backups").glob("*.db"))) == len(backups)
+

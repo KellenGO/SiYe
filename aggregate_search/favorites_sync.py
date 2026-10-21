@@ -14,7 +14,7 @@ class FavoritesSyncError(ValueError):
     safe_message = "收藏列表发生变化或返回异常，已保留进度；请稍后重新同步"
 @dataclass
 class FavoritePage:
-    results:list[dict]; fingerprint:str; complete:bool; count:int; identities:list[tuple[str,object]]; next_token:object=None
+    results:list[dict]; fingerprint:str; complete:bool; count:int; identities:list[tuple[str,object]]; next_token:object=None; skipped:int=0
 class FavoritesSource(Protocol):
     platform:str; incremental_verified:bool
     async def identity(self)->str: ...
@@ -30,16 +30,18 @@ class _Source:
         return await asyncio.wait_for(method(*args,**kwargs),timeout=REQUEST_TIMEOUT)
     def make_page(self,rows,folder,complete,next_token,identity):
         if not isinstance(rows,list): raise FavoritesSyncError("Invalid favorite page")
-        results=[]; identities=[]
+        results=[]; identities=[]; skipped=0
         for row in rows:
-            if not isinstance(row,dict): raise FavoritesSyncError("Invalid favorite item")
+            # 一条不受支持的内容（知乎「想法」、B 站番剧等）不该让整个收藏夹中止：
+            # 跳过并计数，这一页仍算读取成功，否则后面的页永远读不到、reset 也完不成。
+            if not isinstance(row,dict): skipped+=1; continue
             converted=self.adapter.adapt([{**row,"_collection_name":folder["name"]}])
-            if len(converted)!=1: raise FavoritesSyncError("Unsupported favorite item")
+            if len(converted)!=1: skipped+=1; continue
             result=converted[0].model_dump(mode="json"); result["metrics_status"]="partial"
             results.append(result); identities.append((identity(row,result),row.get("fav_time") or row.get("updated_time") or ""))
         if len({x[0] for x in identities}) != len(identities): raise FavoritesSyncError("Duplicate favorite items")
         fp=hashlib.sha256(json.dumps(identities,ensure_ascii=False).encode()).hexdigest()
-        return FavoritePage(results,fp,bool(complete),len(rows),identities,next_token)
+        return FavoritePage(results,fp,bool(complete),len(rows),identities,next_token,skipped)
 
 class BilibiliFavoritesSource(_Source):
     platform="bilibili"; adapter=BilibiliAdapter()
@@ -139,7 +141,7 @@ async def _synchronize_favorites(source:FavoritesSource,store,mode,progress):
     account=await source.identity(); folders=await source.folders(account)
     store.observe_folders(source.platform, account, folders)
     scan=store.begin_scan(source.platform,account,folders,mode)
-    saved=0; errors=[]; incremental=mode=="auto" and source.incremental_verified
+    saved=0; skipped=0; errors=[]; incremental=mode=="auto" and source.incremental_verified
     try:
         first_pages={}
         for index,folder in enumerate(folders,1):
@@ -160,11 +162,14 @@ async def _synchronize_favorites(source:FavoritesSource,store,mode,progress):
                     elif token is not None: sequence=int(checkpoint["page"])+1
                 while True:
                     page=await source.page(folder,token)
+                    skipped += page.skipped
                     if sequence==1:first_pages[folder["id"]]=page.fingerprint
                     crossed,tail=store.baseline_run(account,folder["id"],page.identities,run); reached=reached or crossed
                     stop=incremental and has_baseline and reached
                     store.save_sync_page(source.platform,account,scan,folder["id"],folder["name"],sequence,page.fingerprint,page.results,page.complete or stop,PAGE_SIZE,page.identities,token=token,next_token=page.next_token)
-                    saved += page.count; folder_read += page.count; progress(account,saved,f"正在保存 {folder['name']} · 第 {sequence} 页")
+                    # 进度里的"已保存"只算真正入库的条数；跳过的条数单独统计，
+                    # 否则界面上的条数会比归档里实际的多。
+                    saved += len(page.results); folder_read += page.count; progress(account,saved,f"正在保存 {folder['name']} · 第 {sequence} 页")
                     if page.complete or stop:
                         store.complete_folder(account,scan,folder["id"],reconcile=mode=="full")
                         store.update_folder_diagnostic(account,folder["id"],scan,pages=sequence,returned=folder_read,stop_reason="history_run" if stop else "end")
@@ -179,6 +184,11 @@ async def _synchronize_favorites(source:FavoritesSource,store,mode,progress):
         for folder in folders:
             if folder["id"] in first_pages and (await source.page(folder,1 if source.platform=="bilibili" else None)).fingerprint != first_pages[folder["id"]]:
                 raise FavoritesSyncError("Favorite head changed during sync")
-        store.finish_scan(account,scan,reconcile=mode=="full"); progress(account,saved,"导入完成"); return []
+        store.finish_scan(account,scan,reconcile=mode=="full")
+        # 跳过的不支持内容不算失败：状态仍是成功，把条数写进 error_summary 供界面提示。
+        if skipped:
+            store.sync_status(account,"succeeded",f"{skipped} 条收藏类型暂不支持，已跳过")
+        progress(account,saved,f"导入完成（{skipped} 条暂不支持，已跳过）" if skipped else "导入完成")
+        return []
     except BaseException:
         store.sync_status(account,"cancelled","同步未完成，可手动继续；未据此判断缺失"); raise

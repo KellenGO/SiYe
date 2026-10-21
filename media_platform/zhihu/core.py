@@ -130,7 +130,7 @@ class ZhihuCrawler(AbstractCrawler):
             if config.CRAWLER_TYPE == "search":
                 await self.search()
             elif config.CRAWLER_TYPE == "favorites":
-                await self.fetch_favorites()
+                return await self.fetch_favorites()
             else:
                 pass
 

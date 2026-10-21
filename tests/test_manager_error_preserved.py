@@ -346,3 +346,56 @@ async def test_cleanup_marks_cancelled(monkeypatch):
     for p in ("bilibili", "zhihu"):
         assert job.platforms_state[p].status == "cancelled"
     assert job._compute_overall() == "cancelled"
+
+
+# ── 平台私有错误码不能进 PlatformStatus ─────────────────────────────────
+# 小红书 401 会带 safe_code="session_expired"，403 带 "restricted"，
+# 返回 HTML 时带 "malformed_response"。这些是平台内部错误码，直接写进
+# PlatformStatusInfo 会让 pydantic 的 Literal 校验失败 → GET /jobs 500，
+# 且 overall 永远停在 running。
+
+def test_platform_error_status_mapping():
+    from aggregate_search.models import PLATFORM_STATUSES, coerce_platform_status, platform_error_status
+
+    assert platform_error_status("session_expired") == "login_required"
+    assert platform_error_status("restricted") == "rate_limited"
+    assert platform_error_status("malformed_response") == "failed"
+    assert platform_error_status("browser_unavailable") == "failed"
+    assert platform_error_status("rate_limited") == "rate_limited"
+    assert platform_error_status("某个未来才加的错误码") == "failed"
+    # 合法状态不做二次映射；未知值必须有落点。
+    for value in PLATFORM_STATUSES:
+        assert coerce_platform_status(value) == value
+    assert coerce_platform_status("session_expired") == "login_required"
+    assert coerce_platform_status("") == "failed"
+
+
+@pytest.mark.asyncio
+async def test_unknown_error_code_does_not_break_job_response(monkeypatch):
+    """worker 发 session_expired → 平台状态收敛为 login_required，响应可序列化。"""
+    manager = SearchJobManager()
+    resp = await manager.create_job(SearchJobRequestSchema(
+        keyword="k", platforms=["xhs"], limit_per_platform=1))
+    job_id = resp.job_id
+    out_lines = [
+        _event_line(job_id, "status", {"status": "running"}, platform="xhs"),
+        _event_line(job_id, "error", {
+            "type": "session_expired",
+            "message": "小红书登录状态已失效",
+        }, platform="xhs"),
+    ]
+
+    async def fake_exec(*a, **k):
+        return _FakeProc(out_lines, rc=0)
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+
+    job = manager._active_job
+    await asyncio.wait_for(job.task, timeout=10)
+
+    info = job.platforms_state["xhs"]
+    assert info.status == "login_required"
+    response = job.to_response()
+    assert response.platforms["xhs"].status == "login_required"
+    assert response.overall == "failed"
+

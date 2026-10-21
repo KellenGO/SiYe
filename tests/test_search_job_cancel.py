@@ -453,3 +453,35 @@ async def test_succeeded_without_done_event_keeps_results(monkeypatch, tmp_path)
         assert len(fetched.results) == 1
     finally:
         await mgr.cleanup()
+
+
+@pytest.mark.asyncio
+async def test_cancel_during_hydration_reaches_cancelled_terminal_state():
+    """搜索已完成、只剩详情补全时取消：接口说取消了，GET 也必须说取消。
+
+    以前这条分支直接 return True，既不置 _cancelled 也不 finalize()，
+    于是前端停止轮询显示"已取消"，刷新后 job 又变回 completed。
+    """
+    mgr = SearchJobManager()
+    job = _ActiveJob("hydrating-job", "词", ["xhs"], 10)
+    job.set_platform_status("xhs", "succeeded")
+    job.finalize()
+
+    async def slow_hydration():
+        await asyncio.sleep(30)
+
+    job.hydration_task = asyncio.create_task(slow_hydration())
+    job.hydration_status = "running"
+    mgr._active_job = job
+    try:
+        assert await mgr.cancel_job("hydrating-job") is True
+        response = await mgr.get_job("hydrating-job")
+        assert response is not None
+        assert response.overall == "cancelled"
+        # 已经搜到的结果不能因为取消而消失。
+        assert response.platforms["xhs"].status == "succeeded"
+        assert job.hydration_task.done()
+        # 幂等：再取消一次仍然成功，不会退化成 404。
+        assert await mgr.cancel_job("hydrating-job") is True
+    finally:
+        await mgr.cleanup()

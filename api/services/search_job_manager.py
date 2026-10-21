@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional
 
 from aggregate_search.models import (
     UnifiedSearchResult, interleave_results, make_dedup_key,
-    is_valid_platform,
+    is_valid_platform, coerce_platform_status,
 )
 from aggregate_search.hydration import hydration_candidates, metric_candidates
 from aggregate_search.protocol import parse_event_line, WorkerRequest
@@ -647,8 +647,11 @@ class SearchJobManager:
                         if platform == "zhihu" and not job._cancelled and not job._cancelling:
                             from .reading import reading_service
                             reading_service.remember_search_result(result, job.account_generations[platform])
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        # 字段漂移（duration 从数字变字符串之类）会让整条结果反序列化失败。
+                        # 静默吞掉会变成"平台成功但条数偏少"，排查时被误判成风控 —— 至少留痕。
+                        logger.warning("dropped malformed %s result in job %s: %s",
+                                       platform, job.job_id, type(exc).__name__)
             elif event.event == "reading_body":
                 if platform == "zhihu" and not job._cancelled and not job._cancelling:
                     from .reading import reading_service
@@ -717,10 +720,10 @@ class SearchJobManager:
         job = self._active_job
         if job is None or job.job_id != job_id:
             return False
-        if job.hydration_task is not None and not job.hydration_task.done():
-            await self._stop_hydration_task(job)
-            return True
-        if job.is_terminal():
+        # 只有详情补全还在跑时，job 的平台状态已经是终态（结果已经搜完），
+        # 但后台仍然有活在干。这时必须当成可取消：否则接口回 True、job 却还是
+        # completed，同一个 job 的两个接口给出互相矛盾的终态。
+        if job.is_terminal() and not self._is_hydrating(job):
             # 已取消的 job 重复取消 → 幂等成功；正常终态 → 无可取消。
             return job._cancelled
         # 已有取消在途：等待同一取消操作完成（不启动第二套清理）。
@@ -728,7 +731,7 @@ class SearchJobManager:
             await self._await_cancel_done(job)
             return True
         async with job.cancel_lock:
-            if job.is_terminal():
+            if job.is_terminal() and not self._is_hydrating(job):
                 return job._cancelled
             if job._cancelling:
                 await self._await_cancel_done(job)
@@ -736,6 +739,7 @@ class SearchJobManager:
 
             job._cancelling = True
             try:
+                await self._stop_hydration_task(job)
                 for p in job.platforms:
                     if job.platforms_state[p].status in ("pending", "running"):
                         job.set_platform_status(p, "cancelled", error_summary="已取消")
@@ -833,6 +837,11 @@ class SearchJobManager:
         await self.supervisor.stop_all()
         # Round 16：shutdown 清空内存结果缓存。
         result_cache.clear()
+
+    @staticmethod
+    def _is_hydrating(job: "_ActiveJob") -> bool:
+        """详情补全是否还在跑（此时平台状态已终态，但后台仍有任务）。"""
+        return job.hydration_task is not None and not job.hydration_task.done()
 
     async def _stop_hydration_task(self, job: "_ActiveJob") -> None:
         # Set this even before the detached task starts, closing the terminal
@@ -1002,6 +1011,14 @@ class _ActiveJob:
         info = self.platforms_state.get(platform)
         if info is None:
             return
+        # 兜底：worker 的平台私有错误码（如 session_expired）不能进响应模型，
+        # 否则 PlatformStatusInfo 的 Literal 校验会让整个 job 查询 500。
+        normalised = coerce_platform_status(status)
+        if normalised != status:
+            logger.warning(
+                "unknown platform status %r for %s; mapped to %s",
+                status, platform, normalised)
+        status = normalised
         # timed_out is terminal and must not be downgraded
         if info.status == "timed_out" and status not in ("timed_out",):
             return

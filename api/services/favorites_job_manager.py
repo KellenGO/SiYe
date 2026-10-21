@@ -5,18 +5,37 @@ import uuid
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from aggregate_search.models import UnifiedSearchResult
+from aggregate_search.models import UnifiedSearchResult, coerce_platform_status
 from aggregate_search.protocol import WorkerRequest, parse_event_line
 from base.runtime_paths import application_root
 from ..schemas.favorites import FavoritePlatformInfo, FavoritesJobRequest, FavoritesJobResponse
 from .accounts import mark_login_required_from_search, evidence_token, record_usage
 from .favorite_snapshot import merge_snapshot
 from .remote_favorites_store import get_remote_favorites_store
+from .remote_sync_state import DEFAULT_ACCOUNT_KEY
 from .worker_process import drain_stderr_to_eof, spawn_worker, terminate_worker
 
 _ROOT = application_root()
 # 每个平台最多取 100 条时，分页请求会明显变多，超时相应放宽。
 _TIMEOUT = 300
+# 分页同步的总时长上限：单行 90 秒的超时挡不住"每 90 秒吐一行进度"的 worker，
+# 而收藏同步握着 exclusive("favorites") 租约，不结束就一直 409。
+_PAGED_TIMEOUT = 900
+
+
+def _archive_account(platform: str) -> str:
+    """本机归档里该平台唯一的账号（没有或不止一个就返回空串）。
+
+    分页同步的账号来自 worker 的 status 事件；起进程就失败时它还是空的，
+    这次失败会完全不落盘，重启后页面仍显示上一次的成功记录。用本机已有的
+    唯一账号兜底，把终态写回真实账号行。
+    """
+    try:
+        accounts = [item.get("account") for item in get_remote_favorites_store().archive_summary()["accounts"]
+                    if item.get("platform") == platform and item.get("account")]
+    except Exception:
+        return ""
+    return accounts[0] if len(accounts) == 1 else ""
 
 
 def _merge_result(previous: UnifiedSearchResult, current: UnifiedSearchResult) -> UnifiedSearchResult:
@@ -62,7 +81,12 @@ class _Job:
         self.platforms = {p: FavoritePlatformInfo() for p in self.order}
         self.items: Dict[str, List[UnifiedSearchResult]] = {p: [] for p in self.order}
         self.task: Optional[asyncio.Task] = None
+        # 取消只做一次：并发的两次取消若各自落库，会在 SQLite 上互相抢锁，
+        # 后到的写入失败就会丢掉一个平台的结果。
+        self.cancel_task: Optional[asyncio.Task] = None
         self.procs: List[asyncio.subprocess.Process] = []
+        # 取消时各平台的落库可能互相抢锁，失败的那一个要留到取消流程里重试。
+        self.save_failures: set[str] = set()
         self.persistence_error: Optional[str] = None
 
     def terminal(self) -> bool:
@@ -204,23 +228,47 @@ class FavoritesJobManager:
         job = self._active if self._active and self._active.job_id == job_id else self._recent
         if not job or job.job_id != job_id:
             return None
+        # 幂等：并发/重复取消共享同一次清理，避免两边同时落库。
+        if job.cancel_task is None:
+            job.cancel_task = asyncio.create_task(self._cancel_once(job))
+        await asyncio.shield(job.cancel_task)
+        return await self._snapshot(job, summary)
+
+    async def _cancel_once(self, job: "_Job") -> None:
         if job.task and not job.task.done():
             if not job.task.cancelling():
                 job.task.cancel()
             await asyncio.shield(asyncio.gather(job.task, return_exceptions=True))
         # A task cancelled before its first turn has no platform cleanup to run.
+        paged_mode = bool(job.sync_mode)
+        retried = bool(job.save_failures)
         for platform, info in job.platforms.items():
-            if info.status in ("pending", "running"):
-                info.status, info.error_summary = "cancelled", "同步已取消"
-                info.synced_at = datetime.now(timezone.utc)
-                try:
-                    await asyncio.to_thread(lambda p=platform: get_remote_favorites_store().save_platform(
+            if info.status not in ("pending", "running") and platform not in job.save_failures:
+                continue
+            info.status, info.error_summary = "cancelled", "同步已取消"
+            info.synced_at = info.synced_at or datetime.now(timezone.utc)
+            # 分页模式的结果归属真实账号（xhs:123 这类）。落库时若不传
+            # account_key，状态会写到 default 账号，重启后 archive_summary
+            # 取 max(id) 会把该平台覆盖成"已取消 / 0 条"。
+            account_key = (info.account or _archive_account(platform)) if paged_mode else DEFAULT_ACCOUNT_KEY
+            if paged_mode and not account_key:
+                continue
+            if paged_mode:
+                info.account = account_key
+            try:
+                await asyncio.to_thread(
+                    lambda p=platform, a=account_key: get_remote_favorites_store().save_platform(
                         p, [item.model_dump(mode="json") for item in job.items[p]],
-                        status="cancelled", error_summary="同步已取消", requested_limit=job.limit))
-                except Exception:
-                    job.persistence_error = "同步结果未能保存到本机，请检查磁盘空间后重试"
+                        status="cancelled", error_summary="同步已取消",
+                        requested_limit=job.limit, account_key=a))
+            except Exception:
+                job.save_failures.add(platform)
+                job.persistence_error = "同步结果未能保存到本机，请检查磁盘空间后重试"
+            else:
+                job.save_failures.discard(platform)
+        if retried and not job.save_failures:
+            job.persistence_error = None
         job.completed_at = job.completed_at or datetime.now(timezone.utc)
-        return await self._snapshot(job, summary)
 
     async def _run_platform(self, job: _Job, platform: str) -> None:
         info = job.platforms[platform]
@@ -271,7 +319,7 @@ class FavoritesJobManager:
                             info.status = status
                     elif event.event == "error":
                         error = event.data or {}
-                        info.status = error.get("type", "failed")
+                        info.status = coerce_platform_status(error.get("type", "failed"))
                         info.error_summary = str(error.get("message") or "收藏夹同步失败")[:160]
                         if info.status == "login_required" and record_usage(platform, "favorites", info.status, job.evidence_tokens[platform]):
                             mark_login_required_from_search(platform)
@@ -283,7 +331,7 @@ class FavoritesJobManager:
             # 持续排空 stderr，避免大量日志填满管道后 worker 卡死。
             stderr_task = asyncio.create_task(drain_stderr_to_eof(proc))
             try:
-                done = await read() if paged else await asyncio.wait_for(read(), timeout=_TIMEOUT)
+                done = await asyncio.wait_for(read(), timeout=_PAGED_TIMEOUT if paged else _TIMEOUT)
             finally:
                 stderr_task.cancel()
                 await asyncio.gather(stderr_task, return_exceptions=True)
@@ -315,8 +363,13 @@ class FavoritesJobManager:
             info.synced_at = datetime.now(timezone.utc)
             try:
                 if paged:
-                    if info.account:
-                        await asyncio.to_thread(get_remote_favorites_store().sync_status, info.account, effective_status, effective_error)
+                    # 账号来自 worker 的 status 事件；起进程就失败时它还是空的。
+                    # 用归档里的唯一账号兜底，否则本次失败完全不落盘，
+                    # 重启后页面仍显示上一次的「成功」。
+                    account = info.account or _archive_account(platform)
+                    if account:
+                        info.account = account
+                        await asyncio.to_thread(get_remote_favorites_store().sync_status, account, effective_status, effective_error)
                 else:
                     await asyncio.to_thread(lambda: get_remote_favorites_store().save_platform(
                         platform,
@@ -328,6 +381,9 @@ class FavoritesJobManager:
                 record_usage(platform, "favorites", effective_status, job.evidence_tokens[platform])
             except Exception:
                 record_usage(platform, "favorites", "failed", job.evidence_tokens[platform])
+                # 记下失败平台：取消流程会再存一次（两个平台同时落库时，
+                # 后到的那条连接可能直接被 SQLite 判成只读而整批丢失）。
+                job.save_failures.add(platform)
                 job.persistence_error = "同步结果未能保存到本机，关闭程序后可能丢失，请检查磁盘空间后重试"
 
     async def cleanup(self) -> None:

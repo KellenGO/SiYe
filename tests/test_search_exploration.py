@@ -115,6 +115,8 @@ async def test_all_platforms_keep_page_tail_and_resume_position(platform):
         assert kwargs["offset"] == 30 and kwargs["search_id"] == "search-token"
     else:
         assert args[1]["offset"] == 20
+        # lc_idx 必须跟着 offset 走：恒为 0 时知乎会把第 2 页当首页返回同一批内容。
+        assert args[1]["lc_idx"] == args[1]["offset"]
     assert second.state.exhausted
 
 

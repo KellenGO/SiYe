@@ -127,3 +127,101 @@ async def test_cancel_endpoint_handles_pending_and_unknown_jobs(store, monkeypat
         assert response.json()["platforms"]["xhs"]["status"] == "cancelled"
         assert response.json()["overall"] != "running"
         assert (await client.post("/api/search/favorites/jobs/unknown/cancel")).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_cancel_records_status_under_real_account(store):
+    """分页同步取消后，状态必须落在真实账号名下。
+
+    以前 cancel() 没传 account_key，状态写到 default 账号；重启后
+    archive_summary 取每平台 max(id) 会把该平台显示成「已取消 / 0 条」，
+    把上一次成功的记录盖掉。
+    """
+    import sqlite3
+
+    store.save_platform("xhs", [row("xhs", "kept")], status="succeeded", account_key="xhs:u1")
+    manager = FavoritesJobManager()
+    job = _Job(FavoritesJobRequest(platforms=["xhs"], sync_mode="auto"))
+    job.platforms["xhs"].status = "running"
+    job.platforms["xhs"].account = "xhs:u1"
+    manager._active = manager._recent = job
+
+    response = await manager.cancel(job.job_id)
+    assert response.platforms["xhs"].status == "cancelled"
+
+    with sqlite3.connect(store.db_path) as conn:
+        latest = conn.execute(
+            "SELECT account_key, status, result_count FROM remote_sync_runs "
+            "WHERE platform='xhs' ORDER BY id DESC LIMIT 1").fetchone()
+    assert latest == ("xhs:u1", "cancelled", 0)
+    # 汇总取的是这条 run：它属于真实账号，不会把 default 的假状态摆到平台上。
+    assert store.archive_summary()["platforms"]["xhs"]["status"] == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_cancel_before_account_is_known_writes_nothing(store):
+    """还没拿到账号就取消：宁可不写，也不能写一条 default 账号的假状态。"""
+    import sqlite3
+
+    manager = FavoritesJobManager()
+    job = _Job(FavoritesJobRequest(platforms=["xhs"], sync_mode="auto"))
+    job.platforms["xhs"].status = "running"
+    manager._active = manager._recent = job
+
+    response = await manager.cancel(job.job_id)
+    assert response.platforms["xhs"].status == "cancelled"
+
+    with sqlite3.connect(store.db_path) as conn:
+        assert conn.execute("SELECT count(*) FROM remote_sync_runs").fetchone()[0] == 0
+
+
+@pytest.mark.asyncio
+async def test_paged_sync_has_overall_deadline_despite_progress(store, monkeypatch):
+    """worker 一直吐进度也不能无限跑：分页同步有总时长上限。
+
+    以前只对每行读加 90 秒，worker 每 90 秒发一行 status 就能一直 running，
+    收藏同步攥着 exclusive 租约不放，别的账号操作永远 409。
+    """
+    code = '''
+import json,sys,time
+r=json.loads(sys.stdin.readline())
+while True:
+    print('MC_AGG_EVENT\\t'+json.dumps({'event':'status','job_id':r['job_id'],'platform':r['platform'],
+        'data':{'status':'running','account':'xhs:1','result_count':0,'phase':'分页'}}),flush=True)
+    time.sleep(0.05)
+'''
+    monkeypatch.setattr("api.services.worker_process.worker_command", lambda *a: [sys.executable, "-c", code])
+    monkeypatch.setattr("api.services.favorites_job_manager._PAGED_TIMEOUT", 0.5)
+    manager = FavoritesJobManager()
+    created = await manager.create(FavoritesJobRequest(platforms=["xhs"], sync_mode="auto"))
+    try:
+        await asyncio.wait_for(manager.active_task(), 15)
+        response = await manager.get(created.job_id)
+        assert response.platforms["xhs"].status == "timed_out"
+        assert manager._recent.completed_at is not None
+    finally:
+        await manager.cleanup()
+
+
+@pytest.mark.asyncio
+async def test_paged_failure_before_account_is_known_updates_the_real_account(store, monkeypatch):
+    """worker 还没报账号就挂了，失败也要写回本机已有的真实账号。
+
+    否则这次失败完全不落盘，重启后页面还显示上一次的「成功」。
+    """
+    scan = store.begin_scan("xhs", "xhs:1", [], "auto")
+    store.finish_scan("xhs:1", scan, False)
+    assert store.archive_summary()["platforms"]["xhs"]["status"] == "succeeded"
+
+    code = "import sys;sys.stdin.readline();sys.exit(1)"
+    monkeypatch.setattr("api.services.worker_process.worker_command", lambda *a: [sys.executable, "-c", code])
+    manager = FavoritesJobManager()
+    created = await manager.create(FavoritesJobRequest(platforms=["xhs"], sync_mode="auto"))
+    try:
+        await asyncio.wait_for(manager.active_task(), 20)
+        summary = store.archive_summary()
+        assert summary["platforms"]["xhs"]["status"] == "failed"
+        assert summary["platforms"]["xhs"]["account"] == "xhs:1"
+        assert (await manager.get(created.job_id)).platforms["xhs"].status == "failed"
+    finally:
+        await manager.cleanup()

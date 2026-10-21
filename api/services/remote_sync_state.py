@@ -250,7 +250,8 @@ class RemoteSyncStateMixin:
                     conn.execute("UPDATE remote_folders SET observed_state='not_found' WHERE account=?", (account,))
                 conn.execute("UPDATE remote_accounts SET last_full=? WHERE account=?", (utc_now(), account))
             conn.execute("UPDATE remote_scans SET complete=1 WHERE id=?", (scan,))
-            conn.execute("UPDATE remote_accounts SET status='succeeded',version=version+1,updated_at=? WHERE account=?", (utc_now(), account))
+            # 上一次失败的提示要清掉，否则同步已经成功、界面还挂着旧的错误文案。
+            conn.execute("UPDATE remote_accounts SET status='succeeded',error=NULL,version=version+1,updated_at=? WHERE account=?", (utc_now(), account))
 
     def sync_status(self, account, status, error=None):
         with self._conn(write=True) as conn:

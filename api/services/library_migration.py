@@ -106,6 +106,17 @@ def _merge_local(source: sqlite3.Connection, target: LibraryStore) -> int:
     return imported
 
 
+def _remote_content_key(platform: str, row: sqlite3.Row) -> str:
+    """与 remote_favorites_store 的 `_content_key` 保持同一口径。
+
+    目标表的唯一键是 (account_key, platform, content_key)，迁移时漏掉这一列
+    会让同一平台的第二条收藏直接撞唯一键，整个源被回滚。
+    """
+    content_id = str(row["content_id"] or "")
+    content_type = str(row["content_type"] or "")
+    return f"{content_type}:{content_id}" if platform == "zhihu" and content_type else content_id
+
+
 def _merge_remote(source: sqlite3.Connection, target_path: Path) -> int:
     if "remote_favorites" not in _tables(source):
         return 0
@@ -114,9 +125,11 @@ def _merge_remote(source: sqlite3.Connection, target_path: Path) -> int:
     with sqlite3.connect(target_path) as target:
         target.row_factory = sqlite3.Row
         for row in source.execute("SELECT * FROM remote_favorites ORDER BY last_seen_at, id"):
+            content_key = _remote_content_key(row["platform"], row)
             existing = target.execute(
-                "SELECT * FROM remote_favorites WHERE account_key=? AND platform=? AND content_id=?",
-                (row["account_key"], row["platform"], row["content_id"]),
+                "SELECT * FROM remote_favorites WHERE account_key=? AND platform=? "
+                "AND (content_key=? OR (content_key='' AND content_id=?))",
+                (row["account_key"], row["platform"], content_key, row["content_id"]),
             ).fetchone()
             old_names = json.loads(existing["collection_names"] or "[]") if existing else []
             new_names = json.loads(row["collection_names"] or "[]")
@@ -124,13 +137,15 @@ def _merge_remote(source: sqlite3.Connection, target_path: Path) -> int:
             if existing is None:
                 target.execute(
                     """INSERT INTO remote_favorites
-                    (account_key,platform,content_id,content_type,title,snippet,author,url,published_at,
-                     cover_url,metrics,collection_names,first_seen_at,last_seen_at)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                    tuple(row[key] for key in (
-                        "account_key", "platform", "content_id", "content_type", "title", "snippet",
-                        "author", "url", "published_at", "cover_url", "metrics"
-                    )) + (json.dumps(names, ensure_ascii=False), row["first_seen_at"], row["last_seen_at"]),
+                    (account_key,platform,content_id,content_type,content_key,title,snippet,author,url,
+                     published_at,cover_url,metrics,collection_names,first_seen_at,last_seen_at)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (
+                        row["account_key"], row["platform"], row["content_id"], row["content_type"],
+                        content_key, row["title"], row["snippet"], row["author"], row["url"],
+                        row["published_at"], row["cover_url"], row["metrics"],
+                        json.dumps(names, ensure_ascii=False), row["first_seen_at"], row["last_seen_at"],
+                    ),
                 )
                 imported += 1
             else:

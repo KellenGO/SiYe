@@ -46,7 +46,7 @@ from aggregate_search.protocol import (
     read_request, emit_status, emit_result, emit_done, emit_error,
     emit_metrics,
 )
-from aggregate_search.models import agg_to_core_platform
+from aggregate_search.models import agg_to_core_platform, platform_error_status
 from aggregate_search.provider_chain import (
     ProviderChainTrace,
     SearchProvider,
@@ -143,6 +143,11 @@ def _classify_error(exc: Exception) -> str:
         if p in msg:
             return "rate_limited"
     return "failed"
+
+
+def _classify_platform_error(exc: Exception) -> str:
+    """搜索/收藏要落进 PlatformStatus 的错误码——不能直接透传平台 safe_code。"""
+    return platform_error_status(_classify_error(exc))
 
 
 def _safe_error_message(exc: Exception) -> str:
@@ -338,7 +343,7 @@ async def _run_standard_search(
             chain_result = await run_provider_chain(providers, trace=trace,
                 allow_fallback=lambda exc: current_pagination.get() is None or (
                     current_pagination.get().requests < current_pagination.get().MAX_REQUESTS
-                    and _classify_error(exc) != "rate_limited"))
+                    and _classify_platform_error(exc) != "rate_limited"))
             emit_provider_metrics(trace)
             if chain_result.emitted_count == 0:
                 # 抖音 0 条要分清两种情况（实测：登录正常时平台会返回
@@ -366,14 +371,14 @@ async def _run_standard_search(
             # old error semantics, including the no-rerun-after-first-result
             # rule, while reporting only safe provider IDs in metrics.
             emit_provider_metrics(trace)
-            error_type = _classify_error(exc)
+            error_type = _classify_platform_error(exc)
             safe_msg = _safe_error_message(exc)
             emit_error(job_id, platform, error_type, safe_msg)
 
     except asyncio.TimeoutError:
         emit_error(job_id, platform, "timed_out", f"Search timed out after {WORKER_TIMEOUT_SECONDS}s")
     except Exception as exc:
-        error_type = _classify_error(exc)
+        error_type = _classify_platform_error(exc)
         safe_msg = _safe_error_message(exc)
         emit_error(job_id, platform, error_type, safe_msg)
     finally:
@@ -496,7 +501,7 @@ async def _run_favorites(job_id: str, platform: str, limit: int, sync_mode=None)
             message = _safe_error_message(exc)
             if sync_mode == "reset":
                 message = f"{message}；本机原有跨平台收藏已保留"
-            emit_error(job_id, platform, _classify_error(exc), message)
+            emit_error(job_id, platform, _classify_platform_error(exc), message)
     finally:
         for result in pending.values():
             if result.metrics_status == "pending":
@@ -812,7 +817,7 @@ async def _run_zhihu_search(
         chain_result = await run_provider_chain(providers, trace=trace,
                 allow_fallback=lambda exc: current_pagination.get() is None or (
                     current_pagination.get().requests < current_pagination.get().MAX_REQUESTS
-                    and _classify_error(exc) != "rate_limited"))
+                    and _classify_platform_error(exc) != "rate_limited"))
         emit_provider_metrics(trace)
         if chain_result.emitted_count == 0:
             emit_status(job_id, platform, "empty", {"message": "No results found."})
@@ -828,7 +833,7 @@ async def _run_zhihu_search(
         emit_error(job_id, platform, "login_required", _safe_error_message(exc))
     except Exception as exc:
         emit_provider_metrics(trace)
-        error_type = _classify_error(exc)
+        error_type = _classify_platform_error(exc)
         safe_msg = _safe_error_message(exc)
         emit_error(job_id, platform, error_type, safe_msg)
 

@@ -134,7 +134,7 @@ class DouYinCrawler(AbstractCrawler):
             if config.CRAWLER_TYPE == "search":
                 await self.search()
             elif config.CRAWLER_TYPE == "favorites":
-                await self.fetch_favorites()
+                return await self.fetch_favorites()
 
             utils.logger.info("[DouYinCrawler.start] Douyin Crawler finished ...")
 
@@ -197,9 +197,14 @@ class DouYinCrawler(AbstractCrawler):
                 for post_item in posts_res.get("data"):
                     if remaining <= 0:
                         break
-                    try:
-                        aweme_info: Dict = (post_item.get("aweme_info") or post_item.get("aweme_mix_info", {}).get("mix_items")[0])
-                    except TypeError:
+                    # aweme_mix_info 可能是 null、mix_items 可能是空列表：直接下标会
+                    # 抛 AttributeError/IndexError（以前只捕 TypeError）→ 整个关键词搜索中断。
+                    aweme_info = post_item.get("aweme_info")
+                    if not isinstance(aweme_info, dict) or not aweme_info:
+                        mix = post_item.get("aweme_mix_info")
+                        mix_items = mix.get("mix_items") if isinstance(mix, dict) else None
+                        aweme_info = mix_items[0] if isinstance(mix_items, list) and mix_items else None
+                    if not isinstance(aweme_info, dict) or not aweme_info:
                         continue
                     aweme_list.append(aweme_info.get("aweme_id", ""))
                     page_aweme_list.append(aweme_info.get("aweme_id", ""))

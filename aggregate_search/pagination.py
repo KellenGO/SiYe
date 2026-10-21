@@ -119,9 +119,11 @@ class PaginationRun:
             return await client.search_info_by_keyword(keyword=self.keyword, offset=self.state.offset,
                 publish_time=PublishTimeType(0), search_id=self.state.search_id,
                 count=min(20, self.limit - self.emitted))
+        # lc_idx 必须与 offset 同步推进：恒为 0 时知乎会把第 2 页起的请求当成首页，
+        # 拿回的是同一批内容 → 全部判重 → 平台被报 empty。
         return await client.get("/api/v4/search_v3", {"gk_version": "gz-gaokao", "t": "general",
             "q": self.keyword, "correction": 1, "offset": self.state.offset, "limit": 20,
-            "filter_fields": "", "lc_idx": 0, "show_all_topics": 0, "search_source": "Filter"})
+            "filter_fields": "", "lc_idx": self.state.offset, "show_all_topics": 0, "search_source": "Filter"})
 
     def unpack(self, data):
         if not isinstance(data, dict):

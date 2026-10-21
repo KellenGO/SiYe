@@ -29,7 +29,7 @@ import html
 import re
 import unicodedata
 from datetime import datetime
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -93,6 +93,43 @@ PlatformStatus = Literal[
     "failed",
     "cancelled",
 ]
+
+PLATFORM_STATUSES = frozenset(get_args(PlatformStatus))
+
+# 平台异常自带的 safe_code 是"平台私有错误码"，不是 PlatformStatus。
+# 直接透传会让 API 响应在 pydantic 的 Literal 校验处抛错（接口 500），
+# 也会让 overall 永远停在 running，所以统一在这里做一次映射。
+_SAFE_CODE_STATUS: Dict[str, str] = {
+    "session_expired": "login_required",
+    "login_required": "login_required",
+    "unauthorized": "login_required",
+    "rate_limited": "rate_limited",
+    "restricted": "rate_limited",
+    "timed_out": "timed_out",
+    "malformed_response": "failed",
+    "browser_unavailable": "failed",
+    "failed": "failed",
+}
+
+
+def platform_error_status(value: str) -> str:
+    """把平台错误码收敛到 PlatformStatus；未知值按 failed 处理。"""
+    if not isinstance(value, str) or not value:
+        return "failed"
+    mapped = _SAFE_CODE_STATUS.get(value)
+    if mapped is not None:
+        return mapped
+    if value in PLATFORM_STATUSES and value not in ("pending", "running", "succeeded", "empty", "partial"):
+        return value
+    return "failed"
+
+
+def coerce_platform_status(value: str) -> str:
+    """状态字段的兜底：合法状态原样返回，其余按错误码映射。"""
+    if isinstance(value, str) and value in PLATFORM_STATUSES:
+        return value
+    return platform_error_status(value)
+
 
 OverallStatus = Literal["running", "completed", "partial", "failed", "cancelling", "cancelled"]
 

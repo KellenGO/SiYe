@@ -11,6 +11,8 @@
 
 from __future__ import annotations
 
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -188,3 +190,31 @@ def test_approximate_metrics_remain_approximate_after_restart(store: RemoteFavor
     assert result["metrics_status"] == "partial"
     assert result["metrics_approximate"] == ["like_count"]
     assert result["metrics_updated_at"] == 123.0
+
+
+def test_concurrent_platform_writes_all_persist(store: RemoteFavoritesStore) -> None:
+    """多平台同时落库时每条都要写进去。
+
+    WAL 只允许一个写者：两个线程同时升级成写者时，后到的连接在部分文件系统上
+    会直接报 "attempt to write a readonly database"，那个平台的同步结果整批丢失
+    （表现为重启后少一个平台的数据）。
+    """
+    platforms = ["bilibili", "xhs", "douyin", "zhihu"]
+    barrier = threading.Barrier(len(platforms))
+    errors: list[BaseException] = []
+
+    def save(platform: str) -> None:
+        barrier.wait()
+        try:
+            store.save_platform(platform, [_result(platform=platform, content_id=f"{platform}-1")],
+                                status="succeeded")
+        except BaseException as exc:  # noqa: BLE001 - 断言里要看原始异常
+            errors.append(exc)
+
+    with ThreadPoolExecutor(max_workers=len(platforms)) as pool:
+        list(pool.map(save, platforms))
+
+    assert errors == []
+    saved = store.load()
+    assert set(saved["platforms"]) == set(platforms)
+    assert {row["platform"] for row in saved["results"]} == set(platforms)

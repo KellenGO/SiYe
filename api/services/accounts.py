@@ -766,7 +766,6 @@ async def platform_session_context(platform: str, snapshot=None):
 def _platform_diagnostic(platform: str) -> PlatformDiagnostic:
     """Build a safe, local capability summary; never probes a platform."""
     st = _state_of(platform)
-    profile_exists = profile_dir_for(platform).is_dir()
     snapshot = get_session_snapshot(platform)
     outcome = _last_search_outcomes.get(platform)
     outcome_status = outcome.get("status") if outcome else None
@@ -1060,7 +1059,7 @@ async def _sync_and_verify_platform(
                         await context.cookies(urls) if urls else [])
                 except Exception:
                     snapshot_cookies = None
-        except Exception as exc:
+        except Exception:
             _set_state(platform, status="failed", verified=False,
                        safe_error_code="session_import_failed",
                        safe_message="会话导入失败，请重新同步")

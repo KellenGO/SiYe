@@ -20,7 +20,7 @@ import threading
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterator, Optional, Tuple
+from typing import Dict, Iterator, Optional, Tuple
 
 from base.runtime_paths import library_data_root
 
@@ -47,6 +47,25 @@ def default_db_path() -> Path:
 def utc_now() -> str:
     """统一的 ISO-8601 UTC 时间戳（所有落库时间都走这里）。"""
     return datetime.now(timezone.utc).isoformat()
+
+
+#: 同一库文件的所有写事务按路径串行。
+#:
+#: WAL 只允许一个写者：两条连接同时升级为写者时 SQLite 返回 SQLITE_BUSY，
+#: 而在部分文件系统（网络盘、被杀软占用的文件、沙箱挂载）上会直接退化成
+#: SQLITE_READONLY —— 调用方看到的是"同步结果写不进去"，整批数据丢失。
+#: 这里用可重入锁串起来：同线程的嵌套 `_conn(write=True)` 不会自锁。
+_WRITE_LOCKS: Dict[str, threading.RLock] = {}
+_WRITE_LOCKS_GUARD = threading.Lock()
+
+
+def _write_lock(db_path: Path) -> threading.RLock:
+    key = str(db_path)
+    with _WRITE_LOCKS_GUARD:
+        lock = _WRITE_LOCKS.get(key)
+        if lock is None:
+            lock = _WRITE_LOCKS[key] = threading.RLock()
+        return lock
 
 
 class SqliteStoreBase:
@@ -79,15 +98,20 @@ class SqliteStoreBase:
     def _conn(self, write: bool = False) -> Iterator[sqlite3.Connection]:
         """开/复用一条连接。
 
-        ``write=True`` 时用 ``BEGIN IMMEDIATE`` 立即取写锁，
-        把"读-改-写"之间的竞争窗口关掉。
+        ``write=True`` 时按库路径串行化写事务，并用 ``BEGIN IMMEDIATE`` 立即取
+        写锁，把"读-改-写"之间的竞争窗口关掉。写路径必须声明 ``write=True``，
+        否则会和别的连接抢写锁。
         """
         current = getattr(self._connections, "current", None)
         if current is not None:
             yield current
             return
-        conn = sqlite3.connect(str(self.db_path), timeout=10)
+        lock = _write_lock(self.db_path) if write else None
+        if lock is not None:
+            lock.acquire()
+        conn: Optional[sqlite3.Connection] = None
         try:
+            conn = sqlite3.connect(str(self.db_path), timeout=10)
             conn.row_factory = sqlite3.Row
             if self._FOREIGN_KEYS:
                 conn.execute("PRAGMA foreign_keys = ON")
@@ -99,11 +123,15 @@ class SqliteStoreBase:
             yield conn
             conn.commit()
         except Exception:
-            conn.rollback()
+            if conn is not None:
+                conn.rollback()
             raise
         finally:
             self._connections.current = None
-            conn.close()
+            if conn is not None:
+                conn.close()
+            if lock is not None:
+                lock.release()
 
     @staticmethod
     def _enable_wal(conn: sqlite3.Connection) -> None:

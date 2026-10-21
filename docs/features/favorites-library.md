@@ -92,7 +92,8 @@
 - `PATCH /items/{platform}/{content_id}` 把 content_id 放**路径参数**：含 `/` 的 ID 会被切段，
   可能改错条目或 404。当前数据无此情况，其他接口都走 body。
 - 500 条上限在批量导入时按实际条目数判定，超限条目被跳过并反馈。
-- 本地库**缺并发/锁测试**；长导入是单条 `BEGIN IMMEDIATE` 事务，并发写超过 10s 会超时。
+- **写库必须用 `_conn(write=True)`**：写事务按库路径串行（WAL 只允许一个写者）。用只读连接写库时，两个平台/两次操作并发会在部分文件系统上被 SQLite 直接判成 `attempt to write a readonly database`，那一批数据整块丢失。`tests/test_remote_favorites_store.py::test_concurrent_platform_writes_all_persist` 守住这条。
+- **合并旧库时 `remote_favorites` 必须写 `content_key`**：唯一键是 `(account_key, platform, content_key)`，只填 `content_id` 会让同一平台第二条记录撞唯一键 → `IntegrityError`，整库迁移中断、完成标记也不写。知乎用 `类型:ID`，其余平台用 `content_id`（与 `RemoteFavoritesStore._content_key` 同一口径）。
 - 传了已删除的 collection_id 会让该条内容**整条**收藏失败（单条 400，批量静默跳过）。
 - 备注超 1000 字是**静默截断**，不给用户提示。
 - `LOCALAPPDATA` 不可用时才回退到应用目录；目标目录不可写会让启动明确失败，不会静默改读空库。
