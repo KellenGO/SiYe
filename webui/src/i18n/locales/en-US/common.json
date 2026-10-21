@@ -359,6 +359,12 @@
     "cancel": "Stop response",
     "preview": "AI note preview",
     "append": "Write to note",
+    "copyAnswer": "Copy answer",
+    "answerCopied": "Answer and source links copied",
+    "regenerateHint": "Keep this answer and generate another using the same question and sources",
+    "askSelection": "Ask about selection",
+    "quoteTooLong": "The quote and draft exceed 2,000 characters. Shorten either before continuing.",
+    "cached": "Reused from context",
     "appended": "Written to note",
     "unread": "Some space sources have unread chunks or no readable content. See reading records.",
     "webFailed": "Some web searches or page reads failed. Available analysis was retained.",
@@ -399,7 +405,7 @@
       "analyze": "Analyze",
       "result": "Preview note"
     },
-    "regenerate": "Generate again",
+    "regenerate": "Regenerate",
     "retrySave": "Retry saving note",
     "appendSaveFailed": "Content was inserted into the draft, but saving failed. Retry saving; the preview is kept.",
     "draftInserted": "Inserted into the current draft but not saved yet. Retrying the save will not insert it twice."

@@ -359,6 +359,12 @@
     "cancel": "停止回答",
     "preview": "AI 笔记预览",
     "append": "一键写入笔记",
+    "copyAnswer": "复制回答",
+    "answerCopied": "已复制回答及来源链接",
+    "regenerateHint": "保留原回答，使用相同问题与资料再生成一版",
+    "askSelection": "引用提问",
+    "quoteTooLong": "引用与草稿超过 2000 字，请缩短选文或草稿。",
+    "cached": "上下文复用",
     "appended": "已写入笔记",
     "unread": "部分空间资料尚有可读分段未读或没有可读内容，详情见读取记录。",
     "webFailed": "部分联网搜索或网页读取失败，已有分析保留。",
@@ -399,7 +405,7 @@
       "analyze": "分析整理",
       "result": "预览笔记"
     },
-    "regenerate": "重新生成",
+    "regenerate": "重做",
     "retrySave": "重试保存笔记",
     "appendSaveFailed": "内容已插入草稿，但保存失败。请重试保存；预览已保留。",
     "draftInserted": "已插入当前草稿，尚未保存到本机。重试保存不会重复插入。"

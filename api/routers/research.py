@@ -65,6 +65,7 @@ class TaskInput(WebInput):
     space_id: int
     question: str = Field(default="", max_length=2000)
     conversation_id: str | None = Field(default=None, max_length=64)
+    regenerate_job_id: str | None = Field(default=None, max_length=64)
 
 
 class ArchiveInput(BaseModel):
@@ -130,6 +131,8 @@ def preference_save(space_id: int, payload: WebInput, store: SpacesStore = Depen
 @research_router.post("/jobs", status_code=201)
 async def job_create(payload: TaskInput, store: SpacesStore = Depends(get_spaces_store), manager=Depends(get_research_jobs)):
     try:
+        if payload.regenerate_job_id:
+            return await manager.create(store.get_space(payload.space_id), payload.question, payload.web_enabled, payload.conversation_id, payload.regenerate_job_id)
         return await manager.create(store.get_space(payload.space_id), payload.question, payload.web_enabled, payload.conversation_id)
     except ValueError as error:
         translate(error)

@@ -39,6 +39,43 @@ class QuietHandler(SimpleHTTPRequestHandler):
         pass
 
 
+def check_answer_actions(page, panel, manager, context):
+    answer = panel.locator(".research-chat-turn").last
+    expect(answer.locator(".space-research-preview")).to_be_visible()
+    context.grant_permissions(["clipboard-read", "clipboard-write"])
+    answer.get_by_role("button", name="复制回答", exact=True).click()
+    expect(panel.get_by_role("status")).to_contain_text("已复制回答及来源链接")
+    copied = page.evaluate("navigator.clipboard.readText()")
+    assert "AI生成的苏州研究结果" in copied and "https://www.xiaohongshu.com/explore/one" in copied
+    composer = panel.get_by_label("给 AI 发送消息", exact=True)
+    composer.fill("请解释这段")
+    before_quote = len(manager.jobs)
+    preview = answer.locator(".space-research-preview")
+    preview.evaluate("""element => {
+        const range = document.createRange();
+        range.selectNodeContents(element.querySelector('span'));
+        const selection = window.getSelection();
+        selection.removeAllRanges(); selection.addRange(range);
+    }""")
+    preview.dispatch_event("pointerup")
+    ask = panel.get_by_role("button", name="引用提问", exact=True)
+    expect(ask).to_be_visible()
+    page.screenshot(path=str(ROOT / "build/research-quote-question.png"), full_page=True)
+    ask.click()
+    expect(composer).to_have_value("> AI生成的苏州研究结果\n\n请解释这段")
+    assert len(manager.jobs) == before_quote, "Selecting text sent a paid request"
+    old_job = list(manager.jobs.values())[-1]
+    original_answer = json.dumps(old_job["document"], ensure_ascii=False)
+    old_turn_count = panel.locator(".research-chat-turn").count()
+    answer.get_by_role("button", name="重做", exact=True).click()
+    expect(panel.locator(".research-chat-turn")).to_have_count(old_turn_count + 1)
+    expect(panel.locator(".research-chat-turn").last.locator(".space-research-preview")).to_be_visible(timeout=15000)
+    assert json.dumps(old_job["document"], ensure_ascii=False) == original_answer
+    assert list(manager.jobs.values())[-1]["question"] == old_job["question"]
+    assert composer.input_value().endswith("请解释这段")
+    page.screenshot(path=str(ROOT / "build/research-answer-actions.png"), full_page=True)
+
+
 def main():
     server = ThreadingHTTPServer(("127.0.0.1", 0), partial(QuietHandler, directory=str(ROOT / "webui/dist")))
     threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -202,6 +239,21 @@ def main():
                 page.goto(origin + f"/#/spaces/{first}")
                 full_width = page.locator(".app-main-inner").bounding_box()["width"]
                 panel = open_panel()
+                if "--answer-actions-only" in sys.argv:
+                    panel.get_by_label("给 AI 发送消息", exact=True).fill("概括已加入的资料")
+                    panel.get_by_role("button", name="发送消息", exact=True).click()
+                    expect(panel.locator(".space-research-preview")).to_be_visible(timeout=15000)
+                    check_answer_actions(page, panel, manager, context)
+                    for width, height in ((390, 844), (320, 640)):
+                        page.set_viewport_size({"width": width, "height": height})
+                        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+                        expect(panel.locator(".research-chat-turn").last.get_by_role("button", name="复制回答", exact=True)).to_be_visible()
+                    page.screenshot(path=str(ROOT / "build/research-answer-actions-mobile.png"), full_page=True)
+                    assert not errors, errors
+                    context.close()
+                    browser.close()
+                    print("PASS: source links in copied answers, quoted drafts without sending, preserved originals on regeneration, mobile widths, no browser errors")
+                    return
                 assert page.locator(".app-main-inner").bounding_box()["width"] <= full_width - 450, "Sidebar did not compress the main content"
                 assert page.locator(".app-header").bounding_box()["width"] <= full_width - 450, "Sidebar did not compress the header"
                 bounds = page.locator(".space-research-dialog").bounding_box()
@@ -533,10 +585,13 @@ def main():
                 page.keyboard.press("Escape")
                 expect(page.locator(".space-research-dialog")).not_to_be_visible()
                 expect(open_note()).to_be_visible()
+                page.set_viewport_size({"width": 1440, "height": 1000})
+                panel = open_panel()
+                check_answer_actions(page, panel, manager, context)
                 assert not errors, errors
                 context.close()
                 browser.close()
-                print("PASS: automatic answers, collapsed activity/source details, section links, visible note action, save recovery, bounded generation retry, persistent history, fullscreen/dock resizing and mobile")
+                print("PASS: automatic answers, source links, note save recovery, persistent history, fullscreen/dock resizing, mobile, copy, quoted drafts and non-destructive regeneration")
     finally:
         server.shutdown()
 

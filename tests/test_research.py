@@ -419,7 +419,8 @@ async def test_conversation_followups_reuse_sources_and_limit_context(config, mo
         if payload["mode"] == "collect":
             job["materials"] = [material(row) for row in payload["items"]]
             return {}
-        return {"document": {"type": "doc", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "answer" * 2000}]}]}, "coverage": []}
+        return {"document": {"type": "doc", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "answer" * 2000}]}]}, "coverage": [],
+                "evidence_cache": {"version": 1, "created_at": 100, "entries": []}}
     monkeypatch.setattr(manager, "process", process)
     snapshot = {"id": 1, "archived": False, "items": [source()], "name": "攻略", "description": ""}
     first = await manager.create(snapshot, "路线", False)
@@ -434,6 +435,7 @@ async def test_conversation_followups_reuse_sources_and_limit_context(config, mo
         followup = await manager.create(snapshot, f"追问{index}", index == 0, first["conversation_id"])
         assert followup["status"] == "analyzing" and followup["conversation_id"] == identity
         assert "history" not in followup
+        assert "evidence_cache" not in followup
         await manager.tasks[followup["job_id"]]
         internal = manager.get(followup["job_id"])
         assert len(internal["snapshot"]["items"]) == 1
@@ -443,6 +445,7 @@ async def test_conversation_followups_reuse_sources_and_limit_context(config, mo
     assert sum(row["mode"] == "collect" for row in requests) == 1
     assert requests[-1]["conversation"][-1]["question"] == "追问3"
     assert requests[-1]["research_focus"] == "路线"
+    assert requests[-1]["evidence_cache"]["version"] == 1
     groups = manager.conversations(1)
     assert len(groups) == 1 and groups[0]["turns"] == 6
     with pytest.raises(ValueError, match="不属于"):
@@ -455,6 +458,42 @@ async def test_conversation_followups_reuse_sources_and_limit_context(config, mo
     assert len(manager.get(fresh["job_id"])["snapshot"]["items"]) == 2
     assert manager.get(fresh["job_id"])["history"] == []
     await manager.cancel(fresh["job_id"])
+
+
+@pytest.mark.asyncio
+async def test_regenerate_preserves_answers_and_uses_history_before_target(config, monkeypatch):
+    manager = ResearchJobs(config)
+    monkeypatch.setattr(manager, "require_runtime", lambda: None)
+    snapshot = {"id": 1, "archived": False, "items": [source()], "name": "主题", "description": ""}
+    for i in range(3):
+        row = job_record(f"turn-{i}")
+        row.update(conversation_id="conv", created_at=i, status="ready", question=f"问题{i}", snapshot=snapshot,
+                   document={"type": "doc", "content": [{"type": "paragraph", "content": [{"type": "text", "text": f"旧回答{i}"}]}]},
+                   materials=[material(source())], evidence_cache={"version": 1, "entries": []})
+        manager.jobs[row["job_id"]] = row
+        manager.persist(row["job_id"])
+    original = json.dumps(manager.get("turn-1"), ensure_ascii=False)
+    captured = []
+    async def process(job, payload, credentials=None):
+        captured.append(payload)
+        return {"document": {"type": "doc", "content": [{"type": "paragraph"}]}}
+    monkeypatch.setattr(manager, "process", process)
+    config.save("https://example.com", "model", "secret")
+    result = await manager.create(snapshot, "不能替换原问题", False, "conv", "turn-1")
+    await manager.tasks[result["job_id"]]
+    assert captured[0]["question"] == "问题1"
+    assert [row["question"] for row in captured[0]["conversation"]] == ["问题0"]
+    assert json.dumps(manager.get("turn-1"), ensure_ascii=False) == original
+    assert len(manager.conversation_jobs(1, "conv")) == 4
+    assert "evidence_cache" not in manager.public("turn-1")
+    restarted = ResearchJobs(config)
+    assert restarted.get("turn-1")["evidence_cache"]["version"] == 1
+    manager.get(result["job_id"])["status"] = "failed"
+    retry = await manager.create(snapshot, "", False, "conv", "turn-0")
+    await manager.tasks[retry["job_id"]]
+    assert captured[-1]["question"] == "问题0" and captured[-1]["conversation"] == []
+    with pytest.raises(ValueError, match="只能重做"):
+        await manager.create(snapshot, "", False, "conv", "not-in-conversation")
 
 
 def test_conversation_routes_isolate_spaces_and_lock_configuration(config, tmp_path):

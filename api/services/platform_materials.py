@@ -61,6 +61,7 @@ def bound_component(value):
 def material(item):
     source = item["result"]
     return {"key": item["key"], "platform": source["platform"], "title": source["title"],
+            "content_type": source.get("content_type", ""),
             "url": public_url(source["url"]), "snippet": source.get("snippet") or "",
             "body": component(), "comments": component(),
             "subtitles": component("missing" if source.get("content_type") in {"video", "zvideo"} else "not_applicable")}

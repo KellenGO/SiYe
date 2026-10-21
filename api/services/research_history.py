@@ -10,7 +10,7 @@ from pathlib import Path
 FINISHED = {"ready", "failed", "cancelled"}
 FIELDS = {"job_id", "conversation_id", "space_id", "created_at", "snapshot", "research_focus", "question",
           "web_enabled", "status", "phase", "message", "materials", "elapsed", "error", "document", "activity",
-          "coverage", "external_sources", "web_errors", "usage", "cost_usd"}
+          "coverage", "external_sources", "web_errors", "usage", "cost_usd", "evidence_cache"}
 
 
 class ResearchHistory:

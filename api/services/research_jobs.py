@@ -75,7 +75,7 @@ class ResearchJobs:
 
     def public(self, job_id, store=None, job=None):
         job = job if job is not None else self.get(job_id)
-        visible = {key: copy.deepcopy(value) for key, value in job.items() if key not in {"snapshot", "elapsed", "workdir", "materials", "history", "research_focus", "transcribing_key"}}
+        visible = {key: copy.deepcopy(value) for key, value in job.items() if key not in {"snapshot", "elapsed", "workdir", "materials", "history", "research_focus", "transcribing_key", "evidence_cache"}}
         visible["total_materials"] = len(job["snapshot"]["items"])
         visible["materials"] = []
         for row in job["materials"]:
@@ -180,16 +180,23 @@ class ResearchJobs:
             if warning not in errors:
                 errors.append(warning)
 
-    async def create(self, space, question, web_enabled, conversation_id=None):
+    async def create(self, space, question, web_enabled, conversation_id=None, regenerate_job_id=None):
         if space["archived"]:
             raise ValueError("空间已归档，请先继续研究")
         if not space["items"] and not conversation_id:
             raise ValueError("请先向空间加入资料")
         self.require_runtime()
         previous = self.conversation_jobs(space["id"], conversation_id) if conversation_id else []
-        if previous and previous[-1]["status"] != "ready":
+        if previous and previous[-1]["status"] != "ready" and not (regenerate_job_id and previous[-1]["status"] in {"failed", "cancelled"}):
             raise ValueError("请先完成当前会话的研究，或新建会话")
         latest = previous[-1] if previous else None
+        if regenerate_job_id:
+            target = next((row for row in previous if row["job_id"] == regenerate_job_id and row["status"] == "ready"), None)
+            if target is None:
+                raise ValueError("只能重做当前空间会话中已完成的回答")
+            latest = target
+            question = target["question"]
+            previous = previous[:previous.index(target)]
         history = []
         for row in [row for row in previous if row["status"] == "ready"][-3:]:
             answer = self.document_text(row["document"])
@@ -199,13 +206,18 @@ class ResearchJobs:
         await self.claim(identity)
         self.jobs[identity] = {"job_id": identity, "space_id": space["id"], "snapshot": copy.deepcopy(latest["snapshot"] if latest else space),
             "conversation_id": conversation_id or identity, "history": history, "created_at": time.time_ns(),
-            "research_focus": (latest.get("research_focus") or previous[0]["question"]) if latest else question,
+            "research_focus": (latest.get("research_focus") or latest["question"]) if latest else question,
             "question": question, "web_enabled": web_enabled, "status": "collecting", "phase": "collecting",
             "message": "正在获取空间资料", "materials": [], "elapsed": 0.0, "error": "",
             "document": None, "partial": "", "activity": [], "coverage": [], "external_sources": [], "web_errors": [],
             "usage": None, "cost_usd": None, "context_tokens": 0}
         if latest:
             self.jobs[identity].update(materials=copy.deepcopy(latest["materials"]), status="analyzing", phase="analyzing", message="正在继续分析当前会话资料")
+            # Old history without an explicit type can still recover it from its frozen snapshot.
+            types = {row["key"]: row["result"].get("content_type", "") for row in latest["snapshot"]["items"]}
+            for row in self.jobs[identity]["materials"]:
+                row.setdefault("content_type", types.get(row["key"], ""))
+            self.jobs[identity]["evidence_cache"] = copy.deepcopy(latest.get("evidence_cache"))
         self.persist(identity)
         self.tasks[identity] = asyncio.create_task(self.analyze(identity) if latest else self.collect(identity))
         self.tasks[identity].add_done_callback(lambda _: self.prune())
@@ -412,11 +424,12 @@ class ResearchJobs:
             result = await self.process(job, {"mode": "analyze", "materials": copy.deepcopy(job["materials"]),
                 "space_name": job["snapshot"]["name"], "description": job["snapshot"]["description"],
                 "question": job["question"], "research_focus": job.get("research_focus", ""),
-                "web_enabled": job["web_enabled"], "conversation": job.get("history", []), "stream": True}, self.config.credentials())
+                "web_enabled": job["web_enabled"], "conversation": job.get("history", []),
+                "evidence_cache": copy.deepcopy(job.get("evidence_cache")), "stream": True}, self.config.credentials())
             from .space_notes import validate_note
             if result.get("document") is not None:
                 validate_note(result["document"])
-            job.update({key: value for key, value in result.items() if key in {"document", "coverage", "external_sources", "web_errors"}})
+            job.update({key: value for key, value in result.items() if key in {"document", "coverage", "external_sources", "web_errors", "evidence_cache"}})
             job.update(status="ready", phase="ready", message="笔记已生成，请预览后追加")
         except asyncio.CancelledError:
             job.update(status="cancelled", phase="cancelled", message="研究已取消")
