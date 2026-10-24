@@ -261,6 +261,9 @@ class Extensions:
         size = self.total
         redirects = failures = attempts = 0
         while self.downloaded < size:
+            # Trust the file on disk over the counter: a failed write must not
+            # make the next Range request skip bytes that never landed.
+            self.downloaded = archive.stat().st_size if archive.exists() else 0
             offset = self.downloaded
             attempts += 1
             try:
