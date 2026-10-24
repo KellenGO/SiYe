@@ -196,6 +196,77 @@ async def test_download_install_and_failed_update_keep_previous_version(tmp_path
     assert "校验" in manager.error
 
 
+def test_status_reports_the_published_extension_name(tmp_path):
+    from api.services import extensions as module
+    assert module.EXTENSION_NAME == "SiYe-AI"
+    assert Extensions(tmp_path / "extension").status()["name"] == "SiYe-AI"
+
+
+@pytest.mark.asyncio
+async def test_interrupted_download_resumes_from_disk(tmp_path, monkeypatch):
+    from api.services import extensions as module
+    path, _ = archive(tmp_path)
+    data = path.read_bytes()
+    cut = len(data) // 2
+    ranges = []
+
+    class Dropped(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield data[:cut]
+            raise httpx.ReadError("connection reset")
+
+    async def respond(request):
+        if request.url.host == "api.github.com":
+            return httpx.Response(200, json={"tag_name": "v0.1.0", "assets": [{
+                "name": module.ASSET_NAME, "size": len(data),
+                "digest": "sha256:" + hashlib.sha256(data).hexdigest(),
+                "browser_download_url": "https://github.com/KellenGO/SiYe-AI/releases/download/v0.1.0/" + module.ASSET_NAME}]})
+        ranges.append(request.headers.get("range"))
+        if request.headers.get("range"):
+            start = int(request.headers["range"].removeprefix("bytes=").removesuffix("-"))
+            return httpx.Response(206, content=data[start:])
+        return httpx.Response(200, stream=Dropped())
+
+    monkeypatch.setattr(module.httpx, "AsyncClient", lambda **kwargs: REAL_CLIENT(transport=httpx.MockTransport(respond), **kwargs))
+    monkeypatch.setattr(module, "RETRY_DELAY", 0)
+    manager = Extensions(tmp_path / "extension")
+    await manager.start_install(stopped)
+    await manager.task
+    assert manager.status()["installed"] and manager.error == ""
+    assert ranges == [None, f"bytes={cut}-"]
+
+
+@pytest.mark.asyncio
+async def test_download_gives_up_with_a_network_message(tmp_path, monkeypatch):
+    from api.services import extensions as module
+    path, _ = archive(tmp_path)
+    data = path.read_bytes()
+    attempts = []
+
+    class Dropped(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            raise httpx.ReadError("connection reset")
+            yield b""  # pragma: no cover
+
+    async def respond(request):
+        if request.url.host == "api.github.com":
+            return httpx.Response(200, json={"tag_name": "v0.1.0", "assets": [{
+                "name": module.ASSET_NAME, "size": len(data),
+                "digest": "sha256:" + hashlib.sha256(data).hexdigest(),
+                "browser_download_url": "https://github.com/KellenGO/SiYe-AI/releases/download/v0.1.0/" + module.ASSET_NAME}]})
+        attempts.append(request)
+        return httpx.Response(200, stream=Dropped())
+
+    monkeypatch.setattr(module.httpx, "AsyncClient", lambda **kwargs: REAL_CLIENT(transport=httpx.MockTransport(respond), **kwargs))
+    monkeypatch.setattr(module, "RETRY_DELAY", 0)
+    manager = Extensions(tmp_path / "extension")
+    await manager.start_install(stopped)
+    await manager.task
+    assert manager.phase == "failed" and "下载中断" in manager.error
+    assert len(attempts) == module.DOWNLOAD_ATTEMPTS
+    assert not manager.status()["installed"]
+
+
 @pytest.mark.asyncio
 async def test_cancel_download_removes_partial_files(tmp_path, monkeypatch):
     entered = asyncio.Event()

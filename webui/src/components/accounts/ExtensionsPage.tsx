@@ -76,17 +76,17 @@ export function ExtensionsPage() {
         }}><ArrowLeft aria-hidden="true" />所有扩展</button> : <h3>{row.installed ? "已安装的扩展" : "获取扩展"}</h3>}
         <button type="button" className="btn small" disabled={busy} onClick={() => void run(api.extensionCatalog)}><RefreshCw aria-hidden="true" />检查更新</button>
       </div>
-      <article className="extension-card extension-manager-card" aria-label="AI 研究助手">
+      <article className="extension-card extension-manager-card" aria-label="SiYe-AI">
         <div className="extension-card-heading">
           <div className="extension-icon"><Plug aria-hidden="true" /></div>
           <div className="extension-summary">
-            <div className="extension-name"><h3>AI 研究助手</h3><span className="extension-version">{row.version || row.available?.version}</span></div>
+            <div className="extension-name"><h3>SiYe-AI</h3><span className="extension-version">{row.version || row.available?.version}</span></div>
             <p>围绕空间资料聊天、整理与引用，回答可写入笔记。</p>
           </div>
-          {row.installed && <button type="button" className="switch extension-toggle" role="switch" aria-checked={row.enabled} aria-label="开启 AI 研究助手" disabled={busy || !row.compatible} onClick={() => void run(() => api.enableExtension(!row.enabled))} />}
+          {row.installed && <button type="button" className="switch extension-toggle" role="switch" aria-checked={row.enabled} aria-label="开启 SiYe-AI" disabled={busy || !row.compatible} onClick={() => void run(() => api.enableExtension(!row.enabled))} />}
         </div>
         <div className="extension-card-content">
-          <p className="extension-meta"><span className={`extension-state${row.enabled ? " is-enabled" : ""}`}>{status}</span><span>官方扩展 · SiYe-AI</span></p>
+          <p className="extension-meta"><span className={`extension-state${row.enabled ? " is-enabled" : ""}`}>{status}</span><span>官方扩展 · 四野</span></p>
           {details && <div className="extension-details">
             <dl><div><dt>版本</dt><dd>{row.version || row.available?.version || "暂未获取"}</dd></div><div><dt>下载大小</dt><dd>{size || "暂未获取"}</dd></div><div><dt>来源</dt><dd>四野官方 GitHub Release</dd></div></dl>
             <p className="extension-hint">使用前需要配置模型服务。关闭或卸载后，空间资料和已写入的笔记继续保留。</p>
@@ -115,7 +115,7 @@ export function ExtensionsPage() {
       event.preventDefault();
       if (!busy) setUninstallOpen(false);
     }} onClose={() => setUninstallOpen(false)}>
-      <h2 id="extension-uninstall-title" className="confirm-title">卸载 AI 研究助手？</h2>
+      <h2 id="extension-uninstall-title" className="confirm-title">卸载 SiYe-AI？</h2>
       <p id="extension-uninstall-description" className="confirm-text">卸载后将移除扩展程序。空间资料和已写入的笔记继续保留。</p>
       <label className="confirm-remember"><input type="checkbox" checked={clearData} disabled={busy} onChange={(event) => setClearData(event.target.checked)} /><span>同时清除 AI 配置和聊天记录</span></label>
       <p className="confirm-hint">默认保留配置和聊天记录，重新安装后可以继续使用。</p>

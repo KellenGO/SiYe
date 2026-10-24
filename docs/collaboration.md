@@ -8,6 +8,7 @@
 
 | 任务 ID | 负责人 / 会话 | worktree / 分支 / 起始 HEAD | 修改范围 | 状态 / 下一步 |
 |---|---|---|---|---|
+| `EXT-INSTALL-20261024` | 主工作区会话 | `C:\Users\Kellen\Desktop\MediaCrawler-main` / `fix-20261021-bugscan` / `fd2a67e` | `api/services/extensions.py`、`webui/src/components/accounts/ExtensionsPage.tsx`、`tests/test_extensions.py`、`scripts/extensions_ui_smoke.py`、`docs/features/extensions.md`、`CHANGELOG.md` | 进行中：修复 SiYe-AI 扩展下载中断失败（断点续传 + 重试），扩展名改为 `SiYe-AI` |
 
 ## 待接手事项
 

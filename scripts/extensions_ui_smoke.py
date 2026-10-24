@@ -166,7 +166,7 @@ def verify(package):
                 expect(workspace.locator(".space-research-dialog[open]")).to_have_count(0)
                 assert not workspace.evaluate("document.body.classList.contains('has-ai-sidebar')")
                 page.get_by_role("button", name="卸载", exact=True).click()
-                uninstall = page.get_by_role("dialog", name="卸载 AI 研究助手？", exact=True)
+                uninstall = page.get_by_role("dialog", name="卸载 SiYe-AI？", exact=True)
                 expect(uninstall).to_be_visible()
                 expect(uninstall.get_by_role("button", name="取消", exact=True)).to_be_focused()
                 expect(uninstall.get_by_role("checkbox")).not_to_be_checked()

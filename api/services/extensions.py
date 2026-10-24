@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import re
 import shutil
@@ -11,16 +12,22 @@ import tempfile
 import time
 import zipfile
 from pathlib import Path, PurePosixPath
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 
 from base.app_version import APP_VERSION
 from base.runtime_paths import library_data_root
 
+logger = logging.getLogger(__name__)
+
 RELEASE_API = "https://api.github.com/repos/KellenGO/SiYe-AI/releases/latest"
 RELEASE_MANIFEST = "https://github.com/KellenGO/SiYe-AI/releases/latest/download/extension-release.json"
 ASSET_NAME = "SiYe-AI-Windows-x64.zip"
+EXTENSION_NAME = "SiYe-AI"
+DOWNLOAD_HOSTS = {"github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com"}
+DOWNLOAD_ATTEMPTS = 8
+RETRY_DELAY = 0.5
 MAX_DOWNLOAD = 512 * 1024 * 1024
 MAX_EXPANDED = 1024 * 1024 * 1024
 API_VERSION = 1
@@ -138,7 +145,7 @@ class Extensions:
             except (ValueError, OSError, TypeError):
                 detail = "扩展文件不完整或与当前软件不兼容，请重新安装"
         busy = self.phase in {"downloading", "installing", "stopping", "uninstalling"}
-        return {"id": "siye-ai", "name": "AI 研究助手", "installed": installed,
+        return {"id": "siye-ai", "name": EXTENSION_NAME, "installed": installed,
                 "enabled": bool(row.get("enabled") and compatible and not busy),
                 "version": row.get("version"), "compatible": compatible,
                 "phase": self.phase, "downloaded": self.downloaded, "total": self.total,
@@ -146,7 +153,7 @@ class Extensions:
 
     def require_enabled(self):
         if not self.status()["enabled"]:
-            raise ValueError("请先在扩展管理中安装并开启 AI 研究助手")
+            raise ValueError(f"请先在扩展管理中安装并开启 {EXTENSION_NAME}")
 
     def command(self):
         self.require_enabled()
@@ -161,14 +168,12 @@ class Extensions:
                     url = RELEASE_MANIFEST
                     for _ in range(6):
                         parsed = urlsplit(url)
-                        if (parsed.scheme != "https" or parsed.hostname not in {
-                                "github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com"}
+                        if (parsed.scheme != "https" or parsed.hostname not in DOWNLOAD_HOSTS
                                 or parsed.username or parsed.password):
                             raise ValueError("扩展发布地址无效")
                         response = await client.get(url)
                         if not response.is_redirect:
                             break
-                        from urllib.parse import urljoin
                         url = urljoin(url, response.headers["location"])
                     else:
                         raise ValueError("扩展发布跳转过多")
@@ -206,6 +211,7 @@ class Extensions:
 
     async def _install(self, stop):
         scratch = None
+        previous = self.settings().get("version")
         try:
             await self.catalog()
             if not self.available:
@@ -216,28 +222,7 @@ class Extensions:
             scratch = Path(tempfile.mkdtemp(prefix="install-", dir=self.root))
             archive = scratch / "download.zip"
             async with httpx.AsyncClient(timeout=60, follow_redirects=False) as client:
-                url = available["url"]
-                for attempt in range(6):
-                    parsed = urlsplit(url)
-                    if parsed.scheme != "https" or parsed.hostname not in {"github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com"} or parsed.username or parsed.password:
-                        raise ValueError("扩展下载地址无效")
-                    async with client.stream("GET", url) as response:
-                        if response.is_redirect:
-                            from urllib.parse import urljoin
-                            url = urljoin(url, response.headers["location"])
-                            continue
-                        response.raise_for_status()
-                        with archive.open("wb") as output:
-                            async for chunk in response.aiter_bytes():
-                                self.downloaded += len(chunk)
-                                if self.downloaded > MAX_DOWNLOAD or self.downloaded > self.total:
-                                    raise ValueError("扩展下载大小异常")
-                                output.write(chunk)
-                        break
-                else:
-                    raise ValueError("扩展下载跳转过多")
-            if self.downloaded != self.total:
-                raise ValueError("扩展下载不完整，请重试")
+                await self._download(client, available["url"], archive)
             self.phase = "installing"
             # Extraction is bounded and runs off the event loop. Cancellation must
             # wait for it before cleaning the temporary files.
@@ -257,10 +242,67 @@ class Extensions:
             self.error = ""
         except Exception as error:
             self.phase = "failed"
-            self.error = str(error) if isinstance(error, ValueError) else "扩展安装失败，原有版本已保留，请重试"
+            if isinstance(error, ValueError):
+                self.error = str(error)
+            else:
+                logger.exception("extension install failed")
+                self.error = ("扩展安装失败，原有版本已保留，请重试" if previous
+                              else "扩展安装失败，请重试")
         finally:
             if scratch and scratch.exists():
                 shutil.rmtree(scratch)
+
+    async def _download(self, client, url, archive):
+        """Stream the release asset to disk, resuming after a dropped connection.
+
+        A 130 MB asset over a congested link regularly ends mid-stream; every
+        attempt continues from the bytes already on disk instead of starting over.
+        """
+        size = self.total
+        redirects = failures = attempts = 0
+        while self.downloaded < size:
+            offset = self.downloaded
+            attempts += 1
+            try:
+                headers = {"Range": f"bytes={offset}-"} if offset else None
+                async with client.stream("GET", url, headers=headers) as response:
+                    if response.is_redirect:
+                        redirects += 1
+                        if redirects > 6:
+                            raise ValueError("扩展下载跳转过多")
+                        url = urljoin(url, response.headers["location"])
+                        parsed = urlsplit(url)
+                        if (parsed.scheme != "https" or parsed.hostname not in DOWNLOAD_HOSTS
+                                or parsed.username or parsed.password):
+                            raise ValueError("扩展下载地址无效")
+                        continue
+                    response.raise_for_status()
+                    if offset and response.status_code != 206:
+                        offset = self.downloaded = 0
+                    with archive.open("ab" if offset else "wb") as output:
+                        async for chunk in response.aiter_bytes():
+                            self.downloaded += len(chunk)
+                            if self.downloaded > MAX_DOWNLOAD or self.downloaded > size:
+                                raise ValueError("扩展下载大小异常")
+                            output.write(chunk)
+            except httpx.HTTPStatusError as error:
+                if error.response.status_code not in {408, 429} and error.response.status_code < 500:
+                    raise ValueError("扩展下载失败，请稍后重试") from None
+                failures += 1
+            except (httpx.HTTPError, OSError):
+                failures += 1
+            else:
+                if self.downloaded >= size:
+                    break
+                # Progress from this attempt resets the budget: a link that keeps
+                # dying mid-transfer still finishes, while one that delivers
+                # nothing at all gives up after DOWNLOAD_ATTEMPTS.
+                failures = failures + 1 if self.downloaded <= offset else 0
+            if failures >= DOWNLOAD_ATTEMPTS or attempts > DOWNLOAD_ATTEMPTS * 8:
+                break
+            await asyncio.sleep(min(RETRY_DELAY * (failures + 1), 2))
+        if self.downloaded != size:
+            raise ValueError("扩展下载中断，请检查网络后重试")
 
     async def activate(self, package, manifest, stop):
         old = self.settings()
