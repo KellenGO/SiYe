@@ -237,6 +237,39 @@ async def test_interrupted_download_resumes_from_disk(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_resume_offset_follows_the_file_not_the_counter(tmp_path, monkeypatch):
+    from api.services import extensions as module
+    path, _ = archive(tmp_path)
+    data = path.read_bytes()
+    cut = len(data) // 3
+    ranges = []
+
+    class Short(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield data[:cut]
+            raise httpx.ReadError("connection reset")
+
+    async def respond(request):
+        ranges.append(request.headers.get("range"))
+        if request.headers.get("range"):
+            start = int(request.headers["range"].removeprefix("bytes=").removesuffix("-"))
+            return httpx.Response(206, content=data[start:])
+        return httpx.Response(200, stream=Short())
+
+    monkeypatch.setattr(module, "RETRY_DELAY", 0)
+    manager = Extensions(tmp_path / "extension")
+    manager.total = len(data)
+    # A failed write can leave the counter ahead of the file; the Range offset
+    # must still come from the bytes that actually landed.
+    manager.downloaded = len(data) - 1
+    target = tmp_path / "download.zip"
+    async with REAL_CLIENT(transport=httpx.MockTransport(respond)) as client:
+        await manager._download(client, "https://github.com/KellenGO/SiYe-AI/releases/download/v0.1.0/" + module.ASSET_NAME, target)
+    assert target.read_bytes() == data
+    assert ranges == [None, f"bytes={cut}-"]
+
+
+@pytest.mark.asyncio
 async def test_download_gives_up_with_a_network_message(tmp_path, monkeypatch):
     from api.services import extensions as module
     path, _ = archive(tmp_path)
