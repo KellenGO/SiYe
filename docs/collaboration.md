@@ -8,9 +8,10 @@
 
 | 任务 ID | 负责人 / 会话 | worktree / 分支 / 起始 HEAD | 修改范围 | 状态 / 下一步 |
 |---|---|---|---|---|
-| `EXT-INSTALL-20261024` | 主工作区会话 | `C:\Users\Kellen\Desktop\MediaCrawler-main` / `fix-20261021-bugscan` / `fd2a67e` | `api/services/extensions.py`、`webui/src/components/accounts/ExtensionsPage.tsx`、`tests/test_extensions.py`、`scripts/extensions_ui_smoke.py`、`docs/features/extensions.md`、`CHANGELOG.md` | 进行中：修复 SiYe-AI 扩展下载中断失败（断点续传 + 重试），扩展名改为 `SiYe-AI` |
 
 ## 待接手事项
+
+- `EXT-INSTALL-20261024`：提交 `0ce54c2`，修改范围释放。源码修复了下载中断（`Range` 断点续传 + 重试，真实 130 MB 资产端到端跑通，1821 秒、138720639 字节、无错误），扩展在管理页改名为 `SiYe-AI`。本机 `%LOCALAPPDATA%/SiYe/extensions/siye-ai` 已装入官方 v1.1.0（未开启，需在设置里手动打开并配置模型）。**已安装的 EXE 仍是旧代码**：它能在管理页看到「已安装」，但下载中断的修复只对重新打包后的程序生效；日常要更新时须重新构建主程序，不能只替换界面脚本。未用真实付费模型验收。
 
 - `AI-CONTEXT-20261022`：主程序按任务 ID 定位，独立 SiYe-AI 为 `66c7379`，修改范围释放。源码回归、两份前端构建及回答操作独立 UI 验收通过；完整 `research_ui_smoke.py` 在展开后拖回侧栏的宽度断言处停止，本次未接管宽度逻辑。已安装 EXE／插件未替换，尚未用真实付费模型验收；继续本机使用前须同时构建更新主程序与插件，不能仅替换界面脚本。
 
