@@ -365,6 +365,10 @@
     "askSelection": "引用提问",
     "quoteTooLong": "引用与草稿超过 2000 字，请缩短选文或草稿。",
     "cached": "上下文复用",
+    "ocrCount": "已处理 {{processed}}/{{total}} 张",
+    "ocrCached": "复用 {{count}} 张识别结果",
+    "ocrImageFailure": "第 {{image}} 张图片：{{reason}}",
+    "retryOcr": "重试图片文字",
     "appended": "已写入笔记",
     "unread": "部分空间资料尚有可读分段未读或没有可读内容，详情见读取记录。",
     "webFailed": "部分联网搜索或网页读取失败，已有分析保留。",
@@ -383,7 +387,8 @@
     "component": {
       "body": "正文",
       "comments": "评论",
-      "subtitles": "字幕"
+      "subtitles": "字幕",
+      "ocr": "图片文字"
     },
     "state": {
       "ok": "已取得",

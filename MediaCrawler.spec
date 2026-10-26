@@ -20,6 +20,7 @@ datas = [
     (str(ROOT / "webui" / "dist"), "webui/dist"),
     (str(ROOT / "webui" / "package.json"), "webui"),
     (str(ROOT / "scripts" / "research_asr_worker.py"), "scripts"),
+    (str(ROOT / "scripts" / "research_ocr_worker.ps1"), "scripts"),
     (str(ROOT / "scripts" / "install_research_asr.ps1"), "scripts"),
     # 托盘运行时加载的品牌图标；EXE 的 ICO 图标在构建时单独使用。
     (str(ROOT / "assets" / "siye-icon.png"), "assets"),

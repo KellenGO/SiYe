@@ -418,6 +418,8 @@ async def test_conversation_followups_reuse_sources_and_limit_context(config, mo
         requests.append(payload)
         if payload["mode"] == "collect":
             job["materials"] = [material(row) for row in payload["items"]]
+            for row in job["materials"]:
+                row["ocr"] = component("ok")
             return {}
         return {"document": {"type": "doc", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "answer" * 2000}]}]}, "coverage": [],
                 "evidence_cache": {"version": 1, "created_at": 100, "entries": []}}
@@ -470,6 +472,7 @@ async def test_regenerate_preserves_answers_and_uses_history_before_target(confi
         row.update(conversation_id="conv", created_at=i, status="ready", question=f"问题{i}", snapshot=snapshot,
                    document={"type": "doc", "content": [{"type": "paragraph", "content": [{"type": "text", "text": f"旧回答{i}"}]}]},
                    materials=[material(source())], evidence_cache={"version": 1, "entries": []})
+        row["materials"][0]["ocr"] = component("ok")
         manager.jobs[row["job_id"]] = row
         manager.persist(row["job_id"])
     original = json.dumps(manager.get("turn-1"), ensure_ascii=False)
@@ -494,6 +497,43 @@ async def test_regenerate_preserves_answers_and_uses_history_before_target(confi
     assert captured[-1]["question"] == "问题0" and captured[-1]["conversation"] == []
     with pytest.raises(ValueError, match="只能重做"):
         await manager.create(snapshot, "", False, "conv", "not-in-conversation")
+
+
+@pytest.mark.asyncio
+async def test_ocr_backfills_legacy_conversation_without_overwriting_old_answer(config, monkeypatch):
+    from api.services import research_jobs as module
+    monkeypatch.setattr(module, "get_session_snapshot", lambda _: {"a1": "isolated"})
+    manager = ResearchJobs(config)
+    monkeypatch.setattr(manager, "require_runtime", lambda: None)
+    config.save("https://example.com", "model", "isolated")
+    original = job_record("legacy")
+    original.update(status="ready", document={"type": "doc", "content": [{"type": "paragraph"}]})
+    original["snapshot"]["items"] = [source()]
+    old_material = material(source())
+    old_material.pop("ocr")
+    old_material.update(body=component("ok", text="原正文"), comments=component("ok"))
+    original["materials"] = [old_material]
+    manager.jobs["legacy"] = original
+    saved = json.dumps(original, ensure_ascii=False)
+    inputs = []
+    async def process(job, payload, credentials=None):
+        inputs.append(payload)
+        if payload["mode"] == "collect":
+            assert len(payload["items"]) == 1 and payload["previous"]["xhs|one"]["body"]["text"] == "原正文"
+            job["materials"][0]["ocr"] = component("ok", entries=[{"image": 1, "text": "新增的图片文字"}])
+            return {}
+        assert payload["materials"][0]["ocr"]["entries"][0]["image"] == 1
+        return {"document": {"type": "doc", "content": [{"type": "paragraph"}]}}
+    monkeypatch.setattr(manager, "process", process)
+    new = await manager.create(original["snapshot"], "图片写了什么", False, "legacy")
+    assert new["status"] == "collecting"
+    await manager.tasks[new["job_id"]]
+    assert manager.get(new["job_id"])["status"] == "awaiting_sources"
+    await manager.generate(new["job_id"])
+    await manager.tasks[new["job_id"]]
+    assert json.dumps(original, ensure_ascii=False) == saved
+    assert "新增的图片文字" not in json.dumps(manager.public(new["job_id"]), ensure_ascii=False)
+    assert [row["mode"] for row in inputs] == ["collect", "analyze"]
 
 
 def test_conversation_routes_isolate_spaces_and_lock_configuration(config, tmp_path):

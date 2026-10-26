@@ -96,13 +96,17 @@ def main():
             config = ResearchConfig(Path(temp) / "ai.json", cipher=lambda value, decrypt=False: value)
             config.save("https://example.com", "test-model", "isolated-key")
             manager = jobs_module.ResearchJobs(config)
+            ocr_attempts = []
             manager.require_runtime = lambda: None
             jobs_module.get_session_snapshot = lambda _: {"a1": "isolated-session"}
             async def process(job, payload, credentials=None):
                 if payload["mode"] == "collect":
+                    if "--ocr-only" in sys.argv:
+                        ocr_attempts.append(job["job_id"])
                     job["materials"] = sorted((material(row) for row in payload["items"]),
                         key=lambda row: ("xhs|one", "xhs|two", "xhs|three").index(row["key"]))
                     for row in job["materials"]:
+                        row["ocr"] = component("not_applicable")
                         row.update(body=component("ok", text="完整正文"), comments=component("failed", reason="测试评论读取失败"))
                         row["subtitles"] = component("ok", entries=[{"start": 0, "end": 522, "text": "视频讲述"}])
                         row["subtitles"]["metadata"] = {"source": "native", "duration": 522}
@@ -112,6 +116,14 @@ def main():
                             row.update(comments=component("ok", reason="最多取得 50 条评论", entries=[{"id": str(index), "text": "评论样本" * 40} for index in range(50)]),
                                 subtitles=component("failed", reason="平台无字幕且本地转写不可用"))
                             row["comments"]["truncated"] = True
+                    if "--ocr-only" in sys.argv:
+                        partial = len(ocr_attempts) == 1
+                        job["materials"][0]["ocr"] = component("failed" if partial else "ok", entries=[
+                            {"image": 1, "text": "第一张图：旅行预算 128 元"}, {"image": 3, "text": "第三张图：早上八点出发"}],
+                            reason="部分图片失败，已有文字保留" if partial else "图片文字已取得")
+                        job["materials"][0]["ocr"].update(truncated=partial, metadata={"total": 3, "processed": 3,
+                            "recognized": 2, "failed": 1 if partial else 0, "cached_images": 0 if partial else 2,
+                            "failures": [{"image": 2, "reason": "测试图片下载失败"}] if partial else []})
                     return {}
                 conversation_inputs.append(payload.get("conversation", []))
                 job["activity"] = [{"id": "step-1", "tool": "manifest", "message": "manifest", "status": "completed", "summary": "3 条空间资料"},
@@ -126,7 +138,10 @@ def main():
                         access.chunk(row["key"], "body", index)
                 for index in range(access.sections["xhs|three"]["comments"]["chunks"]):
                     access.chunk("S3", "comments", index)
-                return {"document": answer_document("AI生成的苏州研究结果 [S1:body]。当前评论样本 [S3:comments]；S2 正文和 S3 视频评级不可用。", job["web_enabled"], job["materials"], [], access.coverage()),
+                for index in range(access.sections["xhs|one"]["ocr"]["chunks"]):
+                    access.chunk("S1", "ocr", index)
+                image_answer = "图片预算来自原帖配图 [S1:ocr]。" if "--ocr-only" in sys.argv else ""
+                return {"document": answer_document("AI生成的苏州研究结果 [S1:body]。当前评论样本 [S3:comments]；S2 正文和 S3 视频评级不可用。" + image_answer, job["web_enabled"], job["materials"], [], access.coverage()),
                         "coverage": access.coverage(), "external_sources": [{"id": "web|1", "title": "外部时刻表", "url": "https://example.org/timetable", "level": "网页正文（部分已读）", "fetched_at": "2026-10-05T00:00:00Z"}] if job["web_enabled"] else [],
                         "web_errors": ["测试联网失败"] if job["web_enabled"] else []}
             manager.process = process
@@ -239,6 +254,31 @@ def main():
                 page.goto(origin + f"/#/spaces/{first}")
                 full_width = page.locator(".app-main-inner").bounding_box()["width"]
                 panel = open_panel()
+                if "--ocr-only" in sys.argv:
+                    panel.get_by_label("给 AI 发送消息", exact=True).fill("图片里有什么文字")
+                    panel.get_by_role("button", name="发送消息", exact=True).click()
+                    expect(panel.locator(".space-research-preview")).to_be_visible(timeout=15000)
+                    expect(panel.locator('.space-research-preview a[title*="ocr"]')).to_have_attribute("href", "https://www.xiaohongshu.com/explore/one")
+                    panel.locator(".research-tool-trace summary").first.click()
+                    expect(panel.get_by_text("第 2 张图片：测试图片下载失败", exact=True)).to_be_visible()
+                    expect(panel.get_by_text("已处理 3/3 张", exact=False)).to_be_visible()
+                    page.screenshot(path=str(ROOT / "build/research-ocr-partial.png"), full_page=True)
+                    original_job = list(manager.jobs.values())[-1]
+                    original_answer = json.dumps(original_job["document"], ensure_ascii=False)
+                    panel.get_by_role("button", name="重试图片文字", exact=True).click()
+                    expect(panel.locator(".research-chat-turn")).to_have_count(2)
+                    expect(panel.locator(".research-chat-turn").last.locator(".space-research-preview")).to_be_visible(timeout=15000)
+                    expect(panel.get_by_role("button", name="重试图片文字", exact=True)).to_have_count(0)
+                    panel.locator(".research-chat-turn").last.locator(".research-tool-trace summary").first.click()
+                    expect(panel.get_by_text("复用 2 张识别结果", exact=False)).to_be_visible()
+                    assert json.dumps(original_job["document"], ensure_ascii=False) == original_answer
+                    page.set_viewport_size({"width": 390, "height": 844})
+                    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+                    page.screenshot(path=str(ROOT / "build/research-ocr-mobile.png"), full_page=True)
+                    assert not errors, errors
+                    context.close(); browser.close()
+                    print("PASS: OCR acquisition/read coverage, image failure details, citations, retry preserves answer, cached images and mobile")
+                    return
                 if "--answer-actions-only" in sys.argv:
                     panel.get_by_label("给 AI 发送消息", exact=True).fill("概括已加入的资料")
                     panel.get_by_role("button", name="发送消息", exact=True).click()

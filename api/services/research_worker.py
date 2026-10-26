@@ -15,6 +15,9 @@ def emit(event):
 async def run(payload):
     # Platform client diagnostics can contain raw responses; research only emits its own events.
     logging.disable(logging.CRITICAL)
+    if payload["mode"] == "ocr":
+        from .research_ocr import recognize_image
+        return await recognize_image(payload["path"])
     if payload["mode"] == "collect":
         from .research_materials import MaterialCollector
         collector = MaterialCollector(payload.get("sessions"), emit=emit, workdir=payload.get("workdir"),

@@ -365,6 +365,10 @@
     "askSelection": "Ask about selection",
     "quoteTooLong": "The quote and draft exceed 2,000 characters. Shorten either before continuing.",
     "cached": "Reused from context",
+    "ocrCount": "Processed {{processed}}/{{total}} images",
+    "ocrCached": "Reused {{count}} OCR results",
+    "ocrImageFailure": "Image {{image}}: {{reason}}",
+    "retryOcr": "Retry image text",
     "appended": "Written to note",
     "unread": "Some space sources have unread chunks or no readable content. See reading records.",
     "webFailed": "Some web searches or page reads failed. Available analysis was retained.",
@@ -383,7 +387,8 @@
     "component": {
       "body": "Body",
       "comments": "Comments",
-      "subtitles": "Subtitles"
+      "subtitles": "Subtitles",
+      "ocr": "Image text"
     },
     "state": {
       "ok": "Acquired",

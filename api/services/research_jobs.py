@@ -80,8 +80,8 @@ class ResearchJobs:
         visible["materials"] = []
         for row in job["materials"]:
             summary = {key: row[key] for key in ("key", "platform", "title", "url")}
-            for name in ("body", "comments", "subtitles"):
-                values = row[name]
+            for name in ("body", "comments", "subtitles", "ocr"):
+                values = row.get(name) or {"state": "not_applicable", "reason": "", "truncated": False, "entries": []}
                 summary[name] = {key: values[key] for key in ("state", "reason", "truncated")}
                 summary[name]["count"] = len(values["entries"])
                 summary[name]["collection_truncated"] = bool(values["truncated"])
@@ -90,6 +90,9 @@ class ResearchJobs:
                 if name == "subtitles":
                     summary[name]["metadata"] = {key: values.get("metadata", {})[key] for key in
                         ("source", "engine", "model", "language", "duration", "cached") if key in values.get("metadata", {})}
+                if name == "ocr":
+                    summary[name]["metadata"] = {key: values.get("metadata", {})[key] for key in
+                        ("engine", "total", "processed", "recognized", "empty", "failed", "cached_images", "failures") if key in values.get("metadata", {})}
             visible["materials"].append(summary)
         if store and job.get("space_id"):
             current = store.get_space(job["space_id"])
@@ -211,15 +214,20 @@ class ResearchJobs:
             "message": "正在获取空间资料", "materials": [], "elapsed": 0.0, "error": "",
             "document": None, "partial": "", "activity": [], "coverage": [], "external_sources": [], "web_errors": [],
             "usage": None, "cost_usd": None, "context_tokens": 0}
+        needs_ocr = False
         if latest:
             self.jobs[identity].update(materials=copy.deepcopy(latest["materials"]), status="analyzing", phase="analyzing", message="正在继续分析当前会话资料")
             # Old history without an explicit type can still recover it from its frozen snapshot.
             types = {row["key"]: row["result"].get("content_type", "") for row in latest["snapshot"]["items"]}
             for row in self.jobs[identity]["materials"]:
                 row.setdefault("content_type", types.get(row["key"], ""))
+                if row["platform"] == "xhs" and row.get("content_type") not in {"video", "zvideo"} and row.get("ocr", {}).get("state") not in {"ok", "not_applicable"}:
+                    needs_ocr = True
             self.jobs[identity]["evidence_cache"] = copy.deepcopy(latest.get("evidence_cache"))
+            if needs_ocr:
+                self.jobs[identity].update(status="collecting", phase="collecting", message="正在补取原帖图片文字")
         self.persist(identity)
-        self.tasks[identity] = asyncio.create_task(self.analyze(identity) if latest else self.collect(identity))
+        self.tasks[identity] = asyncio.create_task(self.collect(identity, retry=True) if needs_ocr else self.analyze(identity) if latest else self.collect(identity))
         self.tasks[identity].add_done_callback(lambda _: self.prune())
         return self.public(identity)
 
@@ -273,7 +281,7 @@ class ResearchJobs:
                         if event.get("completed") and job.get("transcribing_key") == item["key"]:
                             job.pop("transcribing_key", None)
                         job["message"] = f"已获取 {len(job['materials'])} / {len(job['snapshot']['items'])} 条资料"
-                        if event.get("completed"):
+                        if event.get("completed") or event.get("checkpoint"):
                             self.persist(job["job_id"])
                     elif kind == "progress":
                         job.update(phase=event["phase"], message=event["message"])
@@ -357,7 +365,8 @@ class ResearchJobs:
                     row["body"] = body_from_reading(cached)
             if retry:
                 items = [item for item in items if item["key"] not in previous or any(
-                    previous[item["key"]][name]["state"] in {"missing", "failed", "restricted"} for name in ("body", "comments", "subtitles"))]
+                    previous[item["key"]].get(name, material(item).get(name, {})).get("state") in {"missing", "failed", "restricted"}
+                    for name in ("body", "comments", "subtitles", "ocr"))]
             await self.process(job, {"mode": "collect", "items": items, "sessions": sessions,
                                      "session_errors": session_errors, "previous": previous})
             job.update(status="awaiting_sources", phase="awaiting_sources", message="请检查读取情况后开始分析", error="")
@@ -378,7 +387,7 @@ class ResearchJobs:
             for item in job["snapshot"]["items"]:
                 if item["key"] not in known:
                     missing = material(item)
-                    for name in ("body", "comments", "subtitles"):
+                    for name in ("body", "comments", "subtitles", "ocr"):
                         if missing[name]["state"] != "not_applicable":
                             missing[name].update(state="failed", reason="本次尚未获取此资料，可重试")
                     job["materials"].append(missing)

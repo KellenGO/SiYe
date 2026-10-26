@@ -12,6 +12,7 @@ from .material_contract import MAX_SECTION_CHARS, public_url
 from .public_network import public_get
 from .result_hydration import ResultHydrator
 from .research_transcription import TranscriptionService, asr_python
+from .research_ocr import OcrService
 from .acquisition_diagnostics import REASONS, AcquisitionError, classify, diagnostic
 
 
@@ -64,7 +65,8 @@ def material(item):
             "content_type": source.get("content_type", ""),
             "url": public_url(source["url"]), "snippet": source.get("snippet") or "",
             "body": component(), "comments": component(),
-            "subtitles": component("missing" if source.get("content_type") in {"video", "zvideo"} else "not_applicable")}
+            "subtitles": component("missing" if source.get("content_type") in {"video", "zvideo"} else "not_applicable"),
+            "ocr": component("missing" if source["platform"] == "xhs" and source.get("content_type") not in {"video", "zvideo"} else "not_applicable")}
 
 
 def failure(error, platform="", section="", stage=""):
@@ -144,6 +146,7 @@ class MaterialCollector(ResultHydrator):
         self.zhihu_bodies = {}
         self.emit = emit
         self.transcription = TranscriptionService(temporary_root=workdir)
+        self.ocr = OcrService(temporary_root=workdir)
 
     async def request(self, method, *args, **kwargs):
         await asyncio.sleep(max(0, self.last_request + 1.0 - time.monotonic()))
@@ -266,18 +269,19 @@ class MaterialCollector(ResultHydrator):
     async def collect(self, item, previous=None):
         self.fallback_diagnostics = {}
         result = material(item) if previous is None else previous
+        result.setdefault("ocr", material(item)["ocr"])
         source, platform = item["result"], item["result"]["platform"]
         try:
             client = await self.client(platform)
         except PermissionError as error:
-            for name in ("body", "comments", "subtitles"):
+            for name in ("body", "comments", "subtitles", "ocr"):
                 if result[name]["state"] not in {"ok", "not_applicable"}:
                     result[name].update(failure(error, platform, name, "session"),
                                         entries=result[name]["entries"], text=result[name]["text"])
                     result[name]["truncated"] = bool(result[name]["entries"] or result[name]["text"])
             return result
         except Exception as error:
-            for name in ("body", "comments", "subtitles"):
+            for name in ("body", "comments", "subtitles", "ocr"):
                 if result[name]["state"] not in {"ok", "not_applicable"}:
                     failed = failure(error, platform, name, "session")
                     result[name].update(state=failed["state"], reason=failed["reason"],
@@ -413,6 +417,17 @@ class MaterialCollector(ResultHydrator):
                         native_fallback_outcome=self.fallback_diagnostics[name]["fallback_outcome"])
                 else:
                     result[name]["diagnostics"].update(self.fallback_diagnostics[name])
+        if result["ocr"]["state"] not in {"ok", "not_applicable"}:
+            self.emit({"type": "material", "material": result})
+            def publish_ocr(value, message):
+                result["ocr"] = bound_component(value)
+                self.emit({"type": "material", "material": result, "checkpoint": True})
+                self.emit({"type": "progress", "phase": "ocr", "message": message})
+            try:
+                result["ocr"] = await self.ocr.collect(source, detail, result["ocr"], publish_ocr)
+            except Exception:
+                result["ocr"].update(state="failed", reason="图片文字识别未完成，已取得的文字保留，可重试", truncated=True)
+            bound_component(result["ocr"])
         return result
 
     async def transcribe_subtitles(self, client, source, detail, result):
