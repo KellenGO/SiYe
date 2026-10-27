@@ -41,6 +41,34 @@ class TranscriptionError(ValueError):
         super().__init__(reason)
 
 
+def media_too_large(error):
+    """True when a download was rejected by the size cap rather than by the network."""
+    return (isinstance(error, TranscriptionError) and error.code == "size_limit") or (
+        isinstance(error, ValueError) and str(error).startswith("媒体超过"))
+
+
+async def download_first(urls, target, referer, progress=lambda _: None):
+    """Try each candidate address in order, moving on only when one is over the size cap.
+
+    A larger stream than 96 MB is a property of that address, not of the post, so a
+    smaller variant that the platform already returned can still be transcribed.
+    """
+    errors = []
+    for index, url in enumerate(urls):
+        try:
+            await download_media(url, target, referer)
+            return
+        except Exception as error:
+            if not media_too_large(error):
+                raise
+            errors.append(error)
+            if index + 1 < len(urls):
+                progress(f"当前媒体超过单条上限，改用下一个可用地址（{index + 1}/{len(urls)}）")
+    if errors:
+        raise errors[-1]
+    raise ValueError("没有可用的媒体地址")
+
+
 async def asr_component_status():
     """Offline optional-component probe, isolated from the app's DLLs and secrets."""
     executable = asr_python()
@@ -276,7 +304,7 @@ class TranscriptionService:
             with tempfile.TemporaryDirectory(prefix="audio-", dir=self.temporary_root) as directory:
                 media = Path(directory) / "media"
                 progress("正在获取转写所需音轨或媒体流")
-                await download_media(url, media, referer)
+                await download_first([url] if isinstance(url, str) else list(url), media, referer, progress)
                 stage = "asr"
                 output = await run_asr(executable, media, self.root / "models", progress)
             entries, limited = normalize_segments(output.get("entries", []))

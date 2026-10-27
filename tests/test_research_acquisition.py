@@ -216,6 +216,43 @@ async def test_douyin_prefers_low_bitrate_existing_stream_without_background_mus
 
 
 @pytest.mark.asyncio
+async def test_douyin_media_candidates_order_by_declared_size_and_keep_fallbacks():
+    collector = materials.MaterialCollector()
+    detail = {"video": {
+        "play_addr": {"url_list": ["https://cdn.example/huge"]},
+        "bit_rate": [
+            {"bit_rate": 100, "play_addr": {"url_list": ["https://cdn.example/unknown-size"]}},
+            {"bit_rate": 900, "play_addr": {"data_size": 140000000, "url_list": ["https://cdn.example/over-96mb"]}},
+            {"bit_rate": 500, "play_addr": {"data_size": 20000000, "url_list": ["https://cdn.example/small"]}},
+        ]}}
+    urls = await collector.audio_candidates(None, {"platform": "douyin"}, detail)
+    # Declared size wins over bitrate order, so the small variant is tried first.
+    assert urls[0] == "https://cdn.example/small"
+    assert urls[1] == "https://cdn.example/over-96mb"
+    assert "https://cdn.example/huge" in urls and len(urls) <= materials.MAX_MEDIA_CANDIDATES
+    await collector.close()
+
+
+def test_media_weight_prefers_size_then_bitrate_and_rejects_noise():
+    assert materials.media_weight({"data_size": 20}) < materials.media_weight({"bit_rate": 1})
+    assert materials.media_weight({"bit_rate": 200}) < materials.media_weight({"bit_rate": 900})
+    assert materials.media_weight({"bit_rate": 900}) < materials.media_weight({})
+    for bad in ({"data_size": float("nan")}, {"data_size": -1}, {"size": "120"}, None, "text"):
+        assert materials.media_weight(bad)[0] >= 2
+
+
+@pytest.mark.asyncio
+async def test_audio_candidates_deduplicate_and_cap_unknown_platforms():
+    collector = materials.MaterialCollector()
+    detail = {"video": {"media": {"stream": {"h264": [
+        {"master_url": "https://cdn.example/same", "backup_urls": ["https://cdn.example/same", "//cdn.example/other"]}]}}}}
+    urls = await collector.audio_candidates(None, {"platform": "xhs"}, detail)
+    assert urls == ["https://cdn.example/same", "https://cdn.example/other"]
+    assert await collector.audio_candidates(None, {"platform": "zhihu"}, {}) == []
+    await collector.close()
+
+
+@pytest.mark.asyncio
 async def test_session_restore_timeout_is_not_reported_as_missing_login():
     collector = materials.MaterialCollector(session_errors={"zhihu": {"code": "timeout", "http_status": None}})
     source = {"key": "zhihu|123", "result": {"platform": "zhihu", "content_type": "answer", "content_id": "123",

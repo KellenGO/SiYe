@@ -128,7 +128,7 @@ async def test_platform_audio_url_failure_returns_specific_gap(monkeypatch, tmp_
     monkeypatch.setattr(materials, "asr_python", lambda: "python")
     async def fail(*args):
         raise RuntimeError("secret-cookie-and-url")
-    monkeypatch.setattr(collector, "audio_resource", fail)
+    monkeypatch.setattr(collector, "audio_candidates", fail)
     result = await collector.transcribe_subtitles(None, source()["result"], {}, {})
     assert result["state"] == "failed" and "媒体资源地址未能取得" in result["reason"]
     assert "secret" not in result["reason"]
@@ -348,6 +348,66 @@ def test_comment_metrics_are_kept_without_extra_requests():
 
 
 @pytest.mark.asyncio
+async def test_oversized_media_falls_back_to_the_next_candidate(monkeypatch, tmp_path):
+    service = module.TranscriptionService(tmp_path)
+    monkeypatch.setattr(module, "asr_python", lambda: "python")
+    attempts, updates = [], []
+
+    async def download(url, target, referer):
+        attempts.append(url)
+        if url.endswith("/big"):
+            raise ValueError("媒体超过 96 MB 转写上限")
+        target.write_bytes(b"media")
+
+    async def run(*args):
+        return {"entries": transcript()["entries"], "language": "zh", "duration": 87}
+
+    monkeypatch.setattr(module, "download_media", download)
+    monkeypatch.setattr(module, "run_asr", run)
+    result = await service.transcribe("video", ["https://cdn.example/big", "https://cdn.example/small"],
+                                      "https://example.com", updates.append)
+    assert result["state"] == "ok"
+    assert attempts == ["https://cdn.example/big", "https://cdn.example/small"]
+    assert updates == ["正在获取转写所需音轨或媒体流", "当前媒体超过单条上限，改用下一个可用地址（1/2）"]
+
+
+@pytest.mark.asyncio
+async def test_non_size_download_failure_does_not_try_another_candidate(monkeypatch, tmp_path):
+    service = module.TranscriptionService(tmp_path)
+    monkeypatch.setattr(module, "asr_python", lambda: "python")
+    attempts = []
+
+    async def download(url, target, referer):
+        attempts.append(url)
+        raise module.TranscriptionError("cdn_restricted", "download", "CDN 拒绝", "restricted", 403)
+
+    monkeypatch.setattr(module, "download_media", download)
+    result = await service.transcribe("video", ["https://cdn.example/a", "https://cdn.example/b"], "https://example.com")
+    assert attempts == ["https://cdn.example/a"] and result["state"] == "restricted"
+
+
+@pytest.mark.asyncio
+async def test_every_candidate_oversized_reports_the_size_limit(monkeypatch, tmp_path):
+    service = module.TranscriptionService(tmp_path)
+    monkeypatch.setattr(module, "asr_python", lambda: "python")
+
+    async def download(url, target, referer):
+        raise ValueError("媒体超过 96 MB 转写上限")
+
+    monkeypatch.setattr(module, "download_media", download)
+    result = await service.transcribe("video", ["https://cdn.example/a", "https://cdn.example/b"], "https://example.com")
+    assert result["state"] == "failed" and "96 MB" in result["reason"]
+    assert service.cached("video") is None
+
+
+def test_media_too_large_only_matches_the_size_cap():
+    assert module.media_too_large(ValueError("媒体超过 96 MB 转写上限"))
+    assert module.media_too_large(module.TranscriptionError("size_limit", "download", "过大", "failed"))
+    assert not module.media_too_large(ValueError("媒体没有可读取内容"))
+    assert not module.media_too_large(RuntimeError("媒体超过 96 MB 转写上限"))
+
+
+@pytest.mark.asyncio
 async def test_real_asr_subprocess_protocol_and_cleanup(monkeypatch, tmp_path):
     worker = tmp_path / "worker.py"
     worker.write_text('''import json, sys
@@ -416,7 +476,7 @@ async def test_missing_native_falls_back_to_normalized_asr_in_collector(monkeypa
     async def comments(*args):
         return materials.component("ok", entries=[{"id": "c", "text": "评论"}])
     async def transcribe(identity, url, referer, progress):
-        assert identity == "xhs|one|primary" and url == "https://cdn.example/video"
+        assert identity == "xhs|one|primary" and url == ["https://cdn.example/video"]
         progress("正在本地 AI 转写")
         return transcript()
     monkeypatch.setattr(collector, "client", client)

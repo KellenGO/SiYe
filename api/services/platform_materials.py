@@ -11,9 +11,11 @@ from urllib.parse import parse_qs, urlsplit
 from .material_contract import MAX_SECTION_CHARS, public_url
 from .public_network import public_get
 from .result_hydration import ResultHydrator
-from .research_transcription import TranscriptionService, asr_python
+from .research_transcription import TranscriptionService, asr_python, media_too_large
 from .research_ocr import OcrService
 from .acquisition_diagnostics import REASONS, AcquisitionError, classify, diagnostic
+
+MAX_MEDIA_CANDIDATES = 4
 
 
 def clean_text(value):
@@ -131,6 +133,23 @@ def subtitle_entries(data):
         except (TypeError, ValueError):
             continue
     return entries
+
+
+def media_weight(row):
+    """Sort key for media rows: declared size first, then bitrate; unknown values last.
+
+    Douyin reports ``data_size`` on its playback variants, which is the only number
+    that predicts whether the 96 MB transcription limit will be hit before downloading.
+    """
+    if not isinstance(row, dict):
+        return (3, math.inf)
+    size = row.get("data_size") or row.get("size") or row.get("filesize")
+    if isinstance(size, (int, float)) and math.isfinite(size) and size > 0:
+        return (0, size)
+    bitrate = row.get("bit_rate") or row.get("bitRate") or row.get("avg_bitrate") or row.get("bandwidth")
+    if isinstance(bitrate, (int, float)) and math.isfinite(bitrate) and bitrate > 0:
+        return (1, bitrate)
+    return (2, math.inf)
 
 
 def douyin_caption_urls(detail):
@@ -485,18 +504,18 @@ class MaterialCollector(ResultHydrator):
         if not isinstance(detail, dict):
             return component("missing", reason="当前详情未保留稳定音频资源，本地转写不可用")
         try:
-            url = await self.audio_resource(client, source, detail)
+            urls = await self.audio_candidates(client, source, detail)
         except Exception as error:
             failed = failure(error, source["platform"], "subtitles", "playurl")
             failed["reason"] = "平台媒体资源地址未能取得，本地转写不可用；" + failed["reason"]
             return failed
-        if not url:
+        if not urls:
             return component("missing", reason="平台详情没有可安全复用的音轨或媒体流，本地转写不可用")
         def progress(message):
             result["subtitles"].update(reason=message)
             self.emit({"type": "material", "material": result})
             self.emit({"type": "progress", "phase": "transcribing", "key": result["key"], "message": f"{result['title'][:80]} · {message}"})
-        transcript = await self.transcription.transcribe(identity, url, result["url"], progress)
+        transcript = await self.transcription.transcribe(identity, urls, result["url"], progress)
         return self.primary_transcript(transcript, source, detail)
 
     @staticmethod
@@ -508,37 +527,47 @@ class MaterialCollector(ResultHydrator):
 
     async def audio_resource(self, client, source, detail):
         """Only known detail fields / the existing Bilibili client; no new crawler."""
+        candidates = await self.audio_candidates(client, source, detail)
+        return candidates[0] if candidates else None
+
+    async def audio_candidates(self, client, source, detail):
+        """Addresses in preference order; the caller may fall back past an oversized one."""
         platform = source["platform"]
         video = detail.get("video") or {}
-        rows = []
         if platform == "bilibili" and detail.get("aid") and detail.get("cid"):
             response = await self.bilibili_player(client, "/x/player/wbi/playurl", {
                 "avid": detail["aid"], "cid": detail["cid"], "fnval": 16, "fnver": 0, "fourk": 0})
-            rows = (response.get("dash") or {}).get("audio") or []
-            rows = sorted((row for row in rows if isinstance(row, dict)), key=lambda row: row.get("bandwidth") or 0)
+            rows = [row for row in (response.get("dash") or {}).get("audio") or [] if isinstance(row, dict)]
+            rows.sort(key=lambda row: row.get("bandwidth") or 0)
         elif platform == "xhs" and isinstance(video, dict):
             streams = ((video.get("media") or {}).get("stream") or {})
-            rows = [row for codec in ("audio", "h264", "h265", "av1") for row in streams.get(codec) or []]
-            rows = sorted((row for row in rows if isinstance(row, dict)), key=lambda row: row.get("avg_bitrate") or 0)
+            rows = [row for codec in ("audio", "h264", "h265", "av1") for row in streams.get(codec) or []
+                    if isinstance(row, dict)]
+            rows.sort(key=lambda row: row.get("avg_bitrate") or 0)
         elif platform == "douyin" and isinstance(video, dict):
             # music.play_url is background music, not the speech track of the post.
             variants = [row for row in video.get("bit_rate") or [] if isinstance(row, dict)
                         and isinstance(row.get("play_addr"), dict) and row.get("format") in {None, "mp4"}]
             variants.sort(key=lambda row: (bool(row.get("is_bytevc1")),
                 row.get("bit_rate") if isinstance(row.get("bit_rate"), (int, float)) else math.inf))
-            rows = [video.get("audio") or {}] + [row["play_addr"] for row in variants] + [video.get("play_addr") or {}]
+            # A separate audio stream comes first, then variants ordered by declared size,
+            # because that is what decides whether the 96 MB transcription limit is hit.
+            sized = sorted((row["play_addr"] for row in variants), key=media_weight)
+            rows = [video.get("audio") or {}] + sized + [video.get("play_addr") or {}]
+        else:
+            rows = []
+        urls = []
         for row in rows:
-            candidates = [row.get(key) for key in ("baseUrl", "base_url", "master_url")]
-            for key in ("url_list", "backup_urls", "backupUrl", "backup_url"):
-                urls = row.get(key)
-                if isinstance(urls, str):
-                    candidates.append(urls)
-                elif isinstance(urls, list):
-                    candidates.extend(urls)
-            for url in candidates:
-                if isinstance(url, str) and url:
-                    return "https:" + url if url.startswith("//") else url
-        return None
+            if not isinstance(row, dict):
+                continue
+            for key in ("baseUrl", "base_url", "master_url", "url_list", "backup_urls", "backupUrl", "backup_url"):
+                value = row.get(key)
+                for url in ([value] if isinstance(value, str) else value if isinstance(value, list) else []):
+                    if isinstance(url, str) and url:
+                        url = "https:" + url if url.startswith("//") else url
+                        if url not in urls:
+                            urls.append(url)
+        return urls[:MAX_MEDIA_CANDIDATES]
 
     async def bilibili_player(self, client, uri, params):
         try:
