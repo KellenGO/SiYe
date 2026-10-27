@@ -10,8 +10,14 @@ from aggregate_search.adapters.zhihu import ZhihuAdapter
 from api.services.remote_sync_state import SyncStateError
 
 PAGE_SIZE, REQUEST_TIMEOUT, INCREMENTAL_STOP_RUN = 20, 30.0, 5
+DOUYIN_UNAVAILABLE = "抖音收藏账号身份尚未验证，暂不能同步收藏"
 class FavoritesSyncError(ValueError):
     safe_message = "收藏列表发生变化或返回异常，已保留进度；请稍后重新同步"
+class FavoritesUnavailableError(Exception):
+    safe_code = "failed"
+    def __init__(self, message):
+        self.safe_message = message
+        super().__init__(message)
 @dataclass
 class FavoritePage:
     results:list[dict]; fingerprint:str; complete:bool; count:int; identities:list[tuple[str,object]]; next_token:object=None; skipped:int=0
@@ -100,15 +106,15 @@ class ZhihuFavoritesSource(_Source):
 class XhsFavoritesSource(_Source):
     platform="xhs"; adapter=XhsAdapter()
     async def identity(self):
-        data=await self.request(self.client.query_self); result=data.get("data",{}).get("result",{}) if isinstance(data,dict) else {}
-        uid=result.get("user_id") or result.get("userId")
+        from media_platform.xhs.core import _resolve_self_user_id
+        uid=await _resolve_self_user_id(self.client.playwright_page)
         if not uid:
-            from base.exceptions import LoginRequiredError; raise LoginRequiredError(platform="xhs",message="小红书登录状态未能确认")
+            raise FavoritesUnavailableError("无法识别当前小红书账号，暂不能同步收藏")
         self.user_id=str(uid); return f"xhs:{uid}"
     async def folders(self,account): return [{"id":"collected","name":"收藏笔记"}]
     async def page(self,folder,token):
         cursor="" if token is None else str(token); data=await self.request(self.client.get_collected_notes,cursor,PAGE_SIZE,self.user_id); body=data.get("data",data) if isinstance(data,dict) else {}
-        rows=body.get("items") or body.get("notes"); more=body.get("has_more"); nxt=body.get("cursor")
+        rows=body.get("items") if isinstance(body.get("items"),list) else body.get("notes"); more=body.get("has_more"); nxt=body.get("cursor")
         if not isinstance(rows,list) or more not in (True,False,0,1) or (more and not isinstance(nxt,str)):raise FavoritesSyncError("Invalid favorite pagination")
         return self.make_page(rows,folder,not bool(more),nxt,lambda r,v:v["content_id"])
 
@@ -116,7 +122,7 @@ class DouyinFavoritesSource(_Source):
     platform="douyin"; adapter=DouyinAdapter(); incremental_verified=False
     async def identity(self):
         # Current client exposes no verified owner endpoint. Never infer it from content/cookies.
-        from base.exceptions import LoginRequiredError; raise LoginRequiredError(platform="douyin",message="抖音收藏账号身份尚未验证，暂不能全量同步")
+        raise FavoritesUnavailableError(DOUYIN_UNAVAILABLE)
     async def folders(self,account): return []
     async def page(self,folder,token): raise AssertionError("unreachable")
 

@@ -71,6 +71,8 @@ async def _resolve_self_user_id(context_page: Page) -> str:
                 const links = document.querySelectorAll(
                     'a[href*="/user/profile/"]');
                 for (const link of links) {
+                    const label = link.querySelector('span');
+                    if (!label || label.textContent.trim() !== '我') continue;
                     const href = link.getAttribute('href') || '';
                     const parts = href.split('/').filter(Boolean);
                     const at = parts.indexOf('profile');
@@ -136,7 +138,11 @@ class XiaoHongShuCrawler(AbstractCrawler):
 
             # Create a client to interact with the Xiaohongshu website.
             self.xhs_client = await self.create_xhs_client(None)
-            if not await self.xhs_client.pong():
+            if config.CRAWLER_TYPE == "favorites" and self._login_fail_fast():
+                logged_in = await self.xhs_client.pong(raise_on_error=True)
+            else:
+                logged_in = await self.xhs_client.pong()
+            if not logged_in:
                 if self._login_fail_fast():
                     from base.exceptions import LoginRequiredError
                     raise LoginRequiredError(platform="xhs", message="小红书登录状态已失效，请前往账号设置重新登录")

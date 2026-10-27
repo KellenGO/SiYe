@@ -454,6 +454,9 @@ async def _run_favorites(job_id: str, platform: str, limit: int, sync_mode=None)
     crawler = None
     try:
         emit_status(job_id, platform, "running")
+        if platform == "douyin" and sync_mode:
+            from aggregate_search.favorites_sync import DOUYIN_UNAVAILABLE, FavoritesUnavailableError
+            raise FavoritesUnavailableError(DOUYIN_UNAVAILABLE)
         crawler = CrawlerFactory.create_crawler(platform=core_platform)
         crawler.runtime_options = CrawlerRuntimeOptions(
             result_sink=handle_results, login_policy="fail_fast",
