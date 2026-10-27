@@ -279,8 +279,13 @@ class DouYinClient(ReusableHttpClientMixin, AbstractApiClient):
             diag["xmst_len"])
 
     async def get_collected_awemes(self, cursor: int = 0, count: int = 20) -> Dict:
-        """Return the current account's collected videos (read only)."""
-        return await self.post("/aweme/v1/web/aweme/listcollection/", {
-            "cursor": str(max(cursor, 0)),
-            "count": str(min(max(count, 1), 20)),
-        })
+        """Return the current account's collected videos (read only).
+
+        收藏列表必须从**官方收藏页内部**读取：后端自己签名的同一请求会被
+        Argus 安全插件拒绝（403 ``Blocked by ArgusSecurityPlugin Uifid Not
+        Found``），而页面自身的 fetch 带着浏览器上下文，不需要手工签名。
+        页面没有加载收藏页时（例如只打开了首页）同样会被拒，所以调用方
+        必须先导航到收藏页；未就绪时这里抛出可重试的错误，而不是伪造空列表。
+        """
+        from .collection import fetch_collected_page
+        return await fetch_collected_page(self.playwright_page, cursor, count)

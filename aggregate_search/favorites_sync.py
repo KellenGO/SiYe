@@ -10,10 +10,10 @@ from aggregate_search.adapters.zhihu import ZhihuAdapter
 from api.services.remote_sync_state import SyncStateError
 
 PAGE_SIZE, REQUEST_TIMEOUT, INCREMENTAL_STOP_RUN = 20, 30.0, 5
-DOUYIN_UNAVAILABLE = "抖音收藏账号身份尚未验证，暂不能同步收藏"
 class FavoritesSyncError(ValueError):
     safe_message = "收藏列表发生变化或返回异常，已保留进度；请稍后重新同步"
 class FavoritesUnavailableError(Exception):
+    """能力或页面未就绪：明确不是登录失效，也不改动账号状态。"""
     safe_code = "failed"
     def __init__(self, message):
         self.safe_message = message
@@ -119,12 +119,35 @@ class XhsFavoritesSource(_Source):
         return self.make_page(rows,folder,not bool(more),nxt,lambda r,v:v["content_id"])
 
 class DouyinFavoritesSource(_Source):
-    platform="douyin"; adapter=DouyinAdapter(); incremental_verified=False
+    platform="douyin"; adapter=DouyinAdapter()
+    # 收藏页按"收藏时间倒序"返回（2026-10-27 实测 4 页游标单调推进、
+    # 无重复、末页 has_more=0），但仍未在真实账号上验证"连续 5 条即到底"，
+    # 所以增量停点保持关闭：每次读完整列表，靠普通同步"不删旧内容"兜底。
+    incremental_verified=False
     async def identity(self):
-        # Current client exposes no verified owner endpoint. Never infer it from content/cookies.
-        raise FavoritesUnavailableError(DOUYIN_UNAVAILABLE)
-    async def folders(self,account): return []
-    async def page(self,folder,token): raise AssertionError("unreachable")
+        # 身份必须来自平台自己的本人接口，绝不从 Cookie 或内容推断。
+        info=await self.request(self.client.get,"/aweme/v1/web/user/profile/self/",{"aid":"6383"})
+        user=info.get("user") if isinstance(info,dict) else None
+        if not isinstance(user,dict) or not (user.get("sec_uid") or user.get("uid")):
+            from base.exceptions import LoginRequiredError
+            raise LoginRequiredError(platform="douyin",message="抖音登录状态已失效，请前往账号设置重新登录")
+        uid=user.get("sec_uid") or user.get("uid")
+        self.user_id=str(uid); return f"douyin:{uid}"
+    async def folders(self,account): return [{"id":"collected","name":"收藏"}]
+    async def page(self,folder,token):
+        cursor=0 if token is None else int(token)
+        data=await self.request(self.client.get_collected_awemes,cursor,PAGE_SIZE)
+        if not isinstance(data,dict) or data.get("status_code") not in (0,None):
+            # 身份已单独确认；这里的非零码是列表接口自身的失败，按可重试的分页异常处理。
+            raise FavoritesSyncError("Invalid favorite response")
+        if data.get("has_more") not in (True,False,0,1): raise FavoritesSyncError("Invalid favorite pagination")
+        rows=data.get("aweme_list")
+        if not isinstance(rows,list): raise FavoritesSyncError("Invalid favorite page")
+        nxt=data.get("cursor") or data.get("max_cursor")
+        try: nxt=int(nxt)
+        except (TypeError,ValueError): nxt=None
+        if data.get("has_more") and nxt is None: raise FavoritesSyncError("Missing favorite cursor")
+        return self.make_page(rows,folder,not bool(data.get("has_more")),nxt,lambda r,v:v["content_id"])
 
 async def synchronize_favorites(source:FavoritesSource,store,mode,progress):
     if mode == "reset":

@@ -2,7 +2,7 @@
 
 ## 一句话
 
-把各平台收藏归档到本机 SQLite。B站和知乎的已接入收藏夹接口不设产品侧总条数上限；小红书当前仅有单一「收藏笔记」入口，抖音收藏列表尚未验证可用。**同步所选平台 / 继续只新增**（读到本机已有的内容段就停）；高级操作中的**重置同步直接覆盖所选且成功完整读取的平台本机归档**。两者都不修改平台收藏。
+把各平台收藏归档到本机 SQLite。B站、知乎和抖音的已接入收藏夹接口不设产品侧总条数上限；小红书当前仅有单一「收藏笔记」入口，抖音仅有单一「收藏」入口。**同步所选平台 / 继续只新增**（读到本机已有的内容段就停）；高级操作中的**重置同步直接覆盖所选且成功完整读取的平台本机归档**。两者都不修改平台收藏。
 
 ## 代码入口
 
@@ -13,6 +13,7 @@
 | HTTP 路由（前缀 `/api/search`） | `api/routers/search.py`：同步任务，以及只读的 `GET /favorites/folders` 和逐夹分页 `GET /favorites/folders/{account}/{folder}` |
 | 请求 / 响应模型 | `api/schemas/favorites.py` |
 | 平台分页来源、增量停点、临时重置库 | `aggregate_search/favorites_sync.py` 的 `synchronize_favorites` 与各 `*FavoritesSource` |
+| 抖音收藏列表的页面内读取 | `media_platform/douyin/collection.py` 的 `fetch_collected_page`、`ensure_collection_page`；`libs/douyin_collection.js` |
 | 账号隔离、检查点、基线比对、取全量结果 | `api/services/remote_sync_state.py`（`RemoteSyncStateMixin`） |
 | 抓取侧（超时、分页、错误码） | `aggregate_search/worker.py` + 各平台 `media_platform/*/core.py` |
 | 前端 | `webui/src/hooks/useFavorites.ts`、`webui/src/components/favorites/FavoritesPage.tsx`、`webui/src/components/search/ResultTabs.tsx`（`pageSize`） |
@@ -68,7 +69,7 @@
 - 打开页面**只显示上次保存的数据和同步时间，不自动访问平台**；只有用户主动点同步才更新。
 - 遇限流 / 验证码 / 登录失效就停止该平台并显示原因；普通同步保留已取内容，重置同步丢弃临时结果、保留原归档。**不自动重试、不降数量试探**。
 - 小红书通过已登录页面的本人资料识别账号，只有明确未登录才标记登录失效；账号身份无法确认或接口异常时保留登录状态并显示同步失败。空收藏列表可正常完成。
-- 抖音分页同步尚未接入可用的账号识别和收藏读取，直接提示暂不可用，不启动平台浏览器，也不把能力缺失标记成登录失效；失败时保留已有归档。只有实际报告需要登录时，收藏页才提供「检查账号」。
+- 抖音分页同步在 **官方收藏页内部** 读取列表，身份来自平台自己的 `profile/self` 接口；只有该接口明确无本人对象时才标记登录失效。收藏页未就绪、结构异常都按可重试失败处理，绝不改成登录失效，也不启动登录扫码。失败时保留已有归档。取舍见[抖音收藏改为页面内读取](../decisions/2026-10-27-抖音收藏页面内读取.md)。
 - 取消 / 中断的同步落库为 `cancelled`，**不写 `running`**（否则前端会一直转圈）。取消是幂等的：并发两次取消共享同一次清理，避免两边同时落库抢 SQLite 写锁而丢掉一个平台的结果。
 - 分页同步的终态必须写回**真实账号**（`xhs:123` 这类）。写进 `default` 会让 `archive_summary` 取到最新那条 `cancelled / 0 条`，重启后平台汇总显示成「已取消」而归档里其实还躺着完整数据。worker 还没报账号就失败时，用归档里该平台唯一的账号兜底，保证这次失败也落盘（否则重启后仍显示上一次的「成功」）。
 - 分页同步有 **900 秒总时长上限**（`_PAGED_TIMEOUT`）：单行 90 秒只能挡住卡住的 worker，"每 90 秒吐一行进度"能无限续命；而同步握着 `exclusive("favorites")` 租约，不结束会让其它账号操作一直 409。

@@ -233,6 +233,9 @@ class DouYinCrawler(AbstractCrawler):
         sync = (getattr(self, "runtime_options", None) and self.runtime_options.extra.get("favorites_sync"))
         if sync:
             return await sync(self.dy_client)
+        # 收藏列表只在官方收藏页内可读（见 media_platform/douyin/collection.py）。
+        from .collection import ensure_collection_page
+        await ensure_collection_page(self.dy_client.playwright_page)
         remaining = self._result_limit()
         cursor = 0
         while remaining > 0:

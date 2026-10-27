@@ -107,8 +107,11 @@ async def test_xhs_and_douyin_favorites_are_bounded():
     assert seen_params == [("", 2, "self-user-id")]
 
     dy_batches = []
+    # 收藏列表只在官方收藏页内可读：页面已在该路由时 ensure_collection_page 不导航。
+    dy_page_obj = SimpleNamespace(
+        url="https://www.douyin.com/user/self?showTab=collection")
     dy = SimpleNamespace(
-        dy_client=SimpleNamespace(), _result_limit=lambda: 1,
+        dy_client=SimpleNamespace(playwright_page=dy_page_obj), _result_limit=lambda: 1,
         _result_sink_call=dy_batches.append,
     )
 
@@ -276,7 +279,8 @@ async def test_hundred_favorites_use_bounded_pages(platform, monkeypatch):
         _result_limit=lambda: 100, _result_sink_call=received.extend,
         context_page=SimpleNamespace(evaluate=AsyncMock(return_value="self-user")),
         xhs_client=SimpleNamespace(get_collected_notes=fetch),
-        dy_client=SimpleNamespace(get_collected_awemes=fetch),
+        dy_client=SimpleNamespace(get_collected_awemes=fetch, playwright_page=SimpleNamespace(
+            url="https://www.douyin.com/user/self?showTab=collection")),
     )
     if platform == "xhs":
         await XiaoHongShuCrawler.fetch_favorites(crawler)

@@ -1,4 +1,5 @@
 """收藏同步的身份判断，全部使用虚构页面与隔离数据库。"""
+from dataclasses import dataclass
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 import json
@@ -8,7 +9,7 @@ import pytest
 import config
 from aggregate_search import worker
 from aggregate_search.favorites_sync import (
-    DOUYIN_UNAVAILABLE, FavoritesUnavailableError, XhsFavoritesSource,
+    FavoritesSyncError, FavoritesUnavailableError, XhsFavoritesSource,
     synchronize_favorites,
 )
 from api.services.remote_favorites_store import RemoteFavoritesStore
@@ -41,17 +42,93 @@ async def test_xhs_unknown_identity_is_failure_not_login_required():
     assert "无法识别" in worker._safe_error_message(exc.value)
 
 
+@dataclass
+class _DouyinClient:
+    """抖音分页同步的最小 client 替身：页面内读取已由 collection 模块测过。"""
+
+    playwright_page: object
+    profile: dict
+    pages: list
+
+    async def get(self, uri, params=None, headers=None):
+        return self.profile
+
+    async def get_collected_awemes(self, cursor=0, count=20):
+        for row in self.pages:
+            if row["cursor"] == cursor:
+                return row["body"]
+        raise AssertionError(f"unexpected cursor {cursor}")
+
+
+def _douyin_pages(rows_per_page):
+    pages = []
+    cursor = 0
+    for index, size in enumerate(rows_per_page):
+        last = index == len(rows_per_page) - 1
+        body = {
+            "status_code": 0,
+            "has_more": 0 if last else 1,
+            "cursor": 0 if last else cursor + size,
+            "aweme_list": [
+                {"aweme_id": f"{cursor + offset}", "desc": f"item {cursor + offset}",
+                 "create_time": 1700000000 + cursor + offset,
+                 "video": {"cover": {"url_list": ["https://p3.douyinpic.com/x.jpg"]}}}
+                for offset in range(size)
+            ],
+        }
+        pages.append({"cursor": cursor, "body": body})
+        cursor += size
+    return pages
+
+
 @pytest.mark.asyncio
-@pytest.mark.parametrize("mode", ["auto", "reset"])
-async def test_douyin_paged_sync_fails_before_opening_browser(monkeypatch, mode):
-    errors = []
-    monkeypatch.setattr(worker, "emit_status", lambda *args: None)
-    monkeypatch.setattr(worker, "emit_error", lambda *args: errors.append(args))
-    monkeypatch.setattr(worker, "emit_done", lambda *args: None)
-    monkeypatch.setattr("main.CrawlerFactory.create_crawler", lambda **kwargs: pytest.fail("browser should not start"))
-    await worker._run_favorites("job", "douyin", 20, mode)
-    assert errors[0][2] == "failed"
-    assert DOUYIN_UNAVAILABLE in errors[0][3]
+async def test_douyin_sync_uses_verified_identity_and_paginates(tmp_path):
+    client = _DouyinClient(
+        playwright_page=FakePage(),
+        profile={"status_code": 0, "user": {"sec_uid": "MS4wLjABAAAAowner"}},
+        pages=_douyin_pages([2, 1]),
+    )
+    store = RemoteFavoritesStore(tmp_path / "library.db")
+    from aggregate_search.favorites_sync import DouyinFavoritesSource
+
+    assert await synchronize_favorites(
+        DouyinFavoritesSource(client, interval=0), store, "auto", lambda *_: None) == []
+    summary = store.archive_summary()
+    assert summary["platforms"]["douyin"]["status"] == "succeeded"
+    assert summary["accounts"][0]["account"] == "douyin:MS4wLjABAAAAowner"
+    assert store.archive_page(limit=10)["total"] == 3
+
+
+@pytest.mark.asyncio
+async def test_douyin_identity_without_owner_is_login_required():
+    from base.exceptions import LoginRequiredError
+    from aggregate_search.favorites_sync import DouyinFavoritesSource
+
+    client = _DouyinClient(playwright_page=FakePage(),
+                           profile={"status_code": 8, "status_msg": "用户未登录"},
+                           pages=[])
+    with pytest.raises(LoginRequiredError):
+        await DouyinFavoritesSource(client, interval=0).identity()
+
+
+@pytest.mark.asyncio
+async def test_douyin_collection_unavailable_is_not_login_required(tmp_path):
+    """收藏页没就绪是可重试失败，绝不能把账号标成登录失效。"""
+    from media_platform.douyin.collection import CollectionUnavailableError
+    from aggregate_search.favorites_sync import DouyinFavoritesSource
+
+    client = _DouyinClient(
+        playwright_page=FakePage(),
+        profile={"status_code": 0, "user": {"sec_uid": "MS4wLjABAAAAowner"}},
+        pages=[])
+    client.get_collected_awemes = AsyncMock(
+        side_effect=CollectionUnavailableError("抖音收藏页没有就绪，暂不能同步收藏"))
+    source = DouyinFavoritesSource(client, interval=0)
+    with pytest.raises(CollectionUnavailableError) as exc:
+        await synchronize_favorites(
+            source, RemoteFavoritesStore(tmp_path / "library.db"), "auto",
+            lambda *_: None)
+    assert worker._classify_platform_error(exc.value) == "failed"
 
 
 @pytest.mark.asyncio
@@ -63,7 +140,7 @@ async def test_unsupported_sync_does_not_change_login_state(monkeypatch, tmp_pat
     proc = SimpleNamespace(
         stdin=SimpleNamespace(write=Mock(), drain=AsyncMock(), close=Mock()),
         stdout=SimpleNamespace(readline=AsyncMock(side_effect=[
-            event("error", {"type": "failed", "message": DOUYIN_UNAVAILABLE}),
+            event("error", {"type": "failed", "message": "抖音收藏页没有就绪，暂不能同步收藏"}),
             event("done", None)])),
     )
     monkeypatch.setattr("api.services.favorites_job_manager.spawn_worker", AsyncMock(return_value=proc))

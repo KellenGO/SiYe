@@ -454,9 +454,6 @@ async def _run_favorites(job_id: str, platform: str, limit: int, sync_mode=None)
     crawler = None
     try:
         emit_status(job_id, platform, "running")
-        if platform == "douyin" and sync_mode:
-            from aggregate_search.favorites_sync import DOUYIN_UNAVAILABLE, FavoritesUnavailableError
-            raise FavoritesUnavailableError(DOUYIN_UNAVAILABLE)
         crawler = CrawlerFactory.create_crawler(platform=core_platform)
         crawler.runtime_options = CrawlerRuntimeOptions(
             result_sink=handle_results, login_policy="fail_fast",
@@ -495,8 +492,15 @@ async def _run_favorites(job_id: str, platform: str, limit: int, sync_mode=None)
         import sqlite3
         from aggregate_search.favorites_sync import FavoritesSyncError
         from api.services.remote_sync_state import SyncStateError
+        from media_platform.douyin.collection import CollectionUnavailableError
         if isinstance(exc, sqlite3.Error):
             emit_error(job_id, platform, "failed", "重置未完成，本机原有跨平台收藏已保留；请检查磁盘空间后重试" if sync_mode == "reset" else "本机收藏保存失败，请检查磁盘空间后继续同步")
+        # 收藏页未就绪/结构异常：可重试，但绝不能被当成登录失效去改账号状态。
+        elif isinstance(exc, CollectionUnavailableError):
+            message = _safe_error_message(exc)
+            if sync_mode == "reset":
+                message = f"{message}；本机原有跨平台收藏已保留"
+            emit_error(job_id, platform, "failed", message)
         # 只认分页同步自己抛的错：别的 ValueError（代码 bug）要按原样暴露，别包装成"列表变化"。
         elif isinstance(exc, (FavoritesSyncError, SyncStateError)) and sync_mode:
             emit_error(job_id, platform, "failed", "重置未完成，本机原有跨平台收藏已保留；请稍后重试" if sync_mode == "reset" else "收藏列表变化或返回异常，已保留进度，请稍后重新同步")
