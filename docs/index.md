@@ -10,6 +10,7 @@
 | 官方可选扩展管理（下载／开关／卸载） | [features/extensions.md](features/extensions.md) | `api/services/extensions.py`、`webui/src/components/accounts/ExtensionsPage.tsx` |
 | 空间 AI 研究（分区读取 + 可选本地视频转写 + 可选联网） | [features/space-research-ai.md](features/space-research-ai.md) | `api/services/research_jobs.py`、`api/services/research_transcription.py`、`webui/src/components/extensions/PluginUI.tsx` |
 | 小红书图片文字 OCR（本地中文识别 + 多图缓存与分区读取） | [features/image-ocr.md](features/image-ocr.md) | `api/services/research_ocr.py`、`scripts/research_ocr_worker.ps1` |
+| AI 回答操作与长图分享（纯图标 + 多轮选择 + 本地 PNG） | [features/ai-sharing.md](features/ai-sharing.md) | `webui/src/components/extensions/PluginUI.tsx`、`scripts/research_ui_smoke.py`（界面实现位于独立 SiYe-AI 仓库） |
 | 主要页面与内容视图切换动效 | [features/interface-transitions.md](features/interface-transitions.md) | `webui/src/App.tsx`、`webui/src/hooks/useSlidingIndicator.ts`、`webui/src/components/search/ResultTabs.tsx`、`webui/src/components/accounts/AccountsPage.tsx` |
 | 界面渲染异常兜底 | [features/ui-error-recovery.md](features/ui-error-recovery.md) | `webui/src/components/layout/AppErrorBoundary.tsx`、`webui/src/main.tsx` |
 | 可跳过的新手引导（七步逐页导览，关键步骤带框选高亮） | [features/getting-started.md](features/getting-started.md) | `webui/src/lib/onboarding.ts`、`webui/src/components/help/GettingStarted.tsx`、`webui/src/components/help/GuideSpotlight.tsx`、`webui/src/components/help/GuideExit.tsx`、`webui/src/hooks/useOnboarding.ts`、`webui/src/components/help/HelpPage.tsx` |

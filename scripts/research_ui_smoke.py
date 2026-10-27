@@ -42,6 +42,10 @@ class QuietHandler(SimpleHTTPRequestHandler):
 def check_answer_actions(page, panel, manager, context):
     answer = panel.locator(".research-chat-turn").last
     expect(answer.locator(".space-research-preview")).to_be_visible()
+    actions = answer.locator(".research-reply-actions button")
+    expect(actions).to_have_count(3)
+    assert actions.all_text_contents() == ["", "", ""], "Answer actions must be icons only"
+    expect(answer.locator(".research-write-note")).to_have_count(0)
     context.grant_permissions(["clipboard-read", "clipboard-write"])
     answer.get_by_role("button", name="复制回答", exact=True).click()
     expect(panel.get_by_role("status")).to_contain_text("已复制回答及来源链接")
@@ -73,7 +77,81 @@ def check_answer_actions(page, panel, manager, context):
     assert json.dumps(old_job["document"], ensure_ascii=False) == original_answer
     assert list(manager.jobs.values())[-1]["question"] == old_job["question"]
     assert composer.input_value().endswith("请解释这段")
+    answer.locator(".research-reply-actions").scroll_into_view_if_needed()
     page.screenshot(path=str(ROOT / "build/research-answer-actions.png"), full_page=True)
+
+
+def check_share_image(page, panel, manager):
+    from PIL import Image, ImageChops
+
+    before = len(manager.jobs)
+    answers = panel.locator(".research-chat-turn")
+    answers.last.get_by_role("button", name="分享回答", exact=True).click()
+    expect(panel.get_by_label("选择第 1 段问答", exact=True)).not_to_be_checked()
+    expect(panel.get_by_label("选择第 2 段问答", exact=True)).to_be_checked()
+    panel.get_by_role("button", name="生成长图", exact=True).click()
+    preview = page.get_by_role("dialog", name="长图预览", exact=True)
+    card = preview.locator(".research-share-card")
+    expect(card.locator(".research-share-turn")).to_have_count(1)
+    expect(card).not_to_contain_text("SHARE_END_1")
+    expect(card).to_contain_text("SHARE_END_2")
+    expect(card).to_contain_text("https://www.xiaohongshu.com/explore/one")
+    assert not card.locator("button, input, .research-tool-trace, .research-reply-actions").count()
+    preview.get_by_label("包含问题", exact=True).uncheck()
+    expect(card.locator(".research-share-question")).to_have_count(0)
+    preview.get_by_label("包含问题", exact=True).check()
+    expected_height = card.evaluate("el => el.scrollHeight")
+    with page.expect_download() as saved:
+        preview.get_by_role("button", name="保存图片", exact=True).click()
+    assert saved.value.suggested_filename.endswith(".png")
+    output = ROOT / "build/research-share-long.png"
+    saved.value.save_as(output)
+    with Image.open(output) as image:
+        assert image.format == "PNG" and image.width == 1440
+        assert image.height == expected_height * 2 and image.height > 4000
+        # Check ink through the whole card, including the final sources/footer.
+        rgb = image.convert("RGB")
+        for top, bottom in ((80, 500), (image.height // 2, image.height // 2 + 400), (image.height - 400, image.height - 20)):
+            band = rgb.crop((60, top, image.width - 60, bottom))
+            assert ImageChops.difference(band, Image.new("RGB", band.size, "white")).getbbox(), "Exported PNG is blank or clipped"
+    page.screenshot(path=str(ROOT / "build/research-share-preview.png"), full_page=True)
+    page.keyboard.press("Escape")
+    expect(preview).not_to_be_visible()
+    expect(panel).to_be_visible()
+    expect(panel.get_by_label("选择第 2 段问答", exact=True)).to_be_checked()
+    panel.get_by_label("全选", exact=True).check()
+    panel.get_by_role("button", name="生成长图", exact=True).click()
+    expect(card.locator(".research-share-turn")).to_have_count(2)
+    assert card.inner_text().index("SHARE_END_1") < card.inner_text().index("SHARE_END_2")
+    # Refuse oversized images rather than silently cropping content.
+    card.evaluate("el => el.style.height = '31000px'")
+    preview.get_by_role("button", name="保存图片", exact=True).click()
+    expect(preview.get_by_role("alert")).to_contain_text("内容太长")
+    card.evaluate("el => el.style.height = ''")
+    preview.get_by_role("button", name="返回选择", exact=True).click()
+    panel.get_by_label("全选", exact=True).uncheck()
+    expect(panel.get_by_role("button", name="生成长图", exact=True)).to_be_disabled()
+    panel.get_by_label("选择第 2 段问答", exact=True).check()
+    for width, height in ((390, 844), (320, 640)):
+        page.set_viewport_size({"width": width, "height": height})
+        page.evaluate("document.documentElement.classList.add('dark')")
+        panel.get_by_role("button", name="生成长图", exact=True).click()
+        expect(preview).to_be_visible()
+        assert preview.bounding_box()["width"] <= width
+        assert preview.evaluate("el => el.scrollWidth <= el.clientWidth")
+        assert card.evaluate("el => getComputedStyle(el).backgroundColor") == "rgb(255, 255, 255)"
+        assert preview.get_by_role("button", name="保存图片", exact=True).bounding_box()["y"] < height
+        if width == 320:
+            with page.expect_download() as mobile_saved:
+                preview.get_by_role("button", name="保存图片", exact=True).click()
+            mobile_saved.value.save_as(ROOT / "build/research-share-mobile.png")
+            page.screenshot(path=str(ROOT / "build/research-share-preview-mobile.png"), full_page=True)
+        page.keyboard.press("Escape")
+        expect(panel.get_by_role("button", name="取消分享", exact=True)).to_be_visible()
+    page.keyboard.press("Escape")
+    expect(panel.get_by_label("给 AI 发送消息", exact=True)).to_be_visible()
+    page.evaluate("document.documentElement.classList.remove('dark')")
+    assert len(manager.jobs) == before, "Sharing triggered a model request"
 
 
 def main():
@@ -141,7 +219,11 @@ def main():
                 for index in range(access.sections["xhs|one"]["ocr"]["chunks"]):
                     access.chunk("S1", "ocr", index)
                 image_answer = "图片预算来自原帖配图 [S1:ocr]。" if "--ocr-only" in sys.argv else ""
-                return {"document": answer_document("AI生成的苏州研究结果 [S1:body]。当前评论样本 [S3:comments]；S2 正文和 S3 视频评级不可用。" + image_answer, job["web_enabled"], job["materials"], [], access.coverage()),
+                answer = "AI生成的苏州研究结果 [S1:body]。当前评论样本 [S3:comments]；S2 正文和 S3 视频评级不可用。" + image_answer
+                if "--share-only" in sys.argv:
+                    answer += "\n\n## 旅行安排\n\n" + "\n\n".join(f"第 {index} 天：**建议提前规划行程**，慢慢游览苏州园林与街巷。保留来源，结合自己的时间安排交通，出发前核实开放时段。" for index in range(1, 31))
+                    answer += f"\n\nSHARE_END_{len(manager.jobs)} 图片末尾完整保留。"
+                return {"document": answer_document(answer, job["web_enabled"], job["materials"], [], access.coverage()),
                         "coverage": access.coverage(), "external_sources": [{"id": "web|1", "title": "外部时刻表", "url": "https://example.org/timetable", "level": "网页正文（部分已读）", "fetched_at": "2026-10-05T00:00:00Z"}] if job["web_enabled"] else [],
                         "web_errors": ["测试联网失败"] if job["web_enabled"] else []}
             manager.process = process
@@ -151,7 +233,6 @@ def main():
                 tested_models.append(config.credentials()["model"])
                 return {"connection_ok": True, "web_ok": web_enabled}
             manager.probe = probe
-            fail_append = False
             fail_generation = False
             generation_attempts = 0
             app = FastAPI()
@@ -178,9 +259,6 @@ def main():
                             if fail_generation:
                                 route.fulfill(status=503, json={"detail": "测试回答启动失败"})
                                 return
-                        if fail_append and path.endswith("/note") and request.method == "PUT":
-                            route.fulfill(status=503, json={"detail": "测试保存失败"})
-                            return
                         response = client.request(request.method, path, content=request.post_data, headers={"content-type": "application/json"})
                         if path.endswith("/note") and response.status_code >= 400:
                             raise AssertionError("Rich-note save rejected: " + request.post_data)
@@ -279,11 +357,13 @@ def main():
                     context.close(); browser.close()
                     print("PASS: OCR acquisition/read coverage, image failure details, citations, retry preserves answer, cached images and mobile")
                     return
-                if "--answer-actions-only" in sys.argv:
+                if "--answer-actions-only" in sys.argv or "--share-only" in sys.argv:
                     panel.get_by_label("给 AI 发送消息", exact=True).fill("概括已加入的资料")
                     panel.get_by_role("button", name="发送消息", exact=True).click()
                     expect(panel.locator(".space-research-preview")).to_be_visible(timeout=15000)
                     check_answer_actions(page, panel, manager, context)
+                    if "--share-only" in sys.argv:
+                        check_share_image(page, panel, manager)
                     for width, height in ((390, 844), (320, 640)):
                         page.set_viewport_size({"width": width, "height": height})
                         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
@@ -292,7 +372,7 @@ def main():
                     assert not errors, errors
                     context.close()
                     browser.close()
-                    print("PASS: source links in copied answers, quoted drafts without sending, preserved originals on regeneration, mobile widths, no browser errors")
+                    print("PASS: icon-only actions, source links, quoted drafts, regeneration, mobile widths and no browser errors" + ("; selected long PNG export, sources, size limit, dark/mobile preview without model requests" if "--share-only" in sys.argv else ""))
                     return
                 assert page.locator(".app-main-inner").bounding_box()["width"] <= full_width - 450, "Sidebar did not compress the main content"
                 assert page.locator(".app-header").bounding_box()["width"] <= full_width - 450, "Sidebar did not compress the header"
@@ -465,7 +545,7 @@ def main():
                 expect(last_turn(panel).get_by_text("我先查看攻略中的路线和交通信息。", exact=True)).not_to_be_visible()
                 note.press("Control+End")
                 note.press_sequentially("，生成期间继续写")
-                expect(last_turn(panel).get_by_role("button", name="一键写入笔记", exact=True)).to_be_visible(timeout=15000)
+                expect(last_turn(panel).get_by_role("button", name="分享回答", exact=True)).to_be_visible(timeout=15000)
                 expect(last_turn(panel).locator(".space-research-preview a").first).to_have_attribute("href", "https://www.xiaohongshu.com/explore/one")
                 assert last_turn(panel).locator(".research-tool-trace").get_attribute("open") is None
                 expect(last_turn(panel).locator(".space-research-preview")).not_to_contain_text("测试评论读取失败")
@@ -485,44 +565,26 @@ def main():
                 expect(last_turn(panel).locator(".space-research-preview a").filter(has_text="[S3:comments]").first).to_have_attribute("href", "https://www.xiaohongshu.com/explore/three")
                 expect(note).not_to_contain_text("AI生成的苏州研究结果")
                 expect(page.locator(".space-note-status")).to_contain_text("已保存到本机")
-                fail_append = True
-                last_turn(panel).get_by_role("button", name="一键写入笔记", exact=True).click()
-                expect(last_turn(panel).get_by_role("button", name="重试保存笔记", exact=True)).to_be_enabled()
-                expect(panel.get_by_role("alert")).to_contain_text("保存失败")
-                assert "AI生成的苏州研究结果" not in json.dumps(store.get_space(first)["note_document"], ensure_ascii=False)
-                fail_append = False
                 page.reload()
                 panel = open_panel()
                 assert panel.bounding_box()["width"] >= 670, "Saved sidebar width was lost after reload"
                 note = open_note()
                 expect(note).not_to_contain_text("AI生成的苏州研究结果")
                 panel.get_by_role("button", name="并排显示笔记与 AI", exact=True).click()
-                last_turn(panel).get_by_role("button", name="一键写入笔记", exact=True).click()
                 expect(note).to_contain_text("生成期间继续写")
-                expect(note).to_contain_text("AI生成的苏州研究结果")
-                expect(note).not_to_contain_text("正文已读")
-                expect(note).not_to_contain_text("生成于")
+                expect(note).not_to_contain_text("AI生成的苏州研究结果")
+                expect(last_turn(panel).locator(".research-reply-actions button")).to_have_count(3)
                 expect(page.locator(".space-note-status")).to_contain_text("已保存到本机")
                 first_conversation = list(manager.jobs.values())[-1]["conversation_id"]
-                note.press("Control+Z")
-                expect(note).not_to_contain_text("AI生成的苏州研究结果")
-                note.press("Control+Shift+Z")
-                expect(note).to_contain_text("AI生成的苏州研究结果")
                 panel.get_by_role("button", name="还原布局", exact=True).click()
                 panel.get_by_label("给 AI 发送消息", exact=True).fill("交通预算是多少？")
                 panel.get_by_role("button", name="发送消息", exact=True).click()
                 expect(last_turn(panel).get_by_text("正在分析资料", exact=True)).to_be_visible()
                 assert list(manager.jobs.values())[-1]["conversation_id"] == first_conversation
                 expect(panel.get_by_role("button", name="新会话", exact=True)).to_be_disabled()
-                expect(last_turn(panel).get_by_role("button", name="一键写入笔记", exact=True)).to_be_visible(timeout=15000)
+                expect(last_turn(panel).get_by_role("button", name="分享回答", exact=True)).to_be_visible(timeout=15000)
                 expect(panel.locator(".research-chat-turn")).to_have_count(2)
-                fail_append = True
-                last_turn(panel).get_by_role("button", name="一键写入笔记", exact=True).click()
-                expect(last_turn(panel).get_by_role("button", name="重试保存笔记", exact=True)).to_be_enabled()
-                fail_append = False
-                last_turn(panel).get_by_role("button", name="重试保存笔记", exact=True).click()
-                expect(last_turn(panel).get_by_role("button", name="已写入笔记", exact=True)).to_be_disabled()
-                assert json.dumps(store.get_space(first)["note_document"], ensure_ascii=False).count("AI生成的苏州研究结果") == 2, "Retry inserted the same result twice"
+                expect(note).not_to_contain_text("AI生成的苏州研究结果")
                 assert conversation_inputs[0] == [] and conversation_inputs[1][0]["answer"], "Follow-up lost prior answers"
                 assert page.locator(".space-note-content").bounding_box()["height"] >= 300
                 expect(last_turn(panel).get_by_label("工具调用过程", exact=True)).not_to_be_visible()
@@ -575,12 +637,12 @@ def main():
                 assert generation_attempts == attempts_before + 1, "Automatic generation retried after failure"
                 fail_generation = False
                 panel.get_by_role("button", name="继续分析", exact=True).click()
-                expect(last_turn(panel).get_by_role("button", name="一键写入笔记", exact=True)).to_be_enabled(timeout=15000)
+                expect(last_turn(panel).get_by_role("button", name="分享回答", exact=True)).to_be_enabled(timeout=15000)
                 assert generation_attempts == attempts_before + 2
                 choose_history(panel, "苏州三天旅行")
                 expect(panel.locator(".research-chat-turn")).to_have_count(2)
                 expect(panel.locator(".research-chat-turn").first).to_contain_text("AI生成的苏州研究结果")
-                expect(last_turn(panel).get_by_role("button", name="已写入笔记", exact=True)).to_be_disabled()
+                expect(last_turn(panel).get_by_role("button", name="分享回答", exact=True)).to_be_enabled()
                 # Replace the server manager as a real app restart would, retaining only disk data.
                 restored = jobs_module.ResearchJobs(config)
                 restored.require_runtime = manager.require_runtime
@@ -591,7 +653,7 @@ def main():
                 panel = open_panel()
                 choose_history(panel, "苏州三天旅行")
                 expect(panel.get_by_label("允许联网补充", exact=True)).to_be_checked()
-                expect(last_turn(panel).get_by_role("button", name="已写入笔记", exact=True)).to_be_disabled()
+                expect(last_turn(panel).get_by_role("button", name="分享回答", exact=True)).to_be_enabled()
                 panel.get_by_role("button", name="并排显示笔记与 AI", exact=True).click()
                 page.goto(origin + f"/#/spaces/{second}")
                 assert not page.evaluate("document.body.classList.contains('has-research-split')")
