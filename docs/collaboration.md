@@ -8,9 +8,10 @@
 
 | 任务 ID | 负责人 / 会话 | worktree / 分支 / 起始 HEAD | 修改范围 | 状态 / 下一步 |
 |---|---|---|---|---|
-| `AI-DOUYIN-CAPTION-20261027` | 本会话 | `MediaCrawler-main` / `fix-20261021-bugscan` / `1cf4c4e` | `api/services/platform_materials.py`、`tests/test_research_acquisition.py`、`docs/features/space-research-ai.md`、`CHANGELOG.md` | 进行中：把 yt-dlp 抖音 extractor 的字幕字段发现移植进采集端 |
 
 ## 待接手事项
+
+- `AI-DOUYIN-CAPTION-20261027`：提交 `e33912c`，修改范围释放。抖音详情里自动字幕的三处字段（`interaction_stickers`／`cla_info`／`subtitleInfos`）现已进入原生字幕候选，中文轨优先，`utterances` 按毫秒换算。字段位置参考 yt-dlp 的 Douyin extractor，但未引入其运行时。**只做了源码与模拟响应测试**（`tests/test_research_acquisition.py` 三条新用例 + 相关 135 项通过），未用真实抖音账号复验，也未重新打包 EXE；平台若改字段名会静默退回原来的字幕缺口。下一步需要一次真人样本确认字幕分区能读到内容。
 
 - `FAVORITES-LOGIN-20261027` / `DOUYIN-FAVORITES-20261027` / `DOUYIN-HISTORY-20261027` / `DOUYIN-COMPARE-20261027`：用户反馈小红书同步已恢复，日常浏览器可查看抖音收藏；四野本人接口成功、收藏接口 HTTP 403。旧路径曾同步 9 条，`0a9c951` 引入必然失败的分页占位分支；POST 签名和正文编码差异待与官方页面对照。分页未验证、抖音仍不可同步；需确认页面响应、账号隔离和重置边界。前端已构建，日常 EXE 未更新。
 
