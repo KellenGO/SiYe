@@ -8,8 +8,12 @@
 
 | 任务 ID | 负责人 / 会话 | worktree / 分支 / 起始 HEAD | 修改范围 | 状态 / 下一步 |
 |---|---|---|---|---|
+| `AI-MEDIA-FALLBACK-20261027` | 本会话 | `MediaCrawler-main` / `fix-20261021-bugscan` / `a426b69` | `api/services/platform_materials.py`、`api/services/research_transcription.py`、`tests/test_research_transcription.py`、`docs/features/space-research-ai.md`、`CHANGELOG.md` | 进行中：媒体候选排序与超限回退 |
 
 ## 待接手事项
+
+- `DOUYIN-FAVORITES-20261027`：抖音收藏同步已修复并验收，修改范围释放。代码在 `a426b69`（该提交标题写成"引入yt-dlp优化AI工具"，与实际内容不符，按任务 ID 检索时注意），文档与探测脚本在 `d767e9c`。真实账号实测 4 页 64 条、auto 与 reset 两条路径、worker 子进程全链路均成功，全量后端 1581 项与前端 410 项通过，前端已构建。**未重建日常 EXE，未跑界面验收**；日常要生效须重新打包主程序。真实账号只验证了一个 profile，未验证空收藏与多账号切换。
+- `AI-MEDIA-FALLBACK-20261027`：登记在"当前写入任务"表中但归属另一个会话；本会话未改动其范围（`api/services/platform_materials.py`、`api/services/research_transcription.py` 仍为未提交状态）。
 
 - `AI-DOUYIN-CAPTION-20261027`：提交 `e33912c`，修改范围释放。抖音详情里自动字幕的三处字段（`interaction_stickers`／`cla_info`／`subtitleInfos`）现已进入原生字幕候选，中文轨优先，`utterances` 按毫秒换算。字段位置参考 yt-dlp 的 Douyin extractor，但未引入其运行时。**只做了源码与模拟响应测试**（`tests/test_research_acquisition.py` 三条新用例 + 相关 135 项通过），未用真实抖音账号复验，也未重新打包 EXE；平台若改字段名会静默退回原来的字幕缺口。下一步需要一次真人样本确认字幕分区能读到内容。
 
