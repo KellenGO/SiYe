@@ -112,7 +112,7 @@ def normalize_comments(rows, platform, parent=None, limit=50):
 
 def subtitle_entries(data):
     if isinstance(data, dict):
-        data = data.get("body") or data.get("subtitles") or []
+        data = data.get("body") or data.get("subtitles") or data.get("utterances") or []
     if not isinstance(data, list):
         return []
     entries = []
@@ -121,12 +121,57 @@ def subtitle_entries(data):
             continue
         try:
             text = clean_text(row.get("content") or row.get("text"))
-            start, end = float(row.get("from", row.get("start", 0))), float(row.get("to", row.get("end", 0)))
+            if "start_time" in row or "end_time" in row:
+                # Douyin caption JSON reports milliseconds; platform subtitles report seconds.
+                start, end = float(row.get("start_time", 0)) / 1000, float(row.get("end_time", 0)) / 1000
+            else:
+                start, end = float(row.get("from", row.get("start", 0))), float(row.get("to", row.get("end", 0)))
             if text and math.isfinite(start) and math.isfinite(end) and 0 <= start <= end:
                 entries.append({"text": text, "start": start, "end": end})
         except (TypeError, ValueError):
             continue
     return entries
+
+
+def douyin_caption_urls(detail):
+    """Caption JSON addresses in the official Douyin detail, Chinese tracks first.
+
+    Field locations follow the maintained yt-dlp Douyin extractor: stickers carry the
+    auto captions, ``cla_info`` and ``subtitleInfos`` are the feed and webpage lists.
+    """
+    video = detail.get("video") if isinstance(detail, dict) else None
+    if not isinstance(video, dict):
+        return []
+    rows = []
+
+    def add(url, language):
+        if isinstance(url, str) and url:
+            rows.append((not str(language or "").lower().startswith("zh"), url))
+
+    info = video.get("cla_info")
+    captions = info.get("caption_infos") if isinstance(info, dict) else None
+    for row in captions if isinstance(captions, list) else []:
+        if isinstance(row, dict):
+            add(row.get("url"), row.get("lang"))
+    for row in video.get("subtitleInfos") or []:
+        if isinstance(row, dict):
+            add(row.get("Url"), row.get("LanguageCodeName"))
+    for sticker in detail.get("interaction_stickers") or []:
+        info = sticker.get("auto_video_caption_info") if isinstance(sticker, dict) else None
+        captions = info.get("auto_captions") if isinstance(info, dict) else None
+        for row in captions if isinstance(captions, list) else []:
+            if not isinstance(row, dict):
+                continue
+            address = row.get("url")
+            urls = address.get("url_list") if isinstance(address, dict) else [address]
+            for url in urls if isinstance(urls, list) else []:
+                add(url, row.get("language"))
+    ordered, seen = [], set()
+    for _, url in sorted(rows, key=lambda row: row[0]):
+        if url not in seen:
+            seen.add(url)
+            ordered.append(url)
+    return ordered[:8]
 
 
 class MaterialCollector(ResultHydrator):
@@ -616,8 +661,12 @@ class MaterialCollector(ResultHydrator):
             if isinstance(detail, dict):
                 video = detail.get("video") or {}
                 candidates = video.get("caption_list") or video.get("subtitle_list") or detail.get("subtitles") or []
-            for row in candidates if isinstance(candidates, list) else []:
-                url = row.get("url") or row.get("subtitle_url") if isinstance(row, dict) else None
+            urls = [row.get("url") or row.get("subtitle_url")
+                    for row in (candidates if isinstance(candidates, list) else []) if isinstance(row, dict)]
+            if source["platform"] == "douyin":
+                # Auto captions live in stickers/cla_info, not in the generic caption_list.
+                urls = douyin_caption_urls(detail) + urls
+            for url in urls:
                 if isinstance(url, str):
                     data = await self.request(public_get, url if not url.startswith("//") else "https:" + url, json_response=True)
                     entries = subtitle_entries(data)

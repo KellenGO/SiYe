@@ -8,6 +8,7 @@
 
 | 任务 ID | 负责人 / 会话 | worktree / 分支 / 起始 HEAD | 修改范围 | 状态 / 下一步 |
 |---|---|---|---|---|
+| `AI-DOUYIN-CAPTION-20261027` | 本会话 | `MediaCrawler-main` / `fix-20261021-bugscan` / `1cf4c4e` | `api/services/platform_materials.py`、`tests/test_research_acquisition.py`、`docs/features/space-research-ai.md`、`CHANGELOG.md` | 进行中：把 yt-dlp 抖音 extractor 的字幕字段发现移植进采集端 |
 
 ## 待接手事项
 

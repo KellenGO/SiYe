@@ -379,6 +379,58 @@ async def test_douyin_collector_uses_official_page_detail_for_body_and_audio(mon
 
 
 @pytest.mark.asyncio
+async def test_douyin_native_captions_are_read_from_sticker_and_feed_fields(monkeypatch):
+    detail = {
+        "video": {
+            "cla_info": {"caption_infos": [{"url": "https://cdn.example/en", "lang": "en"}]},
+            "subtitleInfos": [{"Url": "https://cdn.example/zh", "LanguageCodeName": "zh-CN"}],
+        },
+        "interaction_stickers": [{"auto_video_caption_info": {"auto_captions": [
+            {"language": "zh", "url": {"url_list": ["https://cdn.example/zh-sticker"]}}]}}],
+    }
+    assert materials.douyin_caption_urls(detail) == [
+        "https://cdn.example/zh", "https://cdn.example/zh-sticker", "https://cdn.example/en"]
+    assert materials.douyin_caption_urls({"aweme_id": "1", "video": {"width": 720}}) == []
+    assert materials.douyin_caption_urls(None) == []
+    collector = materials.MaterialCollector()
+    fetched = []
+
+    async def request(method, url, **kwargs):
+        fetched.append(url)
+        assert kwargs == {"json_response": True}
+        return {"utterances": [{"start_time": 0, "end_time": 1500, "text": "第一句"}]}
+
+    monkeypatch.setattr(collector, "request", request)
+    result = await collector.subtitles(None, {"platform": "douyin"}, detail)
+    assert result["state"] == "ok" and result["entries"] == [{"text": "第一句", "start": 0.0, "end": 1.5}]
+    assert fetched == ["https://cdn.example/zh"]
+    await collector.close()
+
+
+@pytest.mark.asyncio
+async def test_douyin_without_caption_fields_reports_missing_and_requests_nothing(monkeypatch):
+    collector = materials.MaterialCollector()
+
+    async def forbidden(*args, **kwargs):
+        raise AssertionError("no caption address should be requested")
+
+    monkeypatch.setattr(collector, "request", forbidden)
+    result = await collector.subtitles(None, {"platform": "douyin"}, {"aweme_id": "1", "video": {"width": 720}})
+    assert result["state"] == "missing" and "原帖未提供可读取的平台字幕" in result["reason"]
+    await collector.close()
+
+
+def test_douyin_caption_timestamps_are_converted_from_milliseconds():
+    assert materials.subtitle_entries({"utterances": [
+        {"start_time": 250, "end_time": 1750, "text": " 讲话 "},
+        {"start_time": 2000, "end_time": 1000, "text": "倒序"},
+        {"start_time": 0, "end_time": 1, "text": ""}]}) == [{"text": "讲话", "start": 0.25, "end": 1.75}]
+    # Platform subtitle JSON keeps reporting seconds.
+    assert materials.subtitle_entries({"body": [{"from": 12, "to": 14, "content": "字幕"}]}) == [
+        {"text": "字幕", "start": 12.0, "end": 14.0}]
+
+
+@pytest.mark.asyncio
 async def test_douyin_adapter_reuses_current_page_instead_of_opening_profile(monkeypatch):
     from api.services import reading_browser
     provider = ResearchBrowserProvider(AsyncExitStack(), {})
