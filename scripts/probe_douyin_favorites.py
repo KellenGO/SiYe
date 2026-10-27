@@ -61,7 +61,16 @@ async def main():
         cursor = 0
         seen_ids = set()
         for _ in range(2 if report["identity_present"] and report["identity_status"] == 0 else 1):
-            result = await client.get_collected_awemes(cursor, 20)
+            try:
+                result = await client.get_collected_awemes(cursor, 20)
+            except Exception as exc:
+                # 后端自拼签名的请求会被 Argus 拒绝（403）；页面内读取才是可用路径。
+                report["pages"].append({
+                    "error_type": type(exc).__name__,
+                    "http_status": getattr(exc, "http_status", None),
+                    "safe_message": getattr(exc, "safe_message", None),
+                })
+                break
             rows = result.get("aweme_list") if isinstance(result, dict) else None
             more = result.get("has_more") if isinstance(result, dict) else None
             next_cursor = result.get("cursor") if isinstance(result, dict) else None
