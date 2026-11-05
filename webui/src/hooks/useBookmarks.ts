@@ -112,7 +112,17 @@ export function useBookmarks() {
         return false;
       }
       const keys = entries.map((entry) => resultKey(entry.result));
-      if (query.isPending || query.isError || keys.some((key) => pending.current.has(key))) return false;
+      // 收藏库还没加载完 / 加载失败时不能静默 return：按钮没有 disabled，
+      // 用户点了以为"收藏上了"，实际什么都没发生。给出明确反馈。
+      if (query.isPending) {
+        toast.error("收藏库正在加载，请稍后再试");
+        return false;
+      }
+      if (query.isError) {
+        toast.error("收藏库暂时不可用，请稍后重试");
+        return false;
+      }
+      if (keys.some((key) => pending.current.has(key))) return false;
       keys.forEach((key) => pending.current.add(key));
       const existing = new Map(state.items.map((item) => [item.key, item]));
       const allSaved = keys.every((key) => {

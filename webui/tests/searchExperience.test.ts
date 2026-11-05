@@ -1356,3 +1356,39 @@ test("SearchSortMode 支持三种模式", () => {
   const modes: SearchSortMode[] = ["default", "latest", "engagement"];
   assert.equal(modes.length, 3);
 });
+
+// ── 7b. 单结果平台的 rank 分不得反向 ─────────────────────────────────
+
+test("aggregateSortResults: 平台只命中一条时不被系统性压到底部", () => {
+  // rank 是 0 起的：只有一个不同取值时，这一条既是该平台第一也是最后。
+  // 旧实现 `value === 0 ? 0 : 1` 会把它判成 0 分（最差），于是"某平台只命中
+  // 一条"的内容被压到别的平台后面 —— 常见于每平台数量设为 1、筛选后每平台剩一条。
+  const results = [
+    makeResult("xhs", "only-xhs", { title: "露营装备真实测评", rank: 0 }),
+    makeResult("douyin", "dy-0", { title: "与主题无关的旅行日记", rank: 0 }),
+    makeResult("douyin", "dy-1", { title: "与主题无关的美食分享", rank: 1 }),
+    makeResult("douyin", "dy-2", { title: "与主题无关的健身记录", rank: 2 }),
+  ];
+  const sorted = aggregateSortResults(results, "露营装备", {
+    nowMs: Date.parse("2026-08-01T00:00:00Z"),
+  });
+  assert.equal(
+    sorted[0].content_id,
+    "only-xhs",
+    "相关性最高且是所在平台唯一一条，应当排在第一",
+  );
+});
+
+test("aggregateSortResults: 单结果平台与满额平台在 rank 分上取中性值", () => {
+  // 同样的相关性、同样的互动，只有平台内条数不同：不应因为"只有一条"就落后。
+  const single = [
+    makeResult("xhs", "solo", { title: "露营装备", rank: 0 }),
+    makeResult("douyin", "pair-0", { title: "露营装备", rank: 0 }),
+    makeResult("douyin", "pair-1", { title: "露营装备", rank: 1 }),
+  ];
+  const sorted = aggregateSortResults(single, "露营装备", {
+    nowMs: Date.parse("2026-08-01T00:00:00Z"),
+  });
+  const soloIndex = sorted.findIndex((r) => r.content_id === "solo");
+  assert.ok(soloIndex <= 1, `单结果平台的名次不应落到底部，实际第 ${soloIndex + 1} 位`);
+});

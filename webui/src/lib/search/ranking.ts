@@ -109,7 +109,11 @@ function relativeRankScore(
   descending: boolean
 ): number {
   const unique = [...new Set(values)].sort((a, b) => descending ? b - a : a - b);
-  if (unique.length <= 1) return value === 0 ? 0 : 1;
+  // 组里只有一个不同取值时，无法排出「相对名次」：这一条既是该平台的第一名，
+  // 也是最后一名。以前 `value === 0 ? 0 : 1` 把「平台内 rank=0 的唯一一条」
+  // 判成 0 分（最差），于是「某平台只命中一条」的内容会被系统性压到底部。
+  // rank 是 0 起的，所以这条路几乎必然命中 rank=0。给中性分。
+  if (unique.length <= 1) return 0.5;
   const index = unique.indexOf(value);
   return 1 - (index / (unique.length - 1));
 }

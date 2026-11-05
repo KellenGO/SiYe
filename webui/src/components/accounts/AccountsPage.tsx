@@ -117,7 +117,10 @@ export function AccountsPage({ activeSection, onSectionChange, onNavigateHelp }:
         finally { invalidateAccounts(queryClient); }
       }
     };
-    void run(); void run();
+    // 一个消费者就够：以前这里连着两次 `void run()`，两个循环共享同一个
+    // queue，于是四个平台各被并发 POST 两次 —— 第二轮必然撞上后端账号操作
+    // 槽位（409），还要多刷一轮账号缓存。
+    void run();
     return () => { disposed = true; };
   }, [activeSection, apiRunning, queryClient]);
   const [extensionState, setExtensionState] = useState<
