@@ -705,3 +705,28 @@ def test_content_views_are_available_in_every_result_context():
         source = (_ROOT / "components" / filename).read_text(encoding="utf-8")
         for scope in scopes:
             assert f'viewScope="{scope}"' in source
+
+def test_i18n_declares_supported_languages_and_uses_resolved_language():
+    """语言解析必须覆盖 en / en-GB，且 `<html lang>` 只能写 resolvedLanguage。
+
+    没有 `supportedLngs` 时 i18next 只认完全匹配：浏览器报 `en` 或 `en-GB`
+    （英文用户里的绝大多数）会整体回落中文，而界面里另外一半又是英文。
+    另外把 `en-GB` 原样写进 `<html lang>` 会让读屏按一套界面里不存在的
+    发音规则朗读。
+    """
+    source = (_ROOT / "i18n" / "index.ts").read_text(encoding="utf-8")
+    assert "supportedLngs" in source, "缺少 supportedLngs，en / en-GB 会回落中文"
+    assert "'zh-CN'" in source and "'en-US'" in source
+    assert "resolvedLanguage" in source, "`<html lang>` 必须用 resolvedLanguage"
+
+
+def test_language_switch_is_mounted_somewhere():
+    """组件存在但没人 import 等于没有切换入口（`mediacrawler_language` 永不写入）。"""
+    mounted = [
+        path for path in _ROOT.rglob("*.tsx")
+        if path.name != "LanguageSwitch.tsx"
+        and "LanguageSwitch" in path.read_text(encoding="utf-8")
+        and "import" in path.read_text(encoding="utf-8")
+        and "./LanguageSwitch" in path.read_text(encoding="utf-8")
+    ]
+    assert mounted, "LanguageSwitch 没有被任何界面挂载，用户无法切换语言"

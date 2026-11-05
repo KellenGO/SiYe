@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { ChevronRight } from 'lucide-react'
 import { ThemeToggle } from './ThemeToggle'
+import { LanguageSwitch } from './LanguageSwitch'
 import { useAccounts } from '@/hooks/useAccounts'
 import type { AccountStatusInfo, LoginBadge } from '@/lib/accounts'
 import {
@@ -289,6 +290,9 @@ export function Header({ viewMode, settingsSection, onNavigate }: HeaderProps) {
             {t('header.backHome')}
           </button>}
 
+          {/* 语言切换：组件一直存在但从未被挂载，导致界面里根本没有切换入口，
+              `mediacrawler_language` 也从未被写入过。 */}
+          <LanguageSwitch />
           <ThemeToggle />
         </div>
       </div>
