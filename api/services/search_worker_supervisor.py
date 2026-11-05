@@ -65,6 +65,11 @@ class PlatformWorkerSupervisor:
         若 worker 恰在写入时退出（如 max-requests 优雅重启的窗口期，
         returncode 尚未置位），丢弃旧进程并重建一次再写。
         worker.reused 标记本次是否复用了既有进程（供 timing 表达）。
+
+        **锁粒度**：`_spawn()` 要起一个 Python 解释器（数十~数百毫秒），
+        `stdin.drain()` 也可能等 IO。以前两者都在全局 `self._lock` 里 ——
+        四个平台并行搜索时，冷启动被强制串行成 4 次进程启动之和。
+        现在锁只保护注册表的读改，spawn 与写入在锁外完成。
         """
         async with self._lock:
             worker = self._workers.get(platform)
@@ -72,35 +77,56 @@ class PlatformWorkerSupervisor:
             if worker is None or worker.proc.returncode is not None:
                 if worker is not None:
                     self._workers.pop(platform, None)
-                worker = await self._spawn(platform)
+                worker = None
+        if worker is None:
+            # 锁外启动子进程；同一平台串行由 `submit` 的调用方保证
+            # （每个平台同时只有一个搜索请求，见 PlatformWorkerSupervisor 文档）。
+            spawned = await self._spawn(platform)
+            async with self._lock:
+                # 期间可能有别的路径刚建好一个，优先用它，避免两个进程抢同一平台。
+                existing = self._workers.get(platform)
+                if existing is not None and existing.proc.returncode is None:
+                    try:
+                        if spawned.proc.returncode is None:
+                            spawned.proc.kill()
+                    except Exception:
+                        pass
+                    await cancel_task_quietly(spawned.stderr_task)
+                    worker = existing
+                    reused = True
+                else:
+                    self._workers[platform] = spawned
+                    worker = spawned
+                    reused = False
+        worker.last_used_at = time.monotonic()
+        worker.request_count += 1
+        worker.busy = True
+        worker.reused = reused
+        try:
+            if worker.proc.stdin:
+                worker.proc.stdin.write(line)
+                await worker.proc.stdin.drain()
+        except Exception:
+            # 进程在"查表→写入"之间退出：丢弃并重建一次。
+            async with self._lock:
+                if self._workers.get(platform) is worker:
+                    self._workers.pop(platform, None)
+            try:
+                if worker.proc.returncode is None:
+                    worker.proc.kill()
+            except Exception:
+                pass
+            worker = await self._spawn(platform)
+            async with self._lock:
                 self._workers[platform] = worker
-                reused = False
             worker.last_used_at = time.monotonic()
             worker.request_count += 1
             worker.busy = True
-            worker.reused = reused
-            try:
-                if worker.proc.stdin:
-                    worker.proc.stdin.write(line)
-                    await worker.proc.stdin.drain()
-            except Exception:
-                # 进程在"查表→写入"之间退出：丢弃并重建一次。
-                self._workers.pop(platform, None)
-                try:
-                    if worker.proc.returncode is None:
-                        worker.proc.kill()
-                except Exception:
-                    pass
-                worker = await self._spawn(platform)
-                self._workers[platform] = worker
-                worker.last_used_at = time.monotonic()
-                worker.request_count += 1
-                worker.busy = True
-                worker.reused = False
-                if worker.proc.stdin:
-                    worker.proc.stdin.write(line)
-                    await worker.proc.stdin.drain()
-            return worker
+            worker.reused = False
+            if worker.proc.stdin:
+                worker.proc.stdin.write(line)
+                await worker.proc.stdin.drain()
+        return worker
 
     async def touch(self, platform: str) -> None:
         """请求处理完成后刷新空闲计时起点（避免长任务被误回收）。

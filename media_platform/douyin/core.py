@@ -216,7 +216,9 @@ class DouYinCrawler(AbstractCrawler):
                 emitted += len(page_aweme_data)
 
                 # Sleep after each page navigation（已达 limit 时无需再等下一页）
-                if remaining > 0:
+                # `has_more` 为假时下一页必然为空，不必再等 2 秒才去发一个注定
+                # 空回来的请求（小红书那边早就有这个判断了）。
+                if remaining > 0 and posts_res.get("has_more") not in (False, 0, "0"):
                     await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
                     utils.logger.info(f"[DouYinCrawler.search] Sleeping for {config.CRAWLER_MAX_SLEEP_SEC} seconds after page {page-1}")
             utils.logger.info(f"[DouYinCrawler.search] keyword:{keyword}, aweme_list:{aweme_list}")

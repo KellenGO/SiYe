@@ -95,6 +95,7 @@ async def test_search_cache_survives_time_and_many_results_but_refresh_and_gener
         service.remember_search_body(search_reading_payload(answer(str(identity))), 7)
     assert (await service.read("answer", "42", "https://www.zhihu.com/answer/42"))["blocks"]
     assert len(calls) == 1 and len(service.search_bodies) == 81
+    assert len(service.search_bodies) <= reading.MAX_SEARCH_BODIES
     monkeypatch.setattr(reading, "get_account_generation", lambda _: 8)
     with pytest.raises(reading.ReadingError):
         await service.read("answer", "42", "https://www.zhihu.com/answer/42")
@@ -102,7 +103,8 @@ async def test_search_cache_survives_time_and_many_results_but_refresh_and_gener
     assert not any(key[3] == "99" for key in service.search_bodies)
     for identity in range(100, 145):
         service.remember_search_body(search_reading_payload(answer(str(identity))), 8)
-    assert len(service.search_bodies) == 126
+    # 缓存必须有界：以前这里是 126（无上限，一次大搜索涨多少算多少）。
+    assert len(service.search_bodies) == reading.MAX_SEARCH_BODIES
     await service.cleanup()
     assert not service.search_bodies
 

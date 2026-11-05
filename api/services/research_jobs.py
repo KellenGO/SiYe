@@ -30,6 +30,51 @@ MAX_FINISHED_JOBS = 10
 MAX_RETAINED_BYTES = 32 * 1024 * 1024
 MAX_PARTIAL_CHARS = 40000
 
+#: 发给研究子进程的 payload 上限。必须**小于**子进程侧的 readline 上限
+#: （`research_worker.py` 是 16MB），留出 JSON 转义与行尾的空间。
+MAX_PAYLOAD_BYTES = 12 * 1024 * 1024
+#: 超限时每节正文压到多少字符（`material_contract.MAX_SECTION_CHARS` 是 256k）。
+TRIMMED_SECTION_CHARS = 20000
+
+
+def _payload_size(payload) -> int:
+    return len(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+
+
+def fit_payload(payload):
+    """把 payload 压到 `MAX_PAYLOAD_BYTES` 以内，返回 `(payload, trimmed)`。
+
+    子进程用 `readline(16MB)` 读一整行 JSON；超限会被静默截断，表现为
+    「研究服务未能完成，请检查配置或重试」—— 用户和开发者都无从下手。
+    这里按"正文截断 → 丢弃证据缓存 → 丢弃对话历史"的次序降级，
+    保证最重要的资料结构还在。
+    """
+    if _payload_size(payload) <= MAX_PAYLOAD_BYTES:
+        return payload, False
+
+    trimmed = copy.deepcopy(payload)
+    # 1) 压缩每条资料的各节正文。
+    for row in trimmed.get("materials") or []:
+        sections = row.get("sections")
+        if isinstance(sections, dict):
+            for key, value in list(sections.items()):
+                if isinstance(value, str) and len(value) > TRIMMED_SECTION_CHARS:
+                    sections[key] = value[:TRIMMED_SECTION_CHARS]
+    if _payload_size(trimmed) <= MAX_PAYLOAD_BYTES:
+        return trimmed, True
+
+    # 2) 证据缓存只用于复用，丢掉不影响本次分析。
+    trimmed["evidence_cache"] = None
+    if _payload_size(trimmed) <= MAX_PAYLOAD_BYTES:
+        return trimmed, True
+
+    # 3) 对话历史从最新往回保留，直到装得下。
+    history = trimmed.get("conversation") or []
+    while history and _payload_size(trimmed) > MAX_PAYLOAD_BYTES:
+        history = history[1:]
+        trimmed["conversation"] = history
+    return trimmed, True
+
 
 def task_command(mode="collect"):
     if mode != "collect":
@@ -175,13 +220,36 @@ class ResearchJobs:
         return self.public(groups[0]["latest_job_id"], store) if groups else None
 
     def persist(self, identity):
+        """把任务快照落盘（同步接口，供事件循环外/短路径调用）。
+
+        `save()` 是 `json.dumps` + `write_text`，单 job 上限 32MB —— 直接在事件
+        循环里跑会把**所有**接口一起卡住（含各平台搜索轮询）。所以调用点优先用
+        `persist_async`；这里保留同步版本给已在工作线程里的路径。
+
+        另外以前只 `except OSError`：`json.dumps` 遇到不可序列化对象会抛
+        `TypeError`，整条研究历史就此丢失且没有任何提示。现在一并兜住。
+        """
         try:
             self.history_store.save(self.jobs[identity])
-        except OSError:
+        except (OSError, TypeError, ValueError):
             warning = "会话历史未能保存到本机，请检查磁盘空间或文件权限"
             errors = self.jobs[identity].setdefault("web_errors", [])
             if warning not in errors:
                 errors.append(warning)
+
+    async def persist_async(self, identity, job=None):
+        """在事件循环里调用：把落盘挪到工作线程，避免阻塞其它请求。"""
+        if job is not None:
+            # 调用方可能已经改过 job 内容，直接用它（避免线程里再取一次全局字典）。
+            try:
+                await asyncio.to_thread(self.history_store.save, job)
+            except (OSError, TypeError, ValueError):
+                warning = "会话历史未能保存到本机，请检查磁盘空间或文件权限"
+                errors = job.setdefault("web_errors", [])
+                if warning not in errors:
+                    errors.append(warning)
+            return
+        await asyncio.to_thread(self.persist, identity)
 
     async def create(self, space, question, web_enabled, conversation_id=None, regenerate_job_id=None):
         if space["archived"]:
@@ -226,7 +294,7 @@ class ResearchJobs:
             self.jobs[identity]["evidence_cache"] = copy.deepcopy(latest.get("evidence_cache"))
             if needs_ocr:
                 self.jobs[identity].update(status="collecting", phase="collecting", message="正在补取原帖图片文字")
-        self.persist(identity)
+        await self.persist_async(identity)
         self.tasks[identity] = asyncio.create_task(self.collect(identity, retry=True) if needs_ocr else self.analyze(identity) if latest else self.collect(identity))
         self.tasks[identity].add_done_callback(lambda _: self.prune())
         return self.public(identity)
@@ -263,6 +331,13 @@ class ResearchJobs:
                     pass
             drain = asyncio.create_task(discard_stderr())
             async with asyncio.timeout(max(1, ACTIVE_SECONDS - job["elapsed"])):
+                # payload 是**一行** JSON，子进程用 readline(16MB) 读：整包超限
+                # 会被截断 → json 解析失败 → 用户只看到"研究服务未能完成"，
+                # 没有任何可排查线索。发送前先压到上限内。
+                payload, trimmed = fit_payload(payload)
+                if trimmed:
+                    job.setdefault("web_errors", []).append(
+                        "资料体积超过单次处理上限，已按正文长度截断后再分析")
                 proc.stdin.write((json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8"))
                 await proc.stdin.drain()
                 proc.stdin.close()
@@ -282,7 +357,7 @@ class ResearchJobs:
                             job.pop("transcribing_key", None)
                         job["message"] = f"已获取 {len(job['materials'])} / {len(job['snapshot']['items'])} 条资料"
                         if event.get("completed") or event.get("checkpoint"):
-                            self.persist(job["job_id"])
+                            await self.persist_async(job["job_id"], job)
                     elif kind == "progress":
                         job.update(phase=event["phase"], message=event["message"])
                         if event["phase"] == "transcribing":
@@ -393,7 +468,7 @@ class ResearchJobs:
                     job["materials"].append(missing)
             if leased:
                 await operation_coordinator.release_exclusive("research")
-            self.persist(identity)
+            await self.persist_async(identity)
 
     @staticmethod
     def safe_error(error):
@@ -410,7 +485,7 @@ class ResearchJobs:
         if self.active != identity:
             await self.claim(identity)
         job.update(status="collecting", phase="collecting", error="")
-        self.persist(identity)
+        await self.persist_async(identity)
         self.tasks[identity] = asyncio.create_task(self.collect(identity, retry=True))
         self.tasks[identity].add_done_callback(lambda _: self.prune())
         return self.public(identity)
@@ -422,7 +497,7 @@ class ResearchJobs:
         if self.active != identity:
             await self.claim(identity)
         job.update(status="analyzing", phase="analyzing", error="", message="AI 正在整理研究笔记")
-        self.persist(identity)
+        await self.persist_async(identity)
         self.tasks[identity] = asyncio.create_task(self.analyze(identity))
         self.tasks[identity].add_done_callback(lambda _: self.prune())
         return self.public(identity)
@@ -451,7 +526,7 @@ class ResearchJobs:
                 if record.get("status") == "running":
                     record.update(status="cancelled" if job["status"] == "cancelled" else "failed", summary="执行已中断")
             await self.release(identity)
-            self.persist(identity)
+            await self.persist_async(identity)
 
     async def cancel(self, identity):
         job = self.get(identity)
@@ -463,7 +538,7 @@ class ResearchJobs:
             job.update(status="cancelled", phase="cancelled", message="研究已取消")
         job["partial"] = ""
         await self.release(identity)
-        self.persist(identity)
+        await self.persist_async(identity)
         return self.public(identity)
 
     def remove_space(self, space_id):

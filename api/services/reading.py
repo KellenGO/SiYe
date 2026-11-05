@@ -21,6 +21,13 @@ from .result_hydration import ResultHydrator
 from .reading_zhihu_questions import question_reference, result_question, fetch_question_page, question_page
 from aggregate_search.models import clean_title
 
+#: 正文缓存上限。`search_bodies` 记录搜索结果里顺带拿到的知乎正文 ——
+#: 以前它**完全没有上限**，一次大搜索命中多少条就涨多少，只有账号切换才清。
+#: 单条正文最多 256k 字符，所以必须封顶。
+MAX_SEARCH_BODIES = 120
+#: 问题分组同样要封顶：一次大搜索可能带出几百个不同问题，每组还挂着回答页。
+MAX_QUESTION_GROUPS = 80
+
 MESSAGES = {
     "busy": "搜索、研究或账号操作正在进行，请结束后重试读取正文。",
     "login_required": "请先在设置中登录此平台，再重试读取内容。",
@@ -109,6 +116,16 @@ class ReadingService:
         self.questions = {}
         self.tasks = set()
 
+    @staticmethod
+    def _trim(cache, limit):
+        while len(cache) > limit:
+            cache.popitem(last=False)
+
+    def _remember_search_body(self, key, value):
+        self.search_bodies[key] = (time.monotonic(), value)
+        self.search_bodies.move_to_end(key)
+        self._trim(self.search_bodies, MAX_SEARCH_BODIES)
+
     def cached_zhihu_body(self, kind, identity, url):
         reading_reference(kind, identity, url)
         row = self.search_bodies.get(("zhihu", get_account_generation("zhihu"), kind, identity))
@@ -129,8 +146,7 @@ class ReadingService:
         if not any(block["type"] != "unsupported" for block in value["blocks"]):
             return
         key = ("zhihu", generation, kind, identity)
-        self.search_bodies[key] = (time.monotonic(), value)
-        self.search_bodies.move_to_end(key)
+        self._remember_search_body(key, value)
 
     def remember_search_result(self, result, generation):
         if generation != get_account_generation("zhihu"):
@@ -147,6 +163,9 @@ class ReadingService:
 
     def _question_state(self, generation, identity, title):
         key = (generation, identity)
+        if key not in self.questions and len(self.questions) >= MAX_QUESTION_GROUPS:
+            # 淘汰最早建立的一组（不再引用它的回答页），防止大搜索把内存吃满。
+            self.questions.pop(next(iter(self.questions)), None)
         return self.questions.setdefault(key, {"title": title, "answers": OrderedDict(),
             "pages": {}, "latest": None, "cursor": None, "offset": 0, "requests": 0})
 
@@ -252,11 +271,12 @@ class ReadingService:
             # Restoring the session can advance its generation during the read.
             key = (platform, get_account_generation(platform), kind, identity)
             self.cache[key] = (time.monotonic(), value)
-            if platform == "zhihu":
-                self.search_bodies[key] = (time.monotonic(), value)
             self.cache.move_to_end(key)
-            while len(self.cache) > 6:
-                self.cache.popitem(last=False)
+            # 详情缓存维持 6 条的既有语义（一次阅读会话里来回看的就那么几条）。
+            self._trim(self.cache, 6)
+            if platform == "zhihu":
+                # 读到正文的同时给搜索命中的条目留一份，供后续打开详情秒开。
+                self._remember_search_body(key, value)
             return value
         except ReadingError:
             raise

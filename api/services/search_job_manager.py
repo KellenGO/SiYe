@@ -60,6 +60,11 @@ TERMINAL_PLATFORM_STATUSES = frozenset({
 })
 
 WORKER_TIMEOUT_SECONDS = 100
+
+#: 一次任务里补全指标的上限。摘要补全有 `HYDRATION_MAX_RESULTS=12`，
+#: 指标补全以前没有任何上限，会跑满 `enrich_favorites` 的 150 秒预算。
+HYDRATION_METRIC_MAX_RESULTS = 20
+
 # Bound on waiting for an already in-flight cancel to finish (idempotent
 # repeat cancel). The cancel cleanup itself is bounded by GRACE_PERIOD.
 CANCEL_WAIT_TIMEOUT = 30.0
@@ -272,10 +277,20 @@ class SearchJobManager:
         metrics_results = []
         try:
             scoped = self._hydration_scope(job)
-            metrics_results = metric_candidates(scoped)
-            if metrics_results:
-                await hydrator.hydrate_metrics(metrics_results, job.hydration_cancel_event, job.update_metrics)
-            updates = await hydrator.hydrate(scoped, job.hydration_cancel_event)
+            # 指标补全必须与摘要补全**并行**，而且要有条数上限：
+            # `metric_candidates` 以前不设上限，`enrich_favorites` 的预算是 150 秒，
+            # 串行挡在摘要补全前面 → 用户为了等几个播放量，30 秒后才看到简介。
+            metrics_results = metric_candidates(scoped)[:HYDRATION_METRIC_MAX_RESULTS]
+            metrics_task = (
+                hydrator.hydrate_metrics(
+                    metrics_results, job.hydration_cancel_event, job.update_metrics)
+                if metrics_results else None
+            )
+            updates = await asyncio.gather(
+                metrics_task or asyncio.sleep(0),
+                hydrator.hydrate(scoped, job.hydration_cancel_event),
+            )
+            updates = updates[1] or []
             if not job.hydration_cancel_event.is_set():
                 for update in updates:
                     job.update_snippet(update.result, update.snippet)

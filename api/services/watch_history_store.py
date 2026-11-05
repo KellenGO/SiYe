@@ -23,6 +23,9 @@ from .favorite_snapshot import decode_metrics, encode_metrics
 from .sqlite_base import RESULT_FIELDS, SqliteStoreBase, default_db_path, utc_now
 
 MAX_VIEWS = 1000
+#: 单次列出的硬上限（也是前端不传 limit 时的默认值）。整表 1000 行一次物化
+#: 太贵，列表页也从来不需要一次显示那么多。
+MAX_LIST_LIMIT = 500
 
 _VIEWS_SCHEMA = """
 CREATE TABLE IF NOT EXISTS views (
@@ -182,15 +185,17 @@ class ViewHistoryStore(SqliteStoreBase):
         limit: Optional[int] = None,
         offset: int = 0,
     ) -> Dict[str, Any]:
-        """列出观看历史，按最近浏览倒序。"""
+        """列出观看历史，按最近浏览倒序。
+
+        `limit` 缺省时也要有硬上限：历史表最多留着 1000 行，整表返回再逐行
+        `decode_metrics` 是一次几十毫秒的同步调用，前端不带 limit 就会踩到。
+        """
         with self._conn() as conn:
             total = conn.execute("SELECT COUNT(*) AS n FROM views").fetchone()["n"]
             sql = "SELECT * FROM views ORDER BY last_viewed_at DESC, id DESC"
-            params: List[Any] = []
-            if limit is not None:
-                sql += " LIMIT ? OFFSET ?"
-                params = [limit, offset]
-            rows = conn.execute(sql, params).fetchall()
+            effective = MAX_LIST_LIMIT if limit is None else min(int(limit), MAX_LIST_LIMIT)
+            sql += " LIMIT ? OFFSET ?"
+            rows = conn.execute(sql, [effective, offset]).fetchall()
             items = [self._row_to_view(row) for row in rows]
         return {"items": items, "total": int(total)}
 

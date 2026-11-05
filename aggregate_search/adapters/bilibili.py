@@ -41,6 +41,7 @@ from __future__ import annotations
 import re
 
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlsplit
 
 from aggregate_search.models import UnifiedSearchResult, _parse_timestamp, clean_snippet, clean_title
 
@@ -141,9 +142,28 @@ class BilibiliAdapter(BasePlatformAdapter):
             return self._safe_str(upper.get("name"))
         return None
 
+    @staticmethod
+    def _allowed_bilibili_url(value: object) -> bool:
+        """只接受 bilibili.com 这个**主机**，不是字符串前缀。
+
+        `startswith("https://www.bilibili.com")` 会放过
+        `https://www.bilibili.com.evil.net/...` —— 该 URL 会成为卡片跳转目标
+        并落进收藏库。按 netloc 精确比对（与 xhs 的 `_is_allowed_xhs_host` 一致）。
+        """
+        if not isinstance(value, str) or not value:
+            return False
+        try:
+            parts = urlsplit(value)
+        except (ValueError, AttributeError):
+            return False
+        if parts.scheme != "https":
+            return False
+        host = (parts.hostname or "").lower()
+        return host == "bilibili.com" or host.endswith(".bilibili.com")
+
     def _extract_url(self, view: Dict, bvid: str, aid: str) -> str:
         arcurl = view.get("arcurl")
-        if isinstance(arcurl, str) and arcurl.startswith("https://www.bilibili.com"):
+        if self._allowed_bilibili_url(arcurl):
             return arcurl
         if bvid:
             return f"https://www.bilibili.com/video/{bvid}"

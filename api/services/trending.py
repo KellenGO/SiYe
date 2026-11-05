@@ -24,12 +24,15 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 # ── 可调参数 ────────────────────────────────────────────────────────────
 
@@ -204,10 +207,17 @@ async def _load(platform: str) -> Dict[str, Any]:
             return {**cached, "cached": True}
         try:
             words, active_time = await fetcher()
-        except Exception:
+        except Exception as exc:
             # 失败只给安全文案；绝不上抛，也不回显上游响应。
+            # 但要留一条日志：以前完全静默，热搜卡片空一整天也查不出为什么。
+            logger.info(
+                "trending fetch failed platform=%s stage=%s outcome=%s",
+                platform, "fetch", type(exc).__name__,
+            )
             return {"status": "failed", "words": [], "message": FAILED_MESSAGE}
         if not words:
+            logger.info("trending fetch empty platform=%s stage=%s outcome=empty",
+                        platform, "fetch")
             return {"status": "failed", "words": [], "message": FAILED_MESSAGE}
         result: Dict[str, Any] = {
             "status": "ok",

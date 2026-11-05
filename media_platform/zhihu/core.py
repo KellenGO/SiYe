@@ -21,6 +21,7 @@
 # -*- coding: utf-8 -*-
 import asyncio
 import os
+import time
 from typing import Dict, List, Optional
 
 from playwright.async_api import (
@@ -63,6 +64,26 @@ class ZhihuCrawler(AbstractCrawler):
         self.user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
         self._extractor = ZhihuExtractor()
         self.cdp_manager = None
+
+    async def _wait_for_search_cookies(self, timeout_seconds: float = 5.0,
+                                       interval_seconds: float = 0.2) -> bool:
+        """等知乎搜索页把 d_c0 之类的基础 cookie 种下，最长 ``timeout_seconds``。
+
+        有界轮询而不是固定 sleep：cookie 已经就位时立刻继续；等到超时也继续
+        原有流程（与旧行为一致，不因为拿不到 cookie 就直接失败）。
+        """
+        deadline = time.monotonic() + timeout_seconds
+        while True:
+            try:
+                cookies = await self.browser_context.cookies(["https://www.zhihu.com"])
+            except Exception:
+                cookies = None
+            if any(c.get("name") in {"d_c0", "z_c0"} and c.get("value")
+                   for c in (cookies or [])):
+                return True
+            if time.monotonic() >= deadline:
+                return False
+            await asyncio.sleep(interval_seconds)
 
     async def start(self) -> None:
         """
@@ -113,14 +134,17 @@ class ZhihuCrawler(AbstractCrawler):
                     urls=self.cookie_urls,
                 )
 
-            # Zhihu's search API requires opening the search page first to access cookies, homepage alone won't work
+            # 知乎的搜索接口需要先打开搜索页拿 cookie，首页不算。
+            # 以前这里固定 `sleep(5)`：不管 cookie 有没有就位都白等满 5 秒，
+            # 而收藏同步、登录、搜索三条路径都会走到。改成有界条件等待 ——
+            # cookie 一到就继续，最长仍是 5 秒（顺序保证与旧行为一致）。
             utils.logger.info(
-                "[ZhihuCrawler.start] Zhihu navigating to search page to get search page cookies, this process takes about 5 seconds"
+                "[ZhihuCrawler.start] Zhihu navigating to search page to get search page cookies"
             )
             await self.context_page.goto(
                 f"{self.index_url}/search?q=python&search_source=Guess&utm_content=search_hot&type=content"
             )
-            await asyncio.sleep(5)
+            await self._wait_for_search_cookies(self.zhihu_client)
             await self.zhihu_client.update_cookies(
                 browser_context=self.browser_context,
                 urls=self.cookie_urls,

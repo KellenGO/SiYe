@@ -204,7 +204,15 @@ async def run_asr(executable, media, models, progress):
 async def read_asr_output(proc, progress, partial):
     result, size, next_progress = None, 0, 0
     async for line in proc.stdout:
-        event = json.loads(line)
+        try:
+            event = json.loads(line)
+        except ValueError:
+            # 子进程 stdout 偶尔混入半行/非 JSON。以前这里会抛出去，被外层
+            # 兜底成"本地转写失败，保留正文和评论"，把**已经识别出的分片**
+            # 一起丢掉。现在跳过这一行继续读。
+            continue
+        if not isinstance(event, dict):
+            continue
         if event.get("type") == "segment":
             entries, limited = normalize_segments([event.get("entry")])
             duration = float(event.get("duration", 0))
