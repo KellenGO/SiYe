@@ -204,6 +204,21 @@
 - **小红书推荐词/热搜词占位项在适配器层就被丢掉**（2026-11-05）：占位项自带 `id`（如 `rec1`），只判 id 存在会把它们当笔记输出成点开即 404 的假卡片，还挤掉真实名额。`media_platform/xhs/core.py` 的搜索路径一直有 `rec_query`/`hot_query` 过滤，但聚合搜索的分页路径（`aggregate_search/pagination.py`）直接调 `adapt()` 绕过了它 —— 现在适配器兜底。
 - **单结果平台的 rank 分取中性值**（2026-11-05）：`relativeRankScore` 在「组内只有一个不同取值」时返回 0.5。原实现 `value === 0 ? 0 : 1` 把「平台内 rank=0 的唯一一条」判成最差分，而 rank 是 0 起的 —— 于是「某平台只命中一条」的内容被系统性压到底部（每平台数量设 1、筛选后每平台剩一条都会遇到）。
 
+- **渲染路径不再每帧重算**（2026-11-05，纯性能，行为不变）：
+  - `selectSearchPresentation` 包 `useMemo([state])`；单平台重搜的
+    `mergeSinglePlatformRetry` 结果按 `job_id + revision + 目标平台 + 条数` 缓存 ——
+    内容没变就不重跑跨平台去重（这条以前在渲染期无缓存执行）。
+  - `ResultTabs` 的过滤与平台计数合并成一次（原来每按键两遍全量过滤 + 两遍
+    `groupZhihuQuestions`）；`matchesFilters` 的 query 归一化提到循环外。
+  - `ResultCard` 用 `memo` + 稳定比较器包住；`useLayoutEffect` 依赖从
+    `result.metrics`（每帧新对象）换成稳定标量，不再每帧重建 ResizeObserver。
+- **顺序冻结覆盖搜索阶段**（2026-11-05）：以前只有补全阶段（`hydrationStatus !==
+  "not_started"`）冻结，搜索进行中每来一条新结果就整表重排，用户正要点的卡片会跑掉。
+  现在首条到终态之间新结果只追加在末尾；换任务/标签/排序/改筛选才重排。
+- **轮询失败不再当终态错误**（2026-11-05）：后端重启/瞬时 5xx 时用次要样式并说明
+  "正在自动重试"，按钮改为「立即重试」（重新提交本任务）；只有 `createError` 或
+  任务已终态时才显示致命错误与「重试」（后者会清空当前结果）。
+
 
 
 ## 测试怎么跑

@@ -8,6 +8,7 @@
 
 | 任务 ID | 负责人 / 会话 | worktree / 分支 / 起始 HEAD | 修改范围 | 状态 / 下一步 |
 |---|---|---|---|---|
+| `SIYE-BUGSCAN-FIX2-20261105` | DSH 会话 | 主工作区 / `fix-20261021-bugscan` / `c404a15` | `api/services/*`、`aggregate_search/*`、`media_platform/*`、`webui/src/**` | 进行中：收尾 P3 与剩余项，分批提交 |
 
 ## 待接手事项
 
