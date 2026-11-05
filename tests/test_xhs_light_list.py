@@ -617,3 +617,33 @@ def test_adapter_extracts_full_metric_set_from_search_card():
     }
     # 小红书不提供播放量，不得凭空补 0。
     assert "view_count" not in metrics
+
+
+# ── Adapter：推荐词 / 热搜词占位项不是内容 ──────────────────────────────
+
+
+def test_adapter_drops_recommendation_placeholders():
+    """占位项自带 ``id``，只判 id 存在会把它们当笔记输出。
+
+    聚合搜索的分页路径（``aggregate_search/pagination.py``）直接调
+    ``adapter.adapt()``，绕过了 ``media_platform/xhs/core.py`` 里的
+    ``model_type in ("rec_query", "hot_query")`` 过滤 —— 于是第一页会混进
+    点开即 404 的假卡片，还挤掉真实名额。这里锁住适配器层的兜底。
+    """
+    placeholders = [
+        {"id": "rec1", "model_type": "rec_query"},
+        {"id": "hot1", "model_type": "hot_query"},
+    ]
+    assert XhsAdapter().adapt(placeholders, "露营") == []
+
+
+def test_adapter_keeps_real_notes_next_to_placeholders():
+    """混合输入时只丢占位项，正常笔记的 rank/顺序不受影响。"""
+    items = [
+        {"id": "rec1", "model_type": "rec_query"},   # 0 占位
+        _search_item(0),                              # 1 正常
+        {"id": "hot1", "model_type": "hot_query"},   # 2 占位
+        _search_item(1),                              # 3 正常
+    ]
+    results = XhsAdapter().adapt(items, "露营")
+    assert [r.content_id for r in results] == ["note00", "note01"]

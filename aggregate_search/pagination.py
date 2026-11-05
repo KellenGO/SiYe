@@ -35,6 +35,9 @@ class PaginationRun:
         self.emit, self.checkpoint = emit, checkpoint
         self.reading_emit = reading_emit
         self.emitted = self.requests = self.duplicates = 0
+        #: 平台是否返回过任意原始条目（含被去重掉的）。用来区分
+        #: 「平台确实没有内容」与「平台一直在返回同一批、被我们全判重了」。
+        self.items_seen = 0
         self.fetching = False
         self.started_at = time.perf_counter()
         self.first_api_ms = None
@@ -99,6 +102,7 @@ class PaginationRun:
             self.state.search_id = search_id
             self.state.exhausted = exhausted
             self.state.pending = results[:100]
+            self.items_seen += len(results)
             self.drain()
         return self.emitted
 

@@ -49,6 +49,16 @@ from .worker_process import (
 )
 from aggregate_search.pagination import PageState, PaginationRun
 
+#: 平台终态。**这是唯一来源**：以前 `set_platform_status` 与 `_compute_overall`
+#: 各写一份，`partial` 只在 `PLATFORM_STATUSES` 里合法却不在任何一份终态集合中，
+#: 一旦有 worker 发 `partial`，平台就永远停在 running（前端轮询不停、结果永不进缓存）。
+TERMINAL_PLATFORM_STATUSES = frozenset({
+    "succeeded", "empty", "login_required", "rate_limited",
+    "timed_out", "failed", "cancelled",
+    # `partial` 表示"拿到了部分内容就停了"，同样不该再等下去。
+    "partial",
+})
+
 WORKER_TIMEOUT_SECONDS = 100
 # Bound on waiting for an already in-flight cancel to finish (idempotent
 # repeat cancel). The cancel cleanup itself is bounded by GRACE_PERIOD.
@@ -923,6 +933,9 @@ class _ActiveJob:
         self.page_checkpoints = set()
         self.prior_ids = {p: [] for p in platforms}
         self._final_results: Optional[List[UnifiedSearchResult]] = None
+        # 运行期视图缓存：结果集合变化时由 _invalidate_preview() 清掉。
+        # 没有它，每次轮询都要重跑一遍 O(n²) 跨平台去重。
+        self._preview_results: Optional[List[UnifiedSearchResult]] = None
         self.revision = 0
         self.changed = asyncio.Event()
 
@@ -1022,8 +1035,7 @@ class _ActiveJob:
         # timed_out is terminal and must not be downgraded
         if info.status == "timed_out" and status not in ("timed_out",):
             return
-        terminal = {"succeeded", "empty", "login_required",
-                    "rate_limited", "timed_out", "failed", "cancelled"}
+        terminal = TERMINAL_PLATFORM_STATUSES
         # Killing workers during cancellation may produce a nonzero exit after
         # a successful status. Preserve outcomes already received by the user.
         if (self._cancelling or self._cancelled) and info.status in terminal:
@@ -1051,12 +1063,17 @@ class _ActiveJob:
         lst = self.platform_results.setdefault(platform, [])
         if len(lst) < self.limit_for(platform):
             lst.append(result)
+            self._invalidate_preview()
             if len(lst) == 1:
                 self.mark_first_result(platform)
             info = self.platforms_state.get(platform)
             if info:
                 info.result_count = len(lst)
             self.notify_changed()
+
+    def _invalidate_preview(self) -> None:
+        """结果集合变了 → 运行期视图缓存作废（终态缓存由 finalize 重建）。"""
+        self._preview_results = None
 
     def is_terminal(self) -> bool:
         return self._compute_overall() in (
@@ -1101,16 +1118,32 @@ class _ActiveJob:
                     record_search_outcome(p, info.status, self.timings.get(p))
         self._final_results = interleave_results(
             self.platform_results, platform_order=self.platforms)
+        self._preview_results = None
         self.notify_changed()
 
     def response_results(self) -> List[UnifiedSearchResult]:
+        """当前应返回的结果视图。
+
+        **加速要点**：`interleave_results()` 内含跨平台去重（两两比对 + 纯 Python
+        Levenshtein），条数一多就是 O(n²) 的同步 CPU。而 `to_response()` 在任务
+        运行期间会被长轮询高频调用 —— 以前每次调用都重算一遍，80 条时单次
+        ≈130ms、120 条 ≈300ms，直接在事件循环里卡住整站（连取消和账号接口都慢）。
+
+        视图**只在结果集合真正变化时**重算：`add_result()` / `update_snippet()` /
+        `update_metrics()` 会清掉缓存，其余访问命中缓存。
+        """
         if self._final_results is not None:
             return self._final_results
+        if self._preview_results is not None:
+            return self._preview_results
         if self.replaces_platforms:
-            return interleave_results(self.platform_results, platform_order=self.platforms)
-        if self.continuation and self.exploration:
-            return self.exploration.preview(self)
-        return interleave_results(self.platform_results, platform_order=self.platforms)
+            preview = interleave_results(self.platform_results, platform_order=self.platforms)
+        elif self.continuation and self.exploration:
+            preview = self.exploration.preview(self)
+        else:
+            preview = interleave_results(self.platform_results, platform_order=self.platforms)
+        self._preview_results = preview
+        return preview
 
     def update_snippet(self, result: UnifiedSearchResult, snippet: Optional[str]) -> None:
         """Update detail fields in place without rebuilding/deduplicating the order."""
@@ -1128,6 +1161,7 @@ class _ActiveJob:
                 if source.platform == result.platform and source.content_id == result.content_id:
                     source.snippet = snippet
                     source.duration_seconds = result.duration_seconds
+        # 视图缓存里存的是同一批对象的引用，就地修改已生效，无需重建去重。
         self.notify_changed()
 
     def update_metrics(self, result: UnifiedSearchResult) -> None:
@@ -1146,6 +1180,7 @@ class _ActiveJob:
             for source in representative.grouped_sources or []:
                 if source.platform == result.platform and source.content_id == result.content_id:
                     source.metrics = dict(result.metrics)
+        # 同上：就地修改，视图缓存依然有效。
         self.notify_changed()
 
     def _compute_overall(self, statuses: Optional[List[str]] = None) -> str:
@@ -1155,13 +1190,14 @@ class _ActiveJob:
             return "cancelling"
         if statuses is None:
             statuses = [info.status for info in self.platforms_state.values()]
-        terminal = {"succeeded", "empty", "login_required",
-                    "rate_limited", "timed_out", "failed", "cancelled"}
+        terminal = TERMINAL_PLATFORM_STATUSES
         if not all(s in terminal for s in statuses):
             return "running"
-        successes = sum(1 for s in statuses if s in {"succeeded", "empty"})
+        # `partial` 是"拿到了部分内容就停了"：算成功的一种，但整轮不算 completed。
+        successes = sum(1 for s in statuses if s in {"succeeded", "empty", "partial"})
+        degraded = sum(1 for s in statuses if s == "partial")
         failures = len(statuses) - successes
-        if failures == 0:
+        if failures == 0 and degraded == 0:
             return "completed"
         if successes > 0:
             return "partial"

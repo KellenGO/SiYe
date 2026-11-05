@@ -106,6 +106,10 @@ _login_procs: Dict[str, asyncio.subprocess.Process] = {}
 _login_tasks: Dict[str, asyncio.Task] = {}
 _MAX_LOGIN_JOBS = 20  # keep at most this many terminal login jobs
 
+#: 登录任务允许对外暴露的终态。前端 `webui/src/lib/scanLogin.ts` 只认这三个，
+#: 多一个未知值就会让"登录进行中"永远不结束 —— 两边必须一致。
+LOGIN_TERMINAL_STATUSES = frozenset({"succeeded", "failed", "timed_out"})
+
 LOGIN_TOTAL_TIMEOUT = 620  # 10 min + margin
 LOGIN_DRAIN_TIMEOUT = 5
 LOGIN_KILL_TIMEOUT = 3
@@ -183,7 +187,14 @@ async def _run_login_worker(platform: str, job_id: str):
                 elif evt.event == "error":
                     error_received = True
                     d = evt.data or {}
-                    final_status = d.get("type", "failed")
+                    raw_type = d.get("type", "failed")
+                    # worker 的平台私有错误码（如 `login_verification_failed`）
+                    # 不能直接当状态写进去：前端只认下面这组终态，其余一律当
+                    # "还在进行中"，于是扫码失败既不弹提示、`_login_jobs` 也
+                    # 永远不被清理。统一折叠成 failed，并把原因留在 message 里。
+                    final_status = (
+                        raw_type if raw_type in LOGIN_TERMINAL_STATUSES else "failed"
+                    )
                     final_message = d.get("message", final_message)
                 elif evt.event == "done":
                     done_received = True

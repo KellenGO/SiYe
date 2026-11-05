@@ -359,6 +359,15 @@ async def _run_standard_search(
                         # 前端会把这条当作"搜索失败"的原因弹在顶部提示里，文案要短。
                         "error_summary": "疑似平台风控",
                     })
+                elif pagination is not None and pagination.duplicates and pagination.items_seen:
+                    # 平台**返回了内容**，但每一页都是我们已见过的（分页参数失效、
+                    # 平台限流后回吐同一批）。这既不是"没有结果"，也不是真失败 ——
+                    # 但报 empty 会被前端当成搜索失败并**自动取消该平台的勾选**，
+                    # 用户下次再也搜不到它，且完全无从排查。所以带上明确原因。
+                    emit_status(job_id, platform, "empty", {
+                        "message": "No results found.",
+                        "error_summary": "平台重复返回相同内容，可能是分页暂时失效",
+                    })
                 else:
                     emit_status(job_id, platform, "empty",
                                 {"message": "No results found."})

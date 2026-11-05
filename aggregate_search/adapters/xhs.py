@@ -57,6 +57,13 @@ XHS_ALLOWED_HOSTS = {
 }
 XHS_EXPLORE_URL = "https://www.xiaohongshu.com/explore/{note_id}"
 
+#: 搜索结果里的**占位项**：推荐词 / 热搜词卡片，不是笔记。
+#: 它们自带 `id`（如 `rec1`），以前只判 id 存在就把它们当笔记输出，
+#: 于是第一页会混进 1–3 张点开就 404 的假卡片，还挤掉真实名额。
+#: `media_platform/xhs/core.py` 的搜索路径一直有这个过滤，聚合搜索的
+#: 分页路径（aggregate_search/pagination.py）绕过了它，所以在这里兜住。
+XHS_PLACEHOLDER_MODEL_TYPES = frozenset({"rec_query", "hot_query"})
+
 
 def _is_allowed_xhs_host(url: str) -> bool:
     try:
@@ -127,6 +134,10 @@ class XhsAdapter(BasePlatformAdapter):
         results: List[UnifiedSearchResult] = []
         for rank, item in enumerate(raw_results):
             if not isinstance(item, dict):
+                continue
+            # 推荐词 / 热搜词占位项：有 id 但不是内容，必须在这里丢掉
+            # （否则会被当成一条「小红书笔记」输出，点开是 404）。
+            if item.get("model_type") in XHS_PLACEHOLDER_MODEL_TYPES:
                 continue
             card = item.get("note_card")
             if not isinstance(card, dict):

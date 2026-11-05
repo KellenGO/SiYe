@@ -379,6 +379,11 @@ CROSS_PLATFORM_DEDUP_MIN_TITLE_LENGTH = 6
 CROSS_PLATFORM_DEDUP_MIN_EXACT_TITLE_LENGTH = 4
 CROSS_PLATFORM_DEDUP_FUZZY_THRESHOLD = 0.90
 CROSS_PLATFORM_DEDUP_MIN_SNIPPET_LENGTH = 20
+#: 长度比下界（两条标题里短/长）。低于它的配对相似度天花板也到不了阈值，
+#: 直接跳过 Levenshtein。取值与 `core_title_contained` 分支的 0.65 对齐。
+CROSS_PLATFORM_DEDUP_MIN_LENGTH_RATIO = 0.65
+#: 作者相同时的标题相似度门槛（比模糊阈值低，预筛必须按更低的下界来）。
+CROSS_PLATFORM_DEDUP_MIN_TITLE_SIMILARITY = 0.86
 _DEDUP_TITLE_SUFFIX_RE = re.compile(
     r"(?:附(?:完整)?(?:文档|资料|教程)|完整(?:版|文档)|完整版)$"
 )
@@ -418,9 +423,37 @@ def _same_dedup_author(left: Any, right: Any) -> bool:
     )
 
 
-def _title_similarity(left: str, right: str) -> float:
-    """Normalized Levenshtein distance over Unicode code points, as in the UI."""
+#: 相似度预筛：只看公共前后缀就能否定的配对，不进 Levenshtein。
+#: 编辑距离 d 满足 `d >= max_len - (公共前缀长 + 公共后缀长)`；
+#: 相似度 = 1 - d/max_len，因此前缀+后缀长度之和够不到阈值就直接返回 0。
+def _prefix_suffix_reject(left: str, right: str, threshold: float) -> bool:
     if not left or not right:
+        return True
+    max_len = max(len(left), len(right))
+    need = max_len * threshold
+    # 前缀
+    limit = min(len(left), len(right))
+    head = 0
+    while head < limit and left[head] == right[head]:
+        head += 1
+    if head >= need:
+        return False  # 仅前缀就已达标，仍需精确计算（这里只做否定判断）
+    # 后缀（不与前缀重叠的部分）
+    tail = 0
+    while tail < limit - head and left[-1 - tail] == right[-1 - tail]:
+        tail += 1
+    return head + tail < need
+
+
+def _title_similarity(left: str, right: str, threshold: float = 0.0) -> float:
+    """Normalized Levenshtein distance over Unicode code points, as in the UI.
+
+    `threshold > 0` 时先做公共前后缀预筛：够不到阈值直接返回 0，跳过 O(L²)
+    的动态规划。去重路径下绝大多数配对都死在这一步。
+    """
+    if not left or not right:
+        return 0.0
+    if threshold > 0 and _prefix_suffix_reject(left, right, threshold):
         return 0.0
     previous = list(range(len(right) + 1))
     for i, left_char in enumerate(left, 1):
@@ -432,36 +465,100 @@ def _title_similarity(left: str, right: str) -> float:
     return 1 - previous[-1] / max(len(left), len(right))
 
 
+#: 摘要相似度阈值（比标题更严格：摘要更长，误合并代价更高）。
+CROSS_PLATFORM_DEDUP_SNIPPET_SIMILARITY = 0.88
+
+
 def _similar_dedup_snippets(
     left: UnifiedSearchResult, right: UnifiedSearchResult,
     left_title: str, right_title: str,
+    left_snippet: Optional[str] = None,
+    right_snippet: Optional[str] = None,
 ) -> bool:
-    left_snippet = normalize_dedup_text(left.snippet)
-    right_snippet = normalize_dedup_text(right.snippet)
+    """两条摘要是否指向同一段文字。
+
+    `left_snippet` / `right_snippet` 允许调用方传入已归一化的值（主循环里
+    每条只算一次）。摘要有 180 字上限，Levenshtein 是 O(L²)，所以这里的
+    长度预筛比标题那步更值钱：长度比不足阈值的一对直接跳过。
+    """
+    if left_snippet is None:
+        left_snippet = normalize_dedup_text(left.snippet)
+    if right_snippet is None:
+        right_snippet = normalize_dedup_text(right.snippet)
+    if min(len(left_snippet), len(right_snippet)) < CROSS_PLATFORM_DEDUP_MIN_SNIPPET_LENGTH:
+        return False
+    # 摘要完全相同是最常见的情况（同一篇内容被两个平台返回），直接判定，
+    # 不进 O(L²) 的动态规划。
+    if left_snippet == right_snippet:
+        return left_snippet != left_title and right_snippet != right_title
+    # 相似度天花板 = 短/长；够不到阈值就不必算距离。
+    if not _is_plausible_pair(
+        len(left_snippet), len(right_snippet), CROSS_PLATFORM_DEDUP_SNIPPET_SIMILARITY
+    ):
+        return False
     return (
-        min(len(left_snippet), len(right_snippet)) >= CROSS_PLATFORM_DEDUP_MIN_SNIPPET_LENGTH
-        and left_snippet != left_title
+        left_snippet != left_title
         and right_snippet != right_title
-        and _title_similarity(left_snippet, right_snippet) >= 0.88
+        and _title_similarity(
+            left_snippet, right_snippet, CROSS_PLATFORM_DEDUP_SNIPPET_SIMILARITY
+        ) >= CROSS_PLATFORM_DEDUP_SNIPPET_SIMILARITY
+    )
+
+
+def _is_plausible_pair(shorter: int, longer: int, threshold: float) -> bool:
+    """长度预筛：相似度天花板够不到阈值的一对，连 Levenshtein 都不必算。
+
+    归一化 Levenshtein 相似度 = `1 - distance/max_len`，而 `distance >= |len差|`，
+    所以相似度上限是 `min_len / max_len`。用这个上界先否掉绝大多数配对，
+    是把 `deduplicate_cross_platform_results` 从 O(n²·L²) 压下来的关键一步。
+
+    `threshold` 传该分支真正要求的相似度；标题分支还允许 `core_title_contained`
+    这条更低的路（长度比 ≥ 0.65），所以调用方传 0.65 而不是 0.9。
+    """
+    if longer <= 0:
+        return False
+    return shorter / longer >= min(threshold, CROSS_PLATFORM_DEDUP_MIN_LENGTH_RATIO)
+
+
+def _is_plausible_title_pair(left_title: str, right_title: str) -> bool:
+    """标题预筛：0.65 的下界同时覆盖模糊阈值与包含关系两条分支。"""
+    return _is_plausible_pair(
+        *sorted((len(left_title), len(right_title))),
+        CROSS_PLATFORM_DEDUP_MIN_LENGTH_RATIO,
     )
 
 
 def _same_cross_platform_content(
     left: UnifiedSearchResult,
     right: UnifiedSearchResult,
+    left_title: Optional[str] = None,
+    right_title: Optional[str] = None,
+    left_snippet: Optional[str] = None,
+    right_snippet: Optional[str] = None,
 ) -> bool:
+    """跨平台同内容判定。
+
+    `left_title` / `right_title` 允许调用方预先归一化后传入 —— 去重主循环里
+    每条结果只归一化一次，而不是每两两配对都重算一遍（原来 80 条要做
+    10 万+ 次 NFKC + 正则）。
+    """
     if left.platform == right.platform:
         return False
 
-    left_title = _normalize_dedup_title(left.title)
-    right_title = _normalize_dedup_title(right.title)
+    if left_title is None:
+        left_title = _normalize_dedup_title(left.title)
+    if right_title is None:
+        right_title = _normalize_dedup_title(right.title)
     if min(len(left_title), len(right_title)) < CROSS_PLATFORM_DEDUP_MIN_EXACT_TITLE_LENGTH:
+        return False
+    if not _is_plausible_title_pair(left_title, right_title):
         return False
 
     same_author = _same_dedup_author(left.author, right.author)
     # A common title or nearby publication dates alone do not identify content.
     if left_title == right_title:
-        return same_author or _similar_dedup_snippets(left, right, left_title, right_title)
+        return same_author or _similar_dedup_snippets(
+            left, right, left_title, right_title, left_snippet, right_snippet)
 
     if min(len(left_title), len(right_title)) < CROSS_PLATFORM_DEDUP_MIN_TITLE_LENGTH:
         return False
@@ -472,7 +569,11 @@ def _same_cross_platform_content(
         and len(shorter_title) / len(longer_title) >= 0.65
         and shorter_title in longer_title
     )
-    title_similarity = _title_similarity(left_title, right_title)
+    # 0.86 是 `same_author` 分支的门槛，比模糊阈值低；预筛按更低的那个来，
+    # 保证不会把 `same_author and title_similarity >= 0.86` 的情况误否。
+    title_similarity = _title_similarity(
+        left_title, right_title, CROSS_PLATFORM_DEDUP_MIN_TITLE_SIMILARITY
+    )
     if same_author and (core_title_contained or title_similarity >= 0.86):
         return True
 
@@ -480,7 +581,8 @@ def _same_cross_platform_content(
     if title_similarity < CROSS_PLATFORM_DEDUP_FUZZY_THRESHOLD:
         return False
 
-    return same_author or _similar_dedup_snippets(left, right, left_title, right_title)
+    return same_author or _similar_dedup_snippets(
+        left, right, left_title, right_title, left_snippet, right_snippet)
 
 
 def _result_completeness_score(result: UnifiedSearchResult) -> float:
@@ -550,9 +652,18 @@ def deduplicate_cross_platform_results(
     def component_members(root: int) -> List[int]:
         return [index for index in range(len(results)) if find(index) == root]
 
+    # 每条结果只归一化一次：原来每两两配对都要重算 NFKC + 正则 + 后缀剥离，
+    # 80 条时一次去重会执行 10 万+ 次。归一化结果是纯函数产物，可以安全复用。
+    normalized_titles = [_normalize_dedup_title(result.title) for result in results]
+    normalized_snippets = [normalize_dedup_text(result.snippet) for result in results]
+
     for left_index in range(len(results)):
         for right_index in range(left_index + 1, len(results)):
-            if not _same_cross_platform_content(results[left_index], results[right_index]):
+            if not _same_cross_platform_content(
+                results[left_index], results[right_index],
+                normalized_titles[left_index], normalized_titles[right_index],
+                normalized_snippets[left_index], normalized_snippets[right_index],
+            ):
                 continue
             left_root = find(left_index)
             right_root = find(right_index)
