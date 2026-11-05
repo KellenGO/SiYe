@@ -12,7 +12,7 @@
  * - 平台偏好每次选择变化立即持久化（effect 写回 localStorage）。
  */
 
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useAggregateSearch } from "./useAggregateSearch";
 import { usePlatformLimits } from "./usePlatformLimits";
 import type { PlatformSlug } from "@/types/search";
@@ -253,7 +253,10 @@ export function useSearchExperience() {
   }, []);
 
   // Phase 2：渐进展示 selector —— UI 全部消费 presentation 输出。
-  const presentation = selectSearchPresentation(state);
+  // 必须 memo：单平台重搜分支每次都会走 mergeSinglePlatformRetry →
+  // interleaveByPlatform → 跨平台去重（两两比对 + Levenshtein），
+  // 在渲染期无缓存地跑，重搜那十几秒里每个 setState 都要重算一遍。
+  const presentation = useMemo(() => selectSearchPresentation(state), [state]);
 
   return {
     // 展示层（UI 全部消费这一层）

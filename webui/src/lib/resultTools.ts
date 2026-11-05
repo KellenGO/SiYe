@@ -56,17 +56,31 @@ export function safeContentUrl(url: string): string | null {
 
 const normalize = (text: string) => text.normalize("NFKC").toLowerCase();
 
-export function matchesFilters(result: UnifiedSearchResult, filters: ResultFilters, nowMs: number): boolean {
+const CONTENT_TYPE_GROUPS: Record<Exclude<ContentFilter, "all">, readonly string[]> = {
+  video: ["video", "short_video", "zvideo"],
+  note: ["note", "post"],
+  article: ["article", "answer"],
+};
+
+/** 查询串的归一化结果只依赖 `filters.query`，提到循环外算一次。 */
+export function filterQueryTokens(query: string): string[] {
+  return normalize(query).trim().split(/\s+/u).filter(Boolean);
+}
+
+export function matchesFilters(
+  result: UnifiedSearchResult,
+  filters: ResultFilters,
+  nowMs: number,
+  queryTokens: readonly string[] = filterQueryTokens(filters.query),
+): boolean {
   if (filters.days) {
     const published = Date.parse(result.published_at || "");
     if (!Number.isFinite(published) || published > nowMs || published < nowMs - filters.days * 86400000) return false;
   }
-  const types: Record<Exclude<ContentFilter, "all">, string[]> = {
-    video: ["video", "short_video", "zvideo"], note: ["note", "post"], article: ["article", "answer"],
-  };
-  if (filters.contentType !== "all" && !types[filters.contentType].includes(result.content_type)) return false;
+  if (filters.contentType !== "all" && !CONTENT_TYPE_GROUPS[filters.contentType].includes(result.content_type)) return false;
+  if (!queryTokens.length) return true;
   const haystack = normalize([result.title, result.author, result.snippet].filter(Boolean).join(" "));
-  return normalize(filters.query).trim().split(/\s+/u).filter(Boolean).every((token) => haystack.includes(token));
+  return queryTokens.every((token) => haystack.includes(token));
 }
 
 /** All conditions must match the same source; keep only matching versions of a group. */
@@ -75,9 +89,12 @@ export function filterResultGroups(
   platform: "all" | PlatformSlug = "all"
 ): UnifiedSearchResult[] {
   const seen = new Set<string>();
+  // 每个按键都会走到这里；把查询归一化提到循环外，别对每条结果重算一遍。
+  const queryTokens = filterQueryTokens(filters.query);
   return results.flatMap((result) => {
     const sources = resultSources(result).filter((source) =>
-      (platform === "all" || source.platform === platform) && matchesFilters(source, filters, nowMs));
+      (platform === "all" || source.platform === platform)
+      && matchesFilters(source, filters, nowMs, queryTokens));
     if (!sources.length) return [];
     const representative = sources.find((source) => resultKey(source) === resultKey(result)) || sources[0];
     const visible = { ...representative, grouped_sources: sources.length >= 2 ? sources : null };

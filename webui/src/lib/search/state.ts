@@ -1,4 +1,4 @@
-import type { PlatformSlug, SearchJobResponse } from "@/types/search";
+import type { PlatformSlug, SearchJobResponse, UnifiedSearchResult } from "@/types/search";
 import { PLATFORM_SLUGS, isPlatformSlug } from "../platformMeta.js";
 import type { SearchHistoryItem } from "./preferences.js";
 import { addHistoryItem, removeHistoryItem } from "./preferences.js";
@@ -549,6 +549,45 @@ export interface SearchPresentation {
  * - 单平台重搜只渐进替换目标平台，不改动其他平台的已有内容。
  * - 实时提示在任务终态后自动消失。
  */
+/**
+ * 单平台重搜的合并结果缓存。
+ *
+ * `mergeSinglePlatformRetry` 会重新做一次跨平台去重（两两比对 + Levenshtein），
+ * 而轮询每 10ms 就可能带来一个新的 `live` 响应 —— 内容没变（`fresh` 相同）时
+ * 重算完全是浪费。用 `jobResponse 引用 + job_id + revision + 目标平台 + fresh 数量`
+ * 做键：`fresh` 由 `live.results` 派生，同一批结果不会变。
+ */
+let retryMergeCache: {
+  key: string;
+  results: UnifiedSearchResult[];
+} | null = null;
+
+function mergeRetryResultsCached(
+  committed: SearchJobResponse,
+  live: SearchJobResponse,
+  target: PlatformSlug,
+  fresh: UnifiedSearchResult[],
+  platforms: PlatformSlug[],
+): UnifiedSearchResult[] {
+  if (!fresh.length) return committed.results;
+  const key = [
+    committed.job_id,
+    live.job_id,
+    live.revision ?? -1,
+    target,
+    fresh.length,
+  ].join("");
+  if (retryMergeCache && retryMergeCache.key === key) return retryMergeCache.results;
+  const results = mergeSinglePlatformRetry(committed.results, target, fresh, platforms);
+  retryMergeCache = { key, results };
+  return results;
+}
+
+/** 仅供测试：丢弃合并缓存。 */
+export function __resetPresentationCacheForTests(): void {
+  retryMergeCache = null;
+}
+
 export function selectSearchPresentation(state: ExperienceState): SearchPresentation {
   const d = state.display;
   const live = d.liveResponse;
@@ -560,15 +599,13 @@ export function selectSearchPresentation(state: ExperienceState): SearchPresenta
   if (d.retryingPlatform && committed) {
     const target = d.retryingPlatform;
     const fresh = expandGroupedResults(live.results).filter((r) => r.platform === target);
+    const platforms = Object.keys({ ...committed.platforms, ...live.platforms }) as PlatformSlug[];
     return {
       jobResponse: {
         ...live,
         platforms: { ...committed.platforms, ...live.platforms },
         exploration: live.exploration ?? committed.exploration,
-        results: fresh.length ? mergeSinglePlatformRetry(
-          committed.results, target, fresh,
-          Object.keys({ ...committed.platforms, ...live.platforms }) as PlatformSlug[],
-        ) : committed.results,
+        results: mergeRetryResultsCached(committed, live, target, fresh, platforms),
       },
       showingStaleSnapshot: fresh.length === 0,
       liveHint: fresh.length ? `已返回 ${fresh.length} 条，仍在搜索` : "正在搜索，暂时显示上次结果",

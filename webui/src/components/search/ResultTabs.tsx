@@ -73,7 +73,8 @@ export function ResultTabs({
   keyword = "",
   overall,
   jobId,
-  hydrationStatus = "not_started",
+  // `hydrationStatus` 仍保留在 props 里（调用方还在传），但顺序冻结现在同时
+  // 覆盖搜索与补全两个阶段，这里不再需要它来分支。
   sortMode = "default",
   onSortModeChange,
   library,
@@ -162,9 +163,27 @@ export function ResultTabs({
   useEffect(() => setSelected(new Set()), [jobId, effectiveTab, selectionResetKey]);
   useEffect(() => setExportOpen(false), [jobId]);
 
+  // 过滤一次、同时算平台计数：以前 `rankedResults` 与 `counts` 各调一次
+  // `filterResultGroups`（每按键两遍全量过滤 + 两遍 groupZhihuQuestions），
+  // 结果多了打字就明显停顿。
+  const filtered = useMemo(() => {
+    const all = filterResultGroups(results, filters, nowMs);
+    const matching = viewScope === "search" ? groupZhihuQuestions(all) : all;
+    const c: Record<string, number> = { all: matching.length };
+    for (const item of matching) {
+      const sources = item.grouped_sources && item.grouped_sources.length >= 2
+        ? item.grouped_sources
+        : [item];
+      for (const source of sources) c[source.platform] = (c[source.platform] || 0) + 1;
+    }
+    return { all, counts: c };
+  }, [results, filters, nowMs, viewScope]);
+
   // 先按当前标签筛选，再按所选模式排序（纯前端计算，不发任何请求）。
   const rankedResults = useMemo(() => {
-    const scoped = filterResultGroups(results, filters, nowMs, effectiveTab);
+    const scoped = effectiveTab === "all"
+      ? filtered.all
+      : filterResultGroups(filtered.all, DEFAULT_FILTERS, nowMs, effectiveTab);
     const sorted = disableSort ? scoped : sortResults(scoped, sortMode, keyword);
     const resultKey = (r: UnifiedSearchResult) => `${r.platform}|${r.content_id}`;
     const signature = [
@@ -175,36 +194,35 @@ export function ResultTabs({
       JSON.stringify(filters),
       scoped.map(resultKey).sort().join(","),
     ].join("\u0001");
-    if (hydrationStatus === "not_started") {
-      hydrationOrderRef.current = { signature, keys: sorted.map(resultKey) };
-      return sorted;
-    }
-    if (hydrationOrderRef.current?.signature !== signature) {
+    // 顺序冻结：新结果只追加在末尾，已展示的卡片不下移。
+    //
+    // 以前只有 `hydrationStatus !== "not_started"`（详情补全阶段）才冻结，
+    // 搜索进行中没有 —— 首条到终态之间每来一条新结果就整表重排，用户正要点的
+    // 卡片会跑掉。现在两个阶段都冻结；换任务/换标签/换排序/改筛选会换 signature，
+    // 那时才按新顺序重排。
+    const previous = hydrationOrderRef.current;
+    if (previous?.signature !== signature) {
       hydrationOrderRef.current = { signature, keys: sorted.map(resultKey) };
       return sorted;
     }
     const byKey = new Map(sorted.map((result) => [resultKey(result), result]));
-    return hydrationOrderRef.current.keys
+    const ordered = previous.keys
       .map((key) => byKey.get(key))
       .filter((result): result is UnifiedSearchResult => Boolean(result));
-  }, [results, effectiveTab, sortMode, keyword, hydrationStatus, jobId, filters, nowMs, disableSort]);
+    // 这一轮新出现的结果接在后面，不去插队。
+    const known = new Set(previous.keys);
+    const appended = sorted.filter((result) => !known.has(resultKey(result)));
+    if (appended.length) {
+      const keys = [...previous.keys, ...appended.map(resultKey)];
+      hydrationOrderRef.current = { signature, keys };
+      return [...ordered, ...appended];
+    }
+    return ordered;
+  }, [filtered, effectiveTab, sortMode, keyword, jobId, filters, nowMs, disableSort]);
   const filteredResults = useMemo(() => viewScope === "search" ? groupZhihuQuestions(rankedResults) : rankedResults,
     [viewScope, rankedResults]);
 
-  const counts = useMemo(() => {
-    const raw = filterResultGroups(results, filters, nowMs);
-    const matching = viewScope === "search" ? groupZhihuQuestions(raw) : raw;
-    const c: Record<string, number> = { all: matching.length };
-    for (const r of matching) {
-      const sources = r.grouped_sources && r.grouped_sources.length >= 2
-        ? r.grouped_sources
-        : [r];
-      for (const source of sources) {
-        c[source.platform] = (c[source.platform] || 0) + 1;
-      }
-    }
-    return c;
-  }, [results, filters, nowMs, viewScope]);
+  const counts = filtered.counts;
 
   // 一次只渲染前 N 条：收藏攒到几百上千条时，一次性铺完会卡。其余点「显示更多」逐步展开，
   // 勾选/导出仍然作用于筛选后的全部结果（不只是已渲染的那些）。

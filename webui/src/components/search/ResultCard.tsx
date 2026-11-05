@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { memo, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowUpRight, ChevronDown, Info, Trash2 } from "lucide-react";
 import { ContentMetric, LocalContentCover } from "@/components/favorites/LocalContentCard";
 import type { GroupedSource, UnifiedSearchResult } from "@/types/search";
@@ -46,7 +46,7 @@ function SourceLine({ source, query, onOpen }: { source: GroupedSource; query: s
   return url ? <a href={url} target="_blank" rel="noreferrer" onClick={onOpen}>{row}</a> : row;
 }
 
-export function ResultCard({ result, index = 0, highlightQuery = "", renderBookmark, onDelete, onOpenDetails, detailsExpanded, onExpandedChange }: ResultCardProps) {
+function ResultCardView({ result, index = 0, highlightQuery = "", renderBookmark, onDelete, onOpenDetails, detailsExpanded, onExpandedChange }: ResultCardProps) {
   const [contentClipped, setContentClipped] = useState(false);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const descriptionRef = useRef<HTMLParagraphElement>(null);
@@ -72,7 +72,10 @@ export function ResultCard({ result, index = 0, highlightQuery = "", renderBookm
     const observer = new ResizeObserver(checkOverflow);
     elements.forEach((element) => observer.observe(element));
     return () => observer.disconnect();
-  }, [detailsExpanded, result.title, result.snippet, result.author, result.published_at, result.metrics]);
+  // 依赖必须是**稳定标量**：`result.metrics` 是每次过滤都新建的对象，
+  // 放进依赖会让每帧 disconnect + new ResizeObserver + 一次强制布局读取。
+  }, [detailsExpanded, result.title, result.snippet, result.author, result.published_at,
+    result.metrics_status, metrics.length]);
 
   return (
     <article className="result-row">
@@ -121,3 +124,46 @@ export function ResultCard({ result, index = 0, highlightQuery = "", renderBookm
     </article>
   );
 }
+
+/**
+ * 卡片用 `memo` 包住。
+ *
+ * 结果列表每帧都会重新 map 一遍（筛选/排序/渐进补全都触发渲染），
+ * 而每张卡片各带一个 ResizeObserver 与若干布局读取。props 未变时跳过渲染，
+ * 是这条渲染路径上性价比最高的一处。
+ *
+ * 注意 `renderBookmark` 通常是内联箭头函数、每帧新引用；调用方已经按
+ * `result` 闭合，这里用一个稳定的比较器忽略它的引用变化，只比较
+ * 真正影响画面的字段（标题/摘要/指标/封面/平台）。
+ */
+function sameCardProps(prev: ResultCardProps, next: ResultCardProps): boolean {
+  if (prev.index !== next.index) return false;
+  if (prev.highlightQuery !== next.highlightQuery) return false;
+  if (prev.detailsExpanded !== next.detailsExpanded) return false;
+  if (prev.onOpenDetails !== next.onOpenDetails) return false;
+  if (prev.onDelete !== next.onDelete) return false;
+  const a = prev.result;
+  const b = next.result;
+  return a === b
+    || (
+      a.platform === b.platform
+      && a.content_id === b.content_id
+      && a.title === b.title
+      && a.snippet === b.snippet
+      && a.author === b.author
+      && a.published_at === b.published_at
+      && a.cover_url === b.cover_url
+      && a.duration_seconds === b.duration_seconds
+      && a.metrics_status === b.metrics_status
+      && (a.grouped_sources?.length ?? 0) === (b.grouped_sources?.length ?? 0)
+      && sameMetrics(a.metrics, b.metrics)
+    );
+}
+
+function sameMetrics(a: Record<string, number>, b: Record<string, number>): boolean {
+  const aKeys = Object.keys(a);
+  if (aKeys.length !== Object.keys(b).length) return false;
+  return aKeys.every((key) => a[key] === b[key]);
+}
+
+export const ResultCard = memo(ResultCardView, sameCardProps);

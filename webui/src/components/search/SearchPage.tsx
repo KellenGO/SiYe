@@ -32,6 +32,24 @@ const FAILED_PLATFORM_STATUSES = ["failed", "login_required", "timed_out", "rate
 /** 已提醒过的 "job:平台" 组合。
  *  模块级集合覆盖组件重新挂载与任务恢复，避免同一失败重复弹窗（SPA 生命周期内有效）。 */
 const handledFailureKeys = new Set<string>();
+/** 只保留最近这些 job 的去重记录：模块级 Set 以前无界增长，长会话越攒越多。 */
+const HANDLED_FAILURE_JOBS_LIMIT = 30;
+const handledFailureJobOrder: string[] = [];
+
+function rememberHandledFailure(jobId: string, platform: string): void {
+  const key = `${jobId}:${platform}`;
+  if (handledFailureKeys.has(key)) return;
+  handledFailureKeys.add(key);
+  if (!handledFailureJobOrder.includes(jobId)) {
+    handledFailureJobOrder.push(jobId);
+    while (handledFailureJobOrder.length > HANDLED_FAILURE_JOBS_LIMIT) {
+      const evicted = handledFailureJobOrder.shift()!;
+      for (const existing of [...handledFailureKeys]) {
+        if (existing.startsWith(`${evicted}:`)) handledFailureKeys.delete(existing);
+      }
+    }
+  }
+}
 
 /** 弹窗里陈述的原因（不吓人、不复述 error_summary 原文）—— 平台自带安全原因时优先用它的。 */
 const FAILURE_REASON_KEYS: Record<string, string> = {
@@ -182,7 +200,7 @@ export function SearchPage({ active = true, homeRequested = false, onViewChange,
     );
     const fresh = failed.filter((platform) => !handledFailureKeys.has(`${job.job_id}:${platform}`));
     if (fresh.length === 0) return;
-    fresh.forEach((platform) => handledFailureKeys.add(`${job.job_id}:${platform}`));
+    fresh.forEach((platform) => rememberHandledFailure(job.job_id, platform));
 
     // 只取消"确实勾着"的失败平台；单独获取一个本来就没勾选的平台失败时，
     // 不该动搜索范围，提示也不该说"已自动取消勾选"。
@@ -367,13 +385,26 @@ export function SearchPage({ active = true, homeRequested = false, onViewChange,
         </div>
       )}
 
-      {/* Error */}
+      {/* Error：轮询失败但任务仍在跑时用"次要"样式 —— 后端重启/瞬时 5xx
+          会自己恢复（轮询已按失败次数指数退避），不该摆成终态失败。
+          "重试"按钮以前调 handleReset，会把还在跑的任务和已出结果一起丢掉。 */}
       {(createError || pollError) && (
-        <div className="mt-4 flex items-center gap-3 px-4 py-3 rounded-xl border border-danger/40 bg-danger-soft text-danger text-sm max-w-2xl w-full">
+        <div className={`mt-4 flex items-center gap-3 px-4 py-3 rounded-xl border text-sm max-w-2xl w-full ${
+          !createError && !isTerminal
+            ? "border-warn/40 bg-warn-soft text-warn"
+            : "border-danger/40 bg-danger-soft text-danger"
+        }`}>
           <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-          <span className="flex-1">{getErrorMessage(createError || pollError)}</span>
-          <button onClick={handleReset} className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-lg border border-danger/40 hover:bg-danger/10 text-xs transition-all">
-            <RotateCcw className="w-3 h-3" />重试
+          <span className="flex-1">
+            {!createError && !isTerminal
+              ? "与后端的连接暂时中断，正在自动重试…"
+              : getErrorMessage(createError || pollError)}
+          </span>
+          <button
+            onClick={!createError && !isTerminal ? handleRefresh : handleReset}
+            className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-lg border border-current/40 hover:bg-current/10 text-xs transition-all"
+          >
+            <RotateCcw className="w-3 h-3" />{!createError && !isTerminal ? "立即重试" : "重试"}
           </button>
         </div>
       )}
