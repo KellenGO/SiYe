@@ -1,8 +1,8 @@
 @echo off
 chcp 65001 >nul
-rem 从源码启动四野（不需要打包产物）。
-rem 源码端口默认 8090，避免和打包版的 8080 撞车；
-rem 想换端口：改下面这行的默认值，或启动前 set SIYE_PORT=xxxx。
+rem Launch SiYe from source (no packaged build required).
+rem Source uses port 8090 so it never collides with the packaged app on 8080;
+rem override before launch with: set SIYE_PORT=xxxx
 setlocal
 cd /d "%~dp0"
 
@@ -10,7 +10,7 @@ if not defined SIYE_PORT set "SIYE_PORT=8090"
 set "HEALTH_URL=http://127.0.0.1:%SIYE_PORT%/api/health"
 set "PAGE_URL=http://127.0.0.1:%SIYE_PORT%"
 
-rem 1. 选解释器：本目录 .venv > py -3 > python > 本机 Python 安装目录
+rem 1. Pick interpreter: local .venv > py -3 > python > installed Python
 set "PYEXE="
 set "PYFLAGS="
 if exist "%~dp0.venv\Scripts\python.exe" set "PYEXE=%~dp0.venv\Scripts\python.exe"
@@ -35,7 +35,7 @@ if errorlevel 1 goto :PY_FAILED
 "%PYEXE%" %PYFLAGS% -c "import os; port = int(os.environ['SIYE_PORT']); assert 1 <= port <= 65535, 'SIYE_PORT must be 1..65535'"
 if errorlevel 1 goto :PORT_UNAVAILABLE
 
-rem 2. 端口已经有人在用？确认是不是四野自己的后端。
+rem 2. Port already in use? Check whether it is SiYe's own backend.
 netstat -ano | findstr /r /c:":%SIYE_PORT% .*LISTENING" >nul 2>&1
 if errorlevel 1 goto :CHECK_BIND
 powershell -NoProfile -Command "try { $r = Invoke-RestMethod -Uri '%HEALTH_URL%' -TimeoutSec 3; if ($r.status -eq 'ok') { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>&1
@@ -46,15 +46,15 @@ pause
 exit /b 0
 
 :CHECK_BIND
-rem 没有监听进程也可能被 Windows 拒绝绑定，必须实际检查。
+rem Windows can refuse the bind even with no listener, so probe it for real.
 "%PYEXE%" %PYFLAGS% -c "import os, socket; s = socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1); s.bind(('127.0.0.1', int(os.environ['SIYE_PORT']))); s.close()"
 if errorlevel 1 goto :PORT_UNAVAILABLE
 
-rem 3. 启动后端（端口由 SIYE_PORT 决定，解析见 base/server_port.py）
+rem 3. Start the backend (port comes from SIYE_PORT, see base/server_port.py)
 echo 正在启动后端，端口 %SIYE_PORT% ...
 start "" /b "%PYEXE%" %PYFLAGS% -m api.main
 
-rem 4. 等 /api/health 就绪后再打开浏览器
+rem 4. Wait for /api/health before opening the browser
 set /a TRIES=0
 :POLL
 set /a TRIES+=1
