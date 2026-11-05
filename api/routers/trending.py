@@ -16,12 +16,14 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
+
+from .local_guard import local_request as _local_request
 
 from ..schemas.trending import TrendingResponse
 from ..services import trending as trending_service
 
-trending_router = APIRouter(prefix="/api/trending", tags=["trending"])
+trending_router = APIRouter(prefix="/api/trending", tags=["trending"], dependencies=[Depends(_local_request)])
 
 
 @trending_router.get("", response_model=TrendingResponse)

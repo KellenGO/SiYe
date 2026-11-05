@@ -16,7 +16,9 @@ import uuid
 from datetime import datetime, timezone
 from typing import Dict, Optional
 
-from fastapi import APIRouter, HTTPException, Header, Request, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+
+from .local_guard import local_request as _local_request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -32,7 +34,7 @@ from ..services.worker_process import (
     cancel_task_quietly, spawn_worker, terminate_worker,
 )
 
-search_router = APIRouter(prefix="/api/search", tags=["aggregate-search"])
+search_router = APIRouter(prefix="/api/search", tags=["aggregate-search"], dependencies=[Depends(_local_request)])
 
 
 

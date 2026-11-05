@@ -29,6 +29,7 @@
 | 热搜卡片（各平台热词 → 一键聚合搜索） | [features/trending-board.md](features/trending-board.md) | `api/services/trending.py`、`webui/src/components/trending/TrendingBoard.tsx` |
 | 返回首页（首页 / 结果页两个视图） | [features/back-to-home.md](features/back-to-home.md) | `webui/src/components/search/SearchPage.tsx`、`webui/src/index.css` |
 | 长列表的「显示更多」与「返回顶部」 | [features/long-list-navigation.md](features/long-list-navigation.md) | `webui/src/components/search/ResultTabs.tsx`、`webui/src/components/layout/ScrollToTopButton.tsx`、`webui/src/index.css` |
+| 本机接口来源校验（只允许本机页面调用） | [features/local-api-guard.md](features/local-api-guard.md) | `api/routers/local_guard.py`、`api/routers/*.py` |
 | 平台没搜到时的原因提示（含疑似风控） | [features/platform-failure-reasons.md](features/platform-failure-reasons.md) | `webui/src/components/search/{SearchPage,PlatformStatus}.tsx`、`aggregate_search/worker.py` |
 
 ## 其他文档

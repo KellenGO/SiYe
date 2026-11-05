@@ -92,7 +92,7 @@ async def test_real_route_waits_for_item_and_validates_bounds(live_job, monkeypa
     monkeypatch.setattr(search, "search_job_manager", manager)
     app = FastAPI()
     app.include_router(search.search_router)
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://127.0.0.1:8080") as client:
         request = asyncio.create_task(client.get("/api/search/jobs/live-job",
             params={"after_revision": job.revision, "wait_seconds": 15}))
         await asyncio.sleep(0)

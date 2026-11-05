@@ -13,10 +13,12 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from .local_guard import local_request as _local_request
+
 from ..schemas.history import HistoryViewInput
 from ..services.watch_history_store import ViewHistoryStore, get_history_store
 
-history_router = APIRouter(prefix="/api/history", tags=["history"])
+history_router = APIRouter(prefix="/api/history", tags=["history"], dependencies=[Depends(_local_request)])
 
 
 def _bad_request(error: ValueError) -> HTTPException:

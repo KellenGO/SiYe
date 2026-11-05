@@ -10,6 +10,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
+from .local_guard import local_request as _local_request
 from ..services.research_config import research_config
 from ..services.research_jobs import research_jobs
 from ..services.spaces_store import SpacesStore, SpaceMissing, get_spaces_store
@@ -25,15 +26,9 @@ def get_research_config():
     return research_config
 
 
-async def local_request(request: Request):
-    # Credential APIs and paid actions must not be callable by arbitrary websites.
-    if request.url.hostname not in {"localhost", "127.0.0.1", "::1"}:
-        raise HTTPException(403, "研究接口仅允许四野本机页面访问")
-    origin = request.headers.get("origin")
-    if origin and origin not in {str(request.base_url).rstrip("/"), "http://localhost:5173", "http://127.0.0.1:5173"}:
-        raise HTTPException(403, "研究接口仅允许四野本机页面访问")
-    if request.headers.get("sec-fetch-site") == "cross-site" and origin not in {"http://localhost:5173", "http://127.0.0.1:5173"}:
-        raise HTTPException(403, "研究接口仅允许四野本机页面访问")
+#: 本机来源守卫。实现统一在 `local_guard.py`，这里保留同名导出，
+#: 因为 `extensions.py` 仍从本模块导入它，且既有测试按这个名字断言。
+local_request = _local_request
 
 
 def require_research_extension():

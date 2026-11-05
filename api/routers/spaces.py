@@ -2,10 +2,12 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from .local_guard import local_request as _local_request
+
 from ..schemas.spaces import ActiveSpaceInput, SpaceArchiveInput, SpaceInfoInput, SpaceItemsInput, SpaceKeysInput, SpaceNoteInput
 from ..services.spaces_store import SpaceConflict, SpaceMissing, SpacesStore, get_spaces_store
 
-spaces_router = APIRouter(prefix="/api/spaces", tags=["spaces"])
+spaces_router = APIRouter(prefix="/api/spaces", tags=["spaces"], dependencies=[Depends(_local_request)])
 
 
 def _call(operation, *args):

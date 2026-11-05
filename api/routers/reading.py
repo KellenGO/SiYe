@@ -13,15 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ..services.reading import ReadingError, reading_service
 from ..services.reading_media import reading_media
-
-
-async def local_reading_request(request: Request):
-    origin = request.headers.get("origin")
-    dev_origins = {"http://localhost:5173", "http://127.0.0.1:5173"}
-    if request.url.hostname not in {"localhost", "127.0.0.1", "::1"} or (
-        origin and origin not in {str(request.base_url).rstrip("/"), *dev_origins}
-    ) or request.headers.get("sec-fetch-site") == "cross-site" and origin not in dev_origins:
-        raise HTTPException(403, "阅读接口仅允许四野本机页面访问")
+from .local_guard import local_request as local_reading_request
 
 
 reading_router = APIRouter(prefix="/api/reading", tags=["reading"], dependencies=[Depends(local_reading_request)])

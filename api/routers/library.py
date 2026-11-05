@@ -21,6 +21,8 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
+from .local_guard import local_request as _local_request
+
 from ..schemas.library import (
     CollectionBatchInput,
     CollectionCreate,
@@ -35,7 +37,7 @@ from ..schemas.library import (
 )
 from ..services.library_store import LibraryStore, get_library_store
 
-library_router = APIRouter(prefix="/api/library", tags=["library"])
+library_router = APIRouter(prefix="/api/library", tags=["library"], dependencies=[Depends(_local_request)])
 
 
 def _bad_request(error: ValueError) -> HTTPException:

@@ -121,7 +121,7 @@ async def test_cancel_endpoint_handles_pending_and_unknown_jobs(store, monkeypat
     monkeypatch.setattr("api.routers.search.favorites_job_manager", manager)
     app = FastAPI()
     app.include_router(search_router)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://127.0.0.1:8080") as client:
         response = await client.post(f"/api/search/favorites/jobs/{job.job_id}/cancel")
         assert response.status_code == 200
         assert response.json()["platforms"]["xhs"]["status"] == "cancelled"
