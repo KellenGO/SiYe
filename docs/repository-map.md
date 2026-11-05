@@ -25,6 +25,16 @@
 
 V1.2 发布状态与尚待验收的边界见 [发布检查](releases/v1.2.0.md)。当前 `dist/` 仍是旧版本日常入口，准备候选包时使用独立目录，不覆盖已有运行环境。
 
+## 前端构建与缓存
+
+源码模式与打包版都由 `api/main.py` 直接服务 `webui/dist`（`resource_path("webui", "dist")`）。
+
+- **`index.html` 必须 no-cache**：它写的是带内容 hash 的资源名。一旦被浏览器缓存住，
+  重新 `npm run build` 后用户仍会加载旧 bundle —— 表现是"改了代码但界面没变"，
+  而且普通刷新不一定管用（`FileResponse` 默认带 ETag/Last-Modified，会走协商缓存）。
+  排查这类问题先看服务端返回的 `cache-control`，别急着怀疑构建。
+- `assets/*` 的文件名自带 hash，按长缓存（`immutable`）返回。
+
 ## 本地瘦身
 
 使用 `.venv/Scripts/python.exe scripts/cleanup_workspace.py` 预览；加 `--apply` 才删除白名单内的已退役构建、旧安装器副本、pytest 临时目录和源码编译缓存。加 `--include-browser-caches` 才纳入四个平台 profile 的下载及渲染缓存。不要用 `git clean -fdx` 替代此入口。

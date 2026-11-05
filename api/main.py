@@ -148,6 +148,25 @@ def _frontend_file(path: str) -> Path | None:
     return candidate if candidate.is_file() else None
 
 
+def _static_response(file: Path, requested: str):
+    """带正确的缓存策略返回静态文件。
+
+    `index.html` **必须** no-cache：它里面写的是带 hash 的资源名，一旦被浏览器
+    缓存住，重新构建后用户仍然加载旧的 bundle —— 表现就是"改了代码但界面没变"，
+    而且刷新页面也不一定管用（`FileResponse` 默认带 ETag/Last-Modified，
+    浏览器会走协商缓存）。
+
+    `assets/*` 的文件名自带内容 hash，可以放心长缓存。
+    """
+    is_entry = file.name == "index.html"
+    headers = (
+        {"Cache-Control": "no-cache, must-revalidate"}
+        if is_entry or not requested
+        else {"Cache-Control": "public, max-age=31536000, immutable"}
+    )
+    return FileResponse(file, headers=headers)
+
+
 def _serve_frontend(path: str = ""):
     """Serve build files and fall back to index.html for SPA routes only."""
     if path == "api" or path.startswith("api/"):
@@ -158,7 +177,7 @@ def _serve_frontend(path: str = ""):
     index_path = _frontend_file("index.html")
     requested_file = _frontend_file(path) if path else index_path
     if requested_file:
-        return FileResponse(requested_file)
+        return _static_response(requested_file, path)
 
     # Missing assets must not be mistaken for an SPA route. Plain paths such
     # as /accounts remain eligible for the React entry point.
@@ -167,7 +186,7 @@ def _serve_frontend(path: str = ""):
     if Path(path).suffix:
         raise HTTPException(status_code=404, detail="Static file not found")
     if index_path:
-        return FileResponse(index_path)
+        return _static_response(index_path, path)
     if path:
         raise HTTPException(status_code=404, detail="WebUI build not found")
     return {

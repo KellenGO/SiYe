@@ -47,3 +47,20 @@ def test_missing_production_build_is_explicit(monkeypatch, tmp_path):
     assert response.status_code == 200
     assert "npm run build" in response.json()["note"]
     assert client.get("/accounts").status_code == 404
+
+
+def test_index_is_not_cached_but_hashed_assets_are(monkeypatch, tmp_path):
+    """`index.html` 必须 no-cache，`assets/*` 可以长缓存。
+
+    这是"改了代码但界面没变"的根因：index.html 里写的是带 hash 的资源名，
+    它一旦被浏览器缓存住，重新构建后用户仍然加载旧 bundle —— 刷新页面也不一定
+    管用（FileResponse 默认带 ETag/Last-Modified，会走协商缓存）。
+    """
+    client = _client_with_dist(monkeypatch, tmp_path)
+    index = client.get("/")
+    assert index.status_code == 200
+    assert "no-cache" in index.headers.get("cache-control", "")
+
+    spa = client.get("/accounts")
+    assert spa.status_code == 200
+    assert "no-cache" in spa.headers.get("cache-control", "")
