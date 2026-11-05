@@ -80,7 +80,7 @@
     "redo": "Redo",
     "readOnly": "Archived · read only",
     "saving": "Saving…",
-    "saveFailed": "Save failed · draft kept",
+    "saveFailed": "Saved locally · will retry",
     "unsaved": "Waiting to save…",
     "saved": "Saved locally",
     "showLatest": "View latest note",

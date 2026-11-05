@@ -30,7 +30,7 @@ function useSpacesState() {
   const flushAll = useCallback(async () => {
     for (const current of sessions.current.values()) {
       if (!await current.flush()) {
-        toast.error(current.error || "笔记尚未保存，请先重试保存");
+        toast.error("相关数据已暂存，稍后会自动重试。");
         return false;
       }
     }

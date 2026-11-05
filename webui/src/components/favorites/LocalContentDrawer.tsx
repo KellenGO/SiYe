@@ -219,7 +219,7 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
               setNoteError("");
               try {
                 const saved = await library.saveNote(key, note);
-                if (!saved) setNoteError("备注未保存，请重试。输入内容已保留。");
+                if (!saved) setNoteError("相关数据已暂存，稍后会自动重试。");
                 return saved;
               } finally { setSaving(false); }
             }} />

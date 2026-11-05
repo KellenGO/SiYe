@@ -224,12 +224,18 @@ def test_home_view_hides_per_platform_fetch_button():
     assert "onPlatformFetch={!isHome && displayJobResponse ? handleFetchPlatform : undefined}" in _SEARCH_PAGE
 
 
-def test_empty_result_counts_as_failure_and_surfaces_reason():
-    """没搜到东西也算搜索失败：进顶部提示那条链路，并优先用平台给的安全原因。"""
+def test_empty_result_counts_as_failure_and_surfaces_a_code():
+    """没搜到东西也算搜索失败：进顶部提示那条链路，并显示稳定的错误码。
+
+    2026-11-05 用户反馈：用户只需要知道"哪个平台失败了"，不需要读一段原因。
+    原因改成按错误码索引（`lib/failureCodes.ts`），主要是给我们自己排障用。
+    """
     assert '"empty"' in _SEARCH_PAGE.split("FAILED_PLATFORM_STATUSES = [")[1].split("]")[0]
-    assert 'empty: "search.reasonEmpty"' in _SEARCH_PAGE
-    assert "info.error_summary" in _SEARCH_PAGE
-    assert _zh("search.reasonEmpty")
+    assert "failureCodeFor" in _SEARCH_PAGE
+    # 错误码表要覆盖 empty，并给出可读的排查说明。
+    codes = (_ROOT / "lib" / "failureCodes.ts").read_text(encoding="utf-8")
+    assert "empty: \"S05\"" in codes
+    assert "S05" in codes and "duplicate_count" in codes
 
 
 def test_webui_i18n_back_home_keys_exist():
@@ -720,13 +726,13 @@ def test_i18n_declares_supported_languages_and_uses_resolved_language():
     assert "resolvedLanguage" in source, "`<html lang>` 必须用 resolvedLanguage"
 
 
-def test_language_switch_is_mounted_somewhere():
-    """组件存在但没人 import 等于没有切换入口（`mediacrawler_language` 永不写入）。"""
-    mounted = [
-        path for path in _ROOT.rglob("*.tsx")
-        if path.name != "LanguageSwitch.tsx"
-        and "LanguageSwitch" in path.read_text(encoding="utf-8")
-        and "import" in path.read_text(encoding="utf-8")
-        and "./LanguageSwitch" in path.read_text(encoding="utf-8")
-    ]
-    assert mounted, "LanguageSwitch 没有被任何界面挂载，用户无法切换语言"
+def test_language_switch_stays_unmounted_while_ui_is_chinese_only():
+    """界面文案目前只有中文，**不要**露出语言切换入口。
+
+    露出来会让用户切到"半中半英"的界面 —— 比只有中文更糟。组件与 en-US
+    语言包保留在仓库里，文案补齐后再挂回去（`i18n/index.ts` 已声明 supportedLngs，
+    挂载点写在 `Header.tsx` 的注释里）。
+    """
+    header = (_ROOT / "components" / "layout" / "Header.tsx").read_text(encoding="utf-8")
+    assert "LanguageSwitch" not in header.split("import")[-1] or "<LanguageSwitch" not in header
+    assert "<LanguageSwitch" not in header, "界面只有中文时不应挂出语言切换入口"

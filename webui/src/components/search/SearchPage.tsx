@@ -12,6 +12,7 @@ import { useSearchExperience } from "@/hooks/useSearchExperience";
 import { usePlatformLimits } from "@/hooks/usePlatformLimits";
 import type { PlatformSlug } from "@/types/search";
 import { PLATFORM_LABELS } from "@/types/search";
+import { failureCodeFor, failureCodeInfo } from "@/lib/failureCodes";
 import { useBookmarks } from "@/hooks/useBookmarks";
 import { TOOL_BUTTON } from "./ResultTools";
 import { useHomePreferencesStore } from "@/store/homePreferencesStore";
@@ -51,14 +52,6 @@ function rememberHandledFailure(jobId: string, platform: string): void {
   }
 }
 
-/** 弹窗里陈述的原因（不吓人、不复述 error_summary 原文）—— 平台自带安全原因时优先用它的。 */
-const FAILURE_REASON_KEYS: Record<string, string> = {
-  login_required: "search.reasonLoginRequired",
-  failed: "search.reasonFailed",
-  timed_out: "search.reasonTimedOut",
-  rate_limited: "search.reasonRateLimited",
-  empty: "search.reasonEmpty",
-};
 
 /**
  * 搜索页主体从搜索框开始，下面直接呈现状态与搜索结果。
@@ -212,18 +205,23 @@ export function SearchPage({ active = true, homeRequested = false, onViewChange,
     fresh.forEach((platform) => {
       const label = PLATFORM_LABELS[platform] || platform;
       const info = job.platforms[platform];
-      // 平台自带的安全原因（例如抖音"疑似平台风控"）优先，比通用文案有信息量。
-      const reason = info.error_summary
-        || t(FAILURE_REASON_KEYS[info.status] ?? "search.reasonFailed");
-      toast(t("search.platformFailedToast", { platform: label, reason }), {
-        description: wasChecked.includes(platform)
-          ? t("search.autoUnchecked", { platform: label })
-          : t("search.failedNotChecked", { platform: label }),
+      // 只报「哪个平台 + 错误码」。具体原因在 lib/failureCodes.ts 里按码索引，
+      // 那是给开发和排障看的，不该占用户的屏幕。
+      const code = failureCodeFor(info.status);
+      const codeInfo = failureCodeInfo(code);
+      const headline = code ? `${label} 失败 · ${code}` : `${label} 失败`;
+      toast(headline, {
+        description: [
+          codeInfo?.short,
+          wasChecked.includes(platform)
+            ? t("search.autoUnchecked", { platform: label })
+            : t("search.failedNotChecked", { platform: label }),
+        ].filter(Boolean).join("　·　"),
         position: "top-center",
         duration: 6000,
         className: "siye-toast-info",
         action:
-          job.platforms[platform].status === "login_required" && onNavigateAccounts
+          info.status === "login_required" && onNavigateAccounts
             ? { label: `${t("search.goAccounts")} →`, onClick: handleGoAccounts }
             : undefined,
       });

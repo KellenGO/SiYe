@@ -390,6 +390,38 @@ class LibraryStore(SqliteStoreBase):
             )
             return cursor.rowcount > 0
 
+    def snapshot_items(self, keys: Sequence[Tuple[str, str]]) -> List[Dict[str, Any]]:
+        """导出这些条目的完整快照，供前端「撤销」在 5 秒窗口内原样写回。
+
+        必须包含备注、收藏夹归属与默认/稍后再看标记 —— 只恢复标题和链接的话，
+        用户撤销回来会发现备注没了、收藏夹归属也没了。
+
+        返回的条目直接喂给 `add_items()` 即可（字段名与它期望的一致）。
+        """
+        if not keys:
+            return []
+        snapshots: List[Dict[str, Any]] = []
+        with self._conn() as conn:
+            for platform, content_id in keys:
+                row = conn.execute(
+                    "SELECT * FROM items WHERE platform = ? AND content_id = ?",
+                    (platform, content_id),
+                ).fetchone()
+                if row is None:
+                    continue
+                item = self._row_to_item(row, self._collections_of(conn, int(row["id"])))
+                snapshots.append({
+                    "result": item["result"],
+                    "note": item["note"],
+                    "saved_at": item["saved_at"],
+                    "fetched_at": item["fetched_at"],
+                    "collection_ids": [entry["id"] for entry in item["collections"]],
+                    "in_default": item["in_default"],
+                    "watch_later": item["watch_later"],
+                    "saved": item["saved"],
+                })
+        return snapshots
+
     def remove_items(self, keys: Sequence[Tuple[str, str]]) -> int:
         """取消收藏（独立操作）。同时解除收藏夹归属，内容本体删除。"""
         if not keys:

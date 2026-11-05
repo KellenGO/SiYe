@@ -326,11 +326,31 @@ export async function removeItemsFromSystemCollection(
   await axios.delete(`${LIBRARY_API_BASE}/system-collections/${collection}/items`, { data: { keys: parsed } });
 }
 
-export async function removeItems(keys: string[]): Promise<void> {
-  if (!keys.length) return;
+/** 撤销窗口：先本地隐藏，到点才真正删除。 */
+export const SOFT_DELETE_MS = 5000;
+
+/** 撤销删除用的条目快照（服务端原样返回，含备注与收藏夹归属）。 */
+export type RestoreEntry = Record<string, unknown>;
+
+/**
+ * 删除条目，并拿回可用于撤销的快照。
+ *
+ * 撤销**不在服务端做延迟删除**：那样"已删除"会变成一段不确定状态，还得维护
+ * 定时任务与清理逻辑。改为前端先本地隐藏、5 秒后才真正删除；这 5 秒内用户
+ * 点撤销，就用返回的快照原样写回。
+ */
+export async function removeItems(keys: string[]): Promise<RestoreEntry[]> {
+  if (!keys.length) return [];
   const parsed = keys.map(splitKey).filter((key): key is { platform: string; content_id: string } => key !== null);
-  if (!parsed.length) return;
-  await axios.delete(`${LIBRARY_API_BASE}/items`, { data: { keys: parsed } });
+  if (!parsed.length) return [];
+  const { data } = await axios.delete(`${LIBRARY_API_BASE}/items`, { data: { keys: parsed } });
+  return Array.isArray(data?.restore) ? (data.restore as RestoreEntry[]) : [];
+}
+
+/** 把删除时拿到的快照写回（撤销窗口内调用）。 */
+export async function restoreItems(entries: RestoreEntry[]): Promise<void> {
+  if (!entries.length) return;
+  await axios.post(`${LIBRARY_API_BASE}/items/restore`, { entries });
 }
 
 export async function updateNote(key: string, note: string): Promise<void> {

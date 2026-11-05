@@ -386,10 +386,10 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
       />
       <ConfirmDialog
         open={confirmDeleteCount > 0}
-        title={`从本机彻底删除这 ${confirmDeleteCount} 条收藏？`}
+        title={`从本机删除这 ${confirmDeleteCount} 条收藏？`}
         description="会同时移除它们在所有收藏夹里的归属。平台上的内容不受影响。"
-        hint="此操作不可撤销。"
-        confirmLabel="彻底删除"
+        hint="删除后 5 秒内可以在提示里撤销。"
+        confirmLabel="删除"
         danger
         busy={moving}
         onConfirm={() => void batchDelete()}

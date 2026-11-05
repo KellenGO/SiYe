@@ -47,6 +47,36 @@ class PlatformWorkerSupervisor:
         if self._reaper_task is None or self._reaper_task.done():
             self._reaper_task = asyncio.create_task(self._idle_reaper())
 
+    async def warm(self, platforms) -> None:
+        """开屏预热：在用户输入关键词之前把各平台 worker 进程先起好。
+
+        冷启动要起一个 Python 解释器（数十~数百毫秒，四个平台叠加就是可感知的
+        "第一次搜特别慢"）。这里只预启动**进程**，不发请求、不碰浏览器、
+        不占搜索租约 —— 真正的搜索仍然走 `submit()`，命中已有的常驻进程。
+        失败一律吞掉：预热是尽力而为，不能因为它让启动报错。
+        """
+        for platform in platforms:
+            try:
+                async with self._lock:
+                    existing = self._workers.get(platform)
+                    if existing is not None and existing.proc.returncode is None:
+                        continue
+                worker = await self._spawn(platform)
+                async with self._lock:
+                    current = self._workers.get(platform)
+                    if current is not None and current.proc.returncode is None:
+                        # 并发路径抢先建好了，丢弃这一个。
+                        try:
+                            if worker.proc.returncode is None:
+                                worker.proc.kill()
+                        except Exception:
+                            pass
+                        await cancel_task_quietly(worker.stderr_task)
+                        continue
+                    self._workers[platform] = worker
+            except Exception as error:  # 预热失败不影响任何功能
+                logger.info("worker warm-up skipped for %s: %s", platform, type(error).__name__)
+
     async def _spawn(self, platform: str) -> "_ResidentWorker":
         # The supervisor is the single source of truth for the max-request
         # 把上限写进子进程 env，worker 与 supervisor 绝不各自维护不一致的上限。

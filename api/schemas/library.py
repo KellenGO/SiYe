@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class LibraryKey(BaseModel):
@@ -45,6 +45,30 @@ class LibraryKeysInput(BaseModel):
     def not_empty(cls, value: List[LibraryKey]) -> List[LibraryKey]:
         if not value:
             raise ValueError("keys 不能为空")
+        return value
+
+
+class RestoreEntry(BaseModel):
+    """撤销删除时原样写回的条目（服务端 delete 返回的 restore 项）。"""
+    model_config = ConfigDict(extra="forbid")
+    result: Dict[str, Any]
+    note: str = ""
+    saved_at: Optional[str] = None
+    fetched_at: Optional[str] = None
+    collection_ids: List[int] = Field(default_factory=list)
+    in_default: bool = False
+    watch_later: bool = False
+    saved: bool = False
+
+
+class RestoreInput(BaseModel):
+    entries: List[RestoreEntry] = Field(default_factory=list, max_length=500)
+
+    @field_validator("entries")
+    @classmethod
+    def not_empty(cls, value: List[RestoreEntry]) -> List[RestoreEntry]:
+        if not value:
+            raise ValueError("entries 不能为空")
         return value
 
 

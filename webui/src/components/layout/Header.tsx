@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { ChevronRight } from 'lucide-react'
 import { ThemeToggle } from './ThemeToggle'
-import { LanguageSwitch } from './LanguageSwitch'
 import { useAccounts } from '@/hooks/useAccounts'
 import type { AccountStatusInfo, LoginBadge } from '@/lib/accounts'
 import {
@@ -290,9 +289,9 @@ export function Header({ viewMode, settingsSection, onNavigate }: HeaderProps) {
             {t('header.backHome')}
           </button>}
 
-          {/* 语言切换：组件一直存在但从未被挂载，导致界面里根本没有切换入口，
-              `mediacrawler_language` 也从未被写入过。 */}
-          <LanguageSwitch />
+          {/* 语言切换入口暂时不挂：界面文案目前只有中文，露出一个切到英文的开关
+              会让用户进入"半中半英"的界面。组件与 en-US 语言包保留在仓库里，
+              文案补齐后在这里挂回去即可（i18n/index.ts 已声明 supportedLngs）。 */}
           <ThemeToggle />
         </div>
       </div>

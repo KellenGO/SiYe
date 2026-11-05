@@ -730,8 +730,39 @@ html.dark .btn.primary { color: #101525; }
 .wordmark b { color: var(--siye-ink); font-size: 56px; letter-spacing: -2px; font-weight: 700; line-height: 1.15; }
 .swoosh { display: block; width: 136px; height: 14.4px; margin: 6px auto 0; }
 .search-area { margin-top: 34px; }
-.search-box { min-height: 60px; border: 1px solid var(--siye-brand); border-radius: 99px; display: flex; align-items: center; padding: 7px 8px 7px 24px; gap: 14px; background: var(--siye-bg); transition: box-shadow .15s; }
-.search-box:focus-within { box-shadow: 0 0 0 4px var(--siye-brand-soft); }
+.search-box {
+  position: relative; isolation: isolate;
+  min-height: 60px; border: 1px solid var(--siye-brand); border-radius: 99px;
+  display: flex; align-items: center; padding: 7px 8px 7px 24px; gap: 14px;
+  background: var(--siye-bg);
+  transition: box-shadow .22s ease-out, border-color .22s ease-out, transform .22s ease-out;
+}
+/* 悬停时轻微抬起：只动 transform / 阴影，不触发重排。 */
+.search-box:hover { box-shadow: 0 6px 20px -12px var(--siye-brand); }
+.search-box:focus-within { box-shadow: 0 0 0 4px var(--siye-brand-soft), 0 8px 26px -18px var(--siye-brand); }
+/* 聚焦时一道柔光从左侧扫过（参考视频站搜索框的聚焦动效）。
+   用伪元素 + transform 平移，播放一次即停，不常驻占用合成层。 */
+.search-box::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  z-index: -1; opacity: 0;
+  background: linear-gradient(100deg, transparent 20%, var(--siye-brand-soft) 45%, transparent 70%);
+  background-size: 220% 100%; background-position: 120% 0;
+}
+.search-box:focus-within::after { animation: search-sheen .72s ease-out 1; }
+@keyframes search-sheen {
+  0%   { opacity: 0; background-position: 120% 0; }
+  35%  { opacity: 1; }
+  100% { opacity: 0; background-position: -40% 0; }
+}
+/* 提交按钮：悬停放大一点、按下回弹，给"按下去了"的反馈。 */
+.search-submit { transition: transform .16s ease-out, box-shadow .16s ease-out; }
+.search-submit:hover { transform: scale(1.06); box-shadow: 0 6px 18px -10px var(--siye-brand); }
+.search-submit:active { transform: scale(.96); }
+@media (prefers-reduced-motion: reduce) {
+  .search-box, .search-submit { transition: none; }
+  .search-box:focus-within::after { animation: none; }
+  .search-box:hover, .search-submit:hover, .search-submit:active { transform: none; }
+}
 .search-input-wrap { position: relative; min-width: 0; flex: 1; }
 .search-leading { width: 21px; height: 21px; display: grid; place-items: center; flex: 0 0 21px; color: var(--siye-muted); }
 .search-leading > svg, .search-leading > button, .search-leading > button svg { width: 19px; height: 19px; }
@@ -2265,6 +2296,16 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
 }
 
 .content-toolbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; flex-wrap: wrap; }
+/* 排序切换：与「列表 / 网格」同一套滑动语言 —— 一个滑块在三个选项间平移，
+   而不是原生下拉。滑块位置用 transform 过渡，不触发重排。 */
+.sort-switch { position: relative; display: inline-grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 2px; border: 1px solid var(--siye-line); border-radius: 7px; background: var(--siye-soft); }
+.sort-switch::before { content: ""; position: absolute; top: 2px; bottom: 2px; left: 2px; width: calc((100% - 4px) / 3); border-radius: 5px; background: var(--siye-bg); box-shadow: 0 1px 3px #20294514; transform: translateX(calc(var(--sort-index, 0) * 100%)); transition: transform .18s ease-out; }
+.sort-switch button { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 30px; padding: 4px 11px; border-radius: 5px; color: var(--siye-muted); font-size: 12px; white-space: nowrap; transition: color .15s ease-out; }
+.sort-switch button[aria-pressed="true"] { color: var(--siye-brand-ink); }
+.sort-switch button:focus-visible { outline: 2px solid var(--siye-brand); outline-offset: 2px; }
+@media (pointer: coarse) { .sort-switch button { min-height: 40px; } }
+@media (prefers-reduced-motion: reduce) { .sort-switch::before { transition: none; } }
+
 .content-view-switch { position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 2px; border: 1px solid var(--siye-line); border-radius: 7px; background: var(--siye-soft); }
 .content-view-switch::before { content: ""; position: absolute; top: 2px; bottom: 2px; left: 2px; width: calc(50% - 2px); border-radius: 5px; background: var(--siye-bg); box-shadow: 0 1px 3px #20294514; transition: transform .18s ease-out; }
 .content-view-switch[data-view="grid"]::before { transform: translateX(100%); }

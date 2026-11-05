@@ -5,6 +5,7 @@
  */
 
 import { test } from "node:test";
+import { failureCodeFor, failureCodeInfo } from "../src/lib/failureCodes.js";
 import assert from "node:assert/strict";
 
 import {
@@ -1391,4 +1392,28 @@ test("aggregateSortResults: 单结果平台与满额平台在 rank 分上取中�
   });
   const soloIndex = sorted.findIndex((r) => r.content_id === "solo");
   assert.ok(soloIndex <= 1, `单结果平台的名次不应落到底部，实际第 ${soloIndex + 1} 位`);
+});
+
+// ── 平台失败错误码 ────────────────────────────────────────────────────
+
+test("failureCodeFor: 失败类状态都有稳定错误码，成功类没有", () => {
+  assert.equal(failureCodeFor("failed"), "S01");
+  assert.equal(failureCodeFor("timed_out"), "S02");
+  assert.equal(failureCodeFor("rate_limited"), "S03");
+  assert.equal(failureCodeFor("login_required"), "S04");
+  assert.equal(failureCodeFor("empty"), "S05");
+  assert.equal(failureCodeFor("succeeded"), null);
+  assert.equal(failureCodeFor("running"), null);
+});
+
+test("failureCodeInfo: 每个码都能查到可读说明，未知码返回 null", () => {
+  for (const status of ["failed", "timed_out", "rate_limited", "login_required", "empty"] as const) {
+    const code = failureCodeFor(status)!;
+    const info = failureCodeInfo(code);
+    assert.ok(info, `${status} 的错误码 ${code} 缺少说明`);
+    assert.ok(info!.short.length > 0);
+    assert.ok(info!.detail.length > 20, "排查说明要有实际信息量");
+  }
+  assert.equal(failureCodeInfo("S99"), null);
+  assert.equal(failureCodeInfo(null), null);
 });

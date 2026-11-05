@@ -80,7 +80,7 @@
     "redo": "重做",
     "readOnly": "已归档 · 只读",
     "saving": "保存中…",
-    "saveFailed": "保存失败 · 草稿已保留",
+    "saveFailed": "已暂存 · 稍后自动重试",
     "unsaved": "等待保存…",
     "saved": "已保存到本机",
     "showLatest": "查看最新笔记",

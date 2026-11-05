@@ -63,8 +63,15 @@ const ALL_TABS: { key: TabKey; label: string }[] = [
 const SORT_MODES: { key: SearchSortMode; label: string }[] = [
   { key: "default", label: "综合" },
   { key: "latest", label: "最新" },
-  { key: "engagement", label: "互动最多" },
+  { key: "engagement", label: "互动" },
 ];
+
+/** 悬停提示：用户不必记「综合」是怎么算的，但想了解时能一眼看到。 */
+const SORT_HINTS: Record<SearchSortMode, string> = {
+  default: "综合：关键词相关度、平台内名次、发布时间与互动量加权",
+  latest: "最新：按发布时间从新到旧，没有时间的排在最后",
+  engagement: "互动：点赞、评论、收藏、播放等互动量从高到低",
+};
 
 export function ResultTabs({
   active = true,
@@ -244,7 +251,6 @@ export function ResultTabs({
   const selectableResults = filteredResults.filter(result => !result.question_answers);
   const hasQuestions = filteredResults.some(result => result.question_answers);
   const allSelected = selectableResults.length > 0 && selectableResults.every(result => selected.has(groupKey(result)));
-  const selectClass = "field select";
 
   return (
     <div className="results-block" ref={resultBlock} tabIndex={-1}>
@@ -270,7 +276,26 @@ export function ResultTabs({
 
       <div className="toolbar">
         <div className="toolbar-left">
-          {onSortModeChange && <label><span className="sr-only">结果排序</span><select className={selectClass} aria-label="排序方式" value={sortMode} onChange={(event) => onSortModeChange(event.target.value as SearchSortMode)}>{SORT_MODES.map((mode) => <option key={mode.key} value={mode.key}>{mode.label === "综合" ? "综合排序" : mode.label}</option>)}</select></label>}
+          {onSortModeChange && (
+            <div
+              className="sort-switch"
+              role="group"
+              aria-label="结果排序"
+              style={{ ["--sort-index" as string]: Math.max(0, SORT_MODES.findIndex((mode) => mode.key === sortMode)) }}
+            >
+              {SORT_MODES.map((mode) => (
+                <button
+                  key={mode.key}
+                  type="button"
+                  aria-pressed={sortMode === mode.key}
+                  title={SORT_HINTS[mode.key]}
+                  onClick={() => onSortModeChange(mode.key)}
+                >
+                  {mode.label}
+                </button>
+              ))}
+            </div>
+          )}
           <input aria-label="结果内关键词" className="field filter-input" maxLength={200} placeholder={`在${savedView ? "收藏" : "结果"}中查找…`} value={filters.query} onChange={(event) => setFilters({ ...filters, query: event.target.value })} />
           {filters.query && <button type="button" className="text-link" onClick={() => setFilters({ ...filters, query: "" })}>清除筛选</button>}
         </div>

@@ -24,6 +24,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from .local_guard import local_request as _local_request
 
 from ..schemas.library import (
+    RestoreInput,
     CollectionBatchInput,
     CollectionCreate,
     CollectionInfoUpdate,
@@ -139,9 +140,30 @@ def remove_items(
     payload: LibraryKeysInput,
     store: LibraryStore = Depends(get_library_store),
 ) -> Dict[str, Any]:
-    """彻底删除：取消收藏和「从本机彻底删除」是同一个动作。"""
-    removed = store.remove_items([(key.platform, key.content_id) for key in payload.keys])
-    return {"removed": removed}
+    """彻底删除：取消收藏和「从本机彻底删除」是同一个动作。
+
+    额外返回被删条目的原文快照，供前端「撤销」在 5 秒窗口内原样写回
+    （备注与所属收藏夹一并保留）。不在服务端做延迟删除：那样会让"已删除"
+    变成一段不确定状态，得多维护一份定时任务与清理逻辑。
+    """
+    keys = [(key.platform, key.content_id) for key in payload.keys]
+    restore = store.snapshot_items(keys)
+    removed = store.remove_items(keys)
+    return {"removed": removed, "restore": restore}
+
+
+@library_router.post("/items/restore")
+def restore_items(
+    payload: RestoreInput,
+    store: LibraryStore = Depends(get_library_store),
+) -> Dict[str, Any]:
+    """撤销删除：把 `DELETE /items` 返回的 restore 快照原样写回。
+
+    前端只在 5 秒窗口内调用；窗口结束后快照已丢弃，不会再有"幽灵恢复"。
+    写回走 `add_items`，备注、收藏夹归属与默认/稍后再看标记一并保留。
+    """
+    stats = store.add_items(entry.model_dump() for entry in payload.entries)
+    return {"restored": stats.get("added", 0) + stats.get("updated", 0), **stats}
 
 
 @library_router.put("/system-collections/{collection}/items")

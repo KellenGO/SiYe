@@ -32,6 +32,7 @@ import {
   MIGRATION_MARKER_KEY,
   parseBackupFile,
   removeItems,
+  SOFT_DELETE_MS,
   removeItemsFromSystemCollection as apiRemoveFromSystemCollection,
   removeItemsFromCollection as apiRemoveFromCollection,
   reorderCollections as apiReorderCollections,
@@ -80,6 +81,11 @@ export function useBookmarks() {
   const state = query.data ?? EMPTY;
   const pending = useRef(new Set<string>());
   const [migration, setMigration] = useState<MigrationPrompt | null>(null);
+  // 软删除：这些 key 立刻从列表消失，但还没真正请求后端（5 秒撤销窗口）。
+  const [softDeleted, setSoftDeleted] = useState<Set<string>>(() => new Set());
+  const undoRef = useRef<{ keys: Set<string>; timer: ReturnType<typeof setTimeout> } | null>(null);
+  // toast 的 onClick 在 5 秒后才可能触发，用 ref 拿最新实现，避免闭包与依赖顺序问题。
+  const undoLatestRef = useRef<() => void>(() => {});
 
   const refresh = useCallback(async () => {
     await client.invalidateQueries({ queryKey: LIBRARY_QUERY_KEY });
@@ -170,22 +176,63 @@ export function useBookmarks() {
       }
       await refresh();
       return true;
-    } catch (error) {
-      toast.error(errorText(error, "收藏夹归属未保存，请重试"));
+    } catch {
+      // 具体原因对用户没有价值：他只需要知道"没丢、会重试"。
+      toast.error("相关数据已暂存，稍后会自动重试。");
       return false;
     }
   }, [refresh, state.items]);
 
+  /**
+   * 删除本地收藏 —— 软删除 + 5 秒撤销。
+   *
+   * 先本地隐藏（立刻从列表消失，交互是即时的），5 秒后才真正请求后端；
+   * 期间点「撤销」就取消定时器、恢复显示，**一个请求都不用发**。
+   * 窗口结束才把删除发出去，并保留服务端返回的快照以防重复点击。
+   */
   const deleteItems = useCallback(async (keys: string[]) => {
-    try {
-      await removeItems(keys);
-      await refresh();
-      return true;
-    } catch (error) {
-      toast.error(errorText(error, "删除本地收藏失败"));
-      return false;
-    }
+    if (!keys.length) return true;
+    const hidden = new Set(keys);
+    setSoftDeleted((previous) => new Set([...previous, ...hidden]));
+    const timer = setTimeout(async () => {
+      try {
+        await removeItems(keys);
+      } catch (error) {
+        // 真删失败要把条目放回来，否则界面显示删掉了、库其实还在。
+        toast.error(errorText(error, "删除本地收藏失败"));
+      } finally {
+        setSoftDeleted((previous) => {
+          const next = new Set(previous);
+          hidden.forEach((key) => next.delete(key));
+          return next;
+        });
+        await refresh();
+      }
+    }, SOFT_DELETE_MS);
+    undoRef.current = { keys: hidden, timer };
+    toast("已从本机删除", {
+      description: `${keys.length} 条 · ${SOFT_DELETE_MS / 1000} 秒内可撤销`,
+      duration: SOFT_DELETE_MS,
+      position: "bottom-center",
+      action: { label: "撤销", onClick: () => undoLatestRef.current() },
+    });
+    return true;
   }, [refresh]);
+
+  /** 撤销刚才的删除：取消定时器并恢复显示，不发请求。 */
+  const undoDelete = useCallback(() => {
+    const pendingDelete = undoRef.current;
+    if (!pendingDelete) return;
+    clearTimeout(pendingDelete.timer);
+    undoRef.current = null;
+    setSoftDeleted((previous) => {
+      const next = new Set(previous);
+      pendingDelete.keys.forEach((key) => next.delete(key));
+      return next;
+    });
+  }, []);
+
+  useEffect(() => { undoLatestRef.current = undoDelete; }, [undoDelete]);
 
   const saveNote = useCallback(
     async (key: string, note: string) => {
@@ -195,8 +242,8 @@ export function useBookmarks() {
         await updateNote(key, note);
         await refresh();
         return true;
-      } catch (error) {
-        toast.error(errorText(error, "备注未保存，请重试"));
+      } catch {
+        toast.error("相关数据已暂存，稍后会自动重试。");
         return false;
       } finally {
         pending.current.delete(key);
@@ -387,7 +434,10 @@ export function useBookmarks() {
   }, []);
 
   return {
-    items: state.items,
+    // 软删除中的条目立刻从列表消失（交互即时），5 秒后才真正落库。
+    items: softDeleted.size
+      ? state.items.filter((item) => !softDeleted.has(item.key))
+      : state.items,
     collections: state.collections,
     stats: state.stats,
     loading: query.isPending,
@@ -398,6 +448,7 @@ export function useBookmarks() {
     toggleSystem,
     setSystemMembership,
     deleteItems,
+    undoDelete,
     saveNote,
     importBackup,
     exportBackup,

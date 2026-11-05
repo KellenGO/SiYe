@@ -21,6 +21,7 @@ SiYe WebUI API Server
 Start command: uvicorn api.main:app --port 8080 --reload
 Or: python -m api.main
 """
+import asyncio
 import uvicorn
 from pathlib import Path
 from fastapi import FastAPI
@@ -55,6 +56,25 @@ async def _prepare_browser_runtime():
     from base.browser_runtime import configure_browser_temp
 
     configure_browser_temp()
+
+
+@app.on_event("startup")
+async def _warm_search_workers():
+    """开屏预热平台 worker：把"第一次搜索特别慢"的那段进程启动挪到用户输入之前。
+
+    尽力而为 —— 预热失败不影响任何功能（真正的搜索会自己补启动）。
+    用后台任务，不阻塞 startup：健康检查与首屏要立刻可用。
+    """
+    from .services.search_job_manager import search_job_manager
+    from aggregate_search.models import PLATFORM_SLUGS
+
+    async def warm() -> None:
+        try:
+            await search_job_manager.supervisor.warm(PLATFORM_SLUGS)
+        except Exception:  # noqa: BLE001 - 预热永远不能影响启动
+            pass
+
+    app.state.warm_task = asyncio.create_task(warm())
 
 
 @app.on_event("startup")
