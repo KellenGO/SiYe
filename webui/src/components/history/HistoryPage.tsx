@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { History as HistoryIcon, Loader2, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ResultTabs } from "@/components/search/ResultTabs";
 import { useHistory } from "@/hooks/useHistory";
 import { PLATFORM_SLUGS } from "@/lib/platformMeta";
@@ -13,12 +15,17 @@ export function HistoryPage() {
 
   const results = history.views.map((view) => view.result);
 
+  const [confirmClear, setConfirmClear] = useState(false);
+
   const handleClear = async () => {
     if (!history.views.length) return;
-    if (!window.confirm(`确定清空全部 ${history.views.length} 条观看历史吗？此操作不可撤销。`)) return;
+    setConfirmClear(false);
     setBusy(true);
     try {
       await history.clearViews();
+    } catch {
+      // 以前只有 try/finally：失败时列表不动、没有任何提示，用户以为点空了。
+      toast.error("清空观看历史失败，请稍后重试。");
     } finally {
       setBusy(false);
     }
@@ -28,6 +35,8 @@ export function HistoryPage() {
     setBusy(true);
     try {
       await history.deleteView(key);
+    } catch {
+      toast.error("删除这条观看记录失败，请稍后重试。");
     } finally {
       setBusy(false);
     }
@@ -35,6 +44,17 @@ export function HistoryPage() {
 
   return (
     <div className="preview-container history-page">
+      <ConfirmDialog
+        open={confirmClear}
+        title={`清空全部 ${history.views.length} 条观看历史？`}
+        description="只删除本机的观看记录，不会影响平台上的内容，也不会影响你的收藏。"
+        hint="此操作不可撤销。"
+        confirmLabel="清空历史"
+        danger
+        busy={busy}
+        onConfirm={() => void handleClear()}
+        onCancel={() => setConfirmClear(false)}
+      />
       <div className="collection-heading">
         <div className="page-heading">
           <div>
@@ -57,7 +77,7 @@ export function HistoryPage() {
       {history.views.length > 0 && (
         <div className="library-batch" role="status" style={{ marginBottom: "12px" }}>
           <span>已记录 {history.views.length} 条观看</span>
-          <button type="button" className="btn danger" disabled={busy} onClick={() => void handleClear()}>
+          <button type="button" className="btn danger" disabled={busy} onClick={() => setConfirmClear(true)}>
             <Trash2 />清空历史
           </button>
         </div>

@@ -55,6 +55,7 @@ import {
 import type { SettingsSection } from "@/components/layout/Header";
 import { SearchSettings } from "./SearchSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 const API_BASE = ACCOUNTS_API_BASE;
 
@@ -342,15 +343,15 @@ export function AccountsPage({ activeSection, onSectionChange, onNavigateHelp }:
     }
   }, [queryClient]);
 
-  // ── 清除登录状态（二次确认；破坏性操作保留原生 confirm 双重确认） ──
-  const deleteSession = useCallback(async (platform: string) => {
+  // ── 清除登录状态（走项目统一的居中确认框，可标红；样式跟随主题） ──
+  const [deleteTarget, setDeleteTarget] = useState<PlatformSlug | null>(null);
+  const deleteSession = useCallback((platform: string) => {
+    // 只打开确认框；真正删除在确认回调里。
+    setDeleteTarget(platform as PlatformSlug);
+  }, []);
+  const confirmDeleteSession = useCallback(async (platform: PlatformSlug) => {
     const name = PLATFORM_LABELS[platform as keyof typeof PLATFORM_LABELS] || platform;
-    if (!window.confirm(`确定清除 ${name} 的登录状态吗？\n\n此操作会删除本地后台登录会话，之后需要重新同步。此操作不可撤销。`)) {
-      return;
-    }
-    if (!window.confirm(`再次确认：将删除 ${name} 的后台登录数据（仅本地 browser_data 目录内），确定继续？`)) {
-      return;
-    }
+    setDeleteTarget(null);
     setBusyPlatform(platform, "deleting");
     try {
       await axios.delete(`${API_BASE}/${platform}/session`);
@@ -538,6 +539,18 @@ export function AccountsPage({ activeSection, onSectionChange, onNavigateHelp }:
 
   // ── 渲染 ─────────────────────────────────────────────────────────────
   return (
+    <>
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title={`清除 ${PLATFORM_LABELS[deleteTarget as keyof typeof PLATFORM_LABELS] || deleteTarget || ""} 的登录状态？`}
+        description="会删除本地后台登录会话（仅 browser_data 目录内），之后需要重新同步或重新扫码。"
+        hint="此操作不可撤销；你的收藏、观看历史与空间笔记不受影响。"
+        confirmLabel="清除登录状态"
+        danger
+        busy={busy[deleteTarget ?? ""] !== undefined}
+        onConfirm={() => { if (deleteTarget) void confirmDeleteSession(deleteTarget); }}
+        onCancel={() => setDeleteTarget(null)}
+      />
     <div className="accounts-page preview-container">
       <div className="settings-layout">
         <aside className="settings-nav" aria-label="设置分类" ref={settingsNavRef}>
@@ -846,5 +859,6 @@ export function AccountsPage({ activeSection, onSectionChange, onNavigateHelp }:
         </div>
       </div>
     </div>
+    </>
   );
 }

@@ -8,7 +8,7 @@ function useSpacesState() {
   const client = useQueryClient();
   const query = useQuery({ queryKey: ["spaces"], queryFn: api.fetchSpaces, retry: false });
   const sessions = useRef(new Map<number, NoteSession>());
-  const [, setGeneration] = useState(0);
+  const [generation, setGeneration] = useState(0);
   const [busy, setBusy] = useState(false);
   const mutationPending = useRef(false);
   const changed = useCallback(() => setGeneration((value) => value + 1), []);
@@ -64,6 +64,8 @@ function useSpacesState() {
   };
   return { spaces: query.data?.spaces ?? [], activeId: query.data?.active_space_id ?? null,
     loading: query.isPending, error: query.error ? spaceError(query.error) : "", busy, session, flushAll, refresh,
+    // 笔记编辑计数单独走 NotesContext（见下面 SpacesProvider 的注释）。
+    notes: { generation },
     create: (name: string, description: string) => run(() => api.createSpace(name, description)),
     activate: (id: number | null) => run(() => api.activateSpace(id)),
     update: (id: number, name: string, description: string) => run(() => api.updateSpace(id, name, description)),
@@ -77,15 +79,38 @@ function useSpacesState() {
   };
 }
 
-const SpacesContext = createContext<ReturnType<typeof useSpacesState> | null>(null);
+/**
+ * 拆成两个 context：**数据/动作** 与 **笔记编辑状态**。
+ *
+ * 笔记每次按键都会 `changed()`，以前整棵树（含每一张卡片的 SpaceAddButton）
+ * 都挂在同一个 context 上，敲一个字就全量重渲染 —— 100 张卡片时每键约 100 次
+ * 卡片渲染。现在只有真正读笔记状态的组件（笔记面板、保存指示）跟着动。
+ */
+type SpacesState = ReturnType<typeof useSpacesState>;
+type NotesState = { generation: number };
+
+const SpacesContext = createContext<SpacesState | null>(null);
+const NotesContext = createContext<NotesState | null>(null);
+
 export function SpacesProvider({ children }: { children: ReactNode }) {
   const state = useSpacesState();
-  return <SpacesContext.Provider value={state}>{children}</SpacesContext.Provider>;
+  return (
+    <SpacesContext.Provider value={state}>
+      <NotesContext.Provider value={state.notes}>
+        {children}
+      </NotesContext.Provider>
+    </SpacesContext.Provider>
+  );
 }
 export function useSpaces() {
   const state = useContext(SpacesContext);
   if (!state) throw new Error("SpacesProvider is required");
   return state;
+}
+
+/** 只在需要"笔记内容变化时重渲染"的地方使用（笔记面板 / 保存状态）。 */
+export function useSpaceNotesRevision(): number {
+  return useContext(NotesContext)?.generation ?? 0;
 }
 export function useSpaceDetail(id: number | null) {
   return useQuery({ queryKey: ["space-detail", id], queryFn: () => api.fetchSpace(id!), enabled: id !== null, retry: false });

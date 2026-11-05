@@ -6,8 +6,9 @@ import { FontSize, TextStyle } from "@tiptap/extension-text-style";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { Fragment, Slice, type Node as EditorNode } from "@tiptap/pm/model";
 import { Bold, Italic, Underline, Undo2, Redo2, List, ListOrdered, ListChecks, Copy, Download, X } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useTranslation } from "react-i18next";
-import { useSpaceDetail, useSpaces } from "@/hooks/useSpaces";
+import { useSpaceDetail, useSpaceNotesRevision, useSpaces } from "@/hooks/useSpaces";
 import { EMPTY_NOTE, NOTE_FONT_SIZES, noteText, spaceError, type NoteDocument, type NoteSession } from "@/lib/spaceNotes";
 import { fetchSpace } from "@/lib/spacesApi";
 import { noteMarkdown, noteExportFilename, safeNoteUrl } from "@/lib/noteExport";
@@ -29,6 +30,7 @@ function NotePanel({ editor, session, name, spaceId, archived, modal, onClose }:
   const [latest, setLatest] = useState<{ document: NoteDocument; revision: number } | null>(null);
   const [latestError, setLatestError] = useState("");
   const [exportNotice, setExportNotice] = useState("");
+  const [confirmReplace, setConfirmReplace] = useState(false);
   const status = archived ? "spaces.readOnly" : session.saving ? "spaces.saving" : session.error ? "spaces.saveFailed" : session.dirty ? "spaces.unsaved" : "spaces.saved";
   useEffect(() => {
     const update = () => updateToolbar((value) => value + 1);
@@ -37,6 +39,21 @@ function NotePanel({ editor, session, name, spaceId, archived, modal, onClose }:
   }, [editor]);
   const action = (label: string, icon: ReactNode, active: boolean, apply: () => void, disabled = false) => <button type="button" title={t(label)} aria-label={t(label)} aria-pressed={active} disabled={archived || disabled} onMouseDown={(event) => event.preventDefault()} onClick={apply}>{icon}</button>;
   return <aside className="space-note-panel" aria-label={t("spaces.note")} role={modal ? "dialog" : undefined} aria-modal={modal || undefined}>
+    <ConfirmDialog
+      open={confirmReplace}
+      title={t("spaces.replaceLatestConfirm")}
+      description={t("spaces.latestNote")}
+      confirmLabel={t("spaces.keepDraft")}
+      danger
+      onConfirm={() => {
+        setConfirmReplace(false);
+        if (!latest) return;
+        session.resolveWithRevision(latest.revision);
+        setLatest(null);
+        void session.flush();
+      }}
+      onCancel={() => setConfirmReplace(false)}
+    />
     <div className="space-note-head"><div><span className="eyebrow">{t("spaces.note")}</span><h2>{name}</h2></div><button type="button" className="btn small" aria-label={t("spaces.closeNote")} onClick={onClose}><X aria-hidden="true" /></button></div>
     <div className="space-note-export">
       <button type="button" className="btn small" onClick={async () => {
@@ -82,9 +99,7 @@ function NotePanel({ editor, session, name, spaceId, archived, modal, onClose }:
         catch (error) { setLatestError(spaceError(error)); }
       }}>{t("spaces.showLatest")}</button>}
       {latestError && <p>{latestError}</p>}
-      {latest && <div className="space-note-conflict"><h3>{t("spaces.latestNote")}</h3><pre>{noteText(latest.document)}</pre><button type="button" className="btn small" disabled={archived} onClick={() => {
-        if (window.confirm(t("spaces.replaceLatestConfirm"))) { session.resolveWithRevision(latest.revision); setLatest(null); void session.flush(); }
-      }}>{t("spaces.keepDraft")}</button></div>}
+      {latest && <div className="space-note-conflict"><h3>{t("spaces.latestNote")}</h3><pre>{noteText(latest.document)}</pre><button type="button" className="btn small" disabled={archived} onClick={() => setConfirmReplace(true)}>{t("spaces.keepDraft")}</button></div>}
     </div>}
   </aside>;
 }
@@ -92,6 +107,9 @@ function NotePanel({ editor, session, name, spaceId, archived, modal, onClose }:
 export default function SpaceNoteController({ spaceId, open, onClose, researchOpen, onCloseResearch, split, target }: { spaceId: number; open: boolean; onClose: () => void; researchOpen: boolean; onCloseResearch: () => void; split: WorkspaceSplitLayout; target: HTMLDivElement | null }) {
   const { t } = useTranslation();
   const spaces = useSpaces();
+  // 订阅笔记编辑计数：只有这个面板需要跟着每次按键重渲染，
+  // 卡片与其它消费者不再被连带刷新。
+  useSpaceNotesRevision();
   const detail = useSpaceDetail(spaceId);
   const session = detail.data ? spaces.session(detail.data) : undefined;
   const sessionRef = useRef(session);

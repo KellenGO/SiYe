@@ -251,7 +251,8 @@
     "failed": "Trending is unavailable, please retry",
     "updatedAt": "Updated {{time}}",
     "pickHint": "Click one to search",
-    "manualOnly": "Refreshes only when you ask"
+    "manualOnly": "Refreshes only when you ask",
+    "refreshFailed": "Refresh failed — showing the previous hot words"
   },
   "footer": {
     "basedOn": "四野 · Local aggregate search built on MediaCrawler",

@@ -18,6 +18,7 @@ import { moveCollection } from "@/lib/collectionOrder";
 import { useSpaces } from "@/hooks/useSpaces";
 import { SpaceWorkspace } from "@/components/spaces/SpaceWorkspace";
 import { SpaceAddButton } from "@/components/spaces/SpaceAddButton";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 const PLATFORMS = PLATFORM_SLUGS;
 const RECOVERY_NOTICE_PREFIX = "siye_library_recovery_notice_";
@@ -60,13 +61,17 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
     onTabChange?.(next);
   };
   const [selected, setSelected] = useState<Set<PlatformSlug>>(() => new Set(PLATFORMS));
+  const [confirmReset, setConfirmReset] = useState(false);
   const resetSelected = () => {
     const platforms = [...selected];
     if (!platforms.length || remote.busy) return;
-    const names = platforms.map((platform) => PLATFORM_LABELS[platform]).join("、");
-    if (window.confirm(`重置同步将覆盖所选平台（${names}）对应的本地跨平台收藏。不会修改平台上的收藏。是否继续？`)) {
-      void remote.sync(platforms, "reset");
-    }
+    setConfirmReset(true);
+  };
+  const confirmResetSelected = () => {
+    const platforms = [...selected];
+    setConfirmReset(false);
+    if (!platforms.length || remote.busy) return;
+    void remote.sync(platforms, "reset");
   };
 
   const [selection, setSelection] = useState<LibrarySelection>({ kind: "all" });
@@ -329,8 +334,10 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
     }
   };
 
+  const [confirmDeleteCount, setConfirmDeleteCount] = useState(0);
   const batchDelete = async () => {
-    if (!selectedItemKeys.length || !window.confirm(`确定从本机彻底删除这 ${selectedItemKeys.length} 条收藏吗？此操作会同时移除所有收藏夹归属。`)) return;
+    if (!selectedItemKeys.length) return;
+    setConfirmDeleteCount(0);
     setMoving(true);
     const ok = await library.deleteItems(selectedItemKeys);
     setMoving(false);
@@ -366,6 +373,28 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
   };
 
   return (
+    <>
+      <ConfirmDialog
+        open={confirmReset}
+        title={`重置 ${[...selected].map((platform) => PLATFORM_LABELS[platform]).join("、") || "所选平台"} 的同步？`}
+        description="会覆盖这些平台对应的本地跨平台收藏。平台上的收藏不会改动。"
+        hint="已同步的内容会按平台重新读取，过程中请不要关闭程序。"
+        confirmLabel="重置并重新同步"
+        busy={remote.busy}
+        onConfirm={confirmResetSelected}
+        onCancel={() => setConfirmReset(false)}
+      />
+      <ConfirmDialog
+        open={confirmDeleteCount > 0}
+        title={`从本机彻底删除这 ${confirmDeleteCount} 条收藏？`}
+        description="会同时移除它们在所有收藏夹里的归属。平台上的内容不受影响。"
+        hint="此操作不可撤销。"
+        confirmLabel="彻底删除"
+        danger
+        busy={moving}
+        onConfirm={() => void batchDelete()}
+        onCancel={() => setConfirmDeleteCount(0)}
+      />
     <SpaceWorkspace spaceId={spaces.activeId} selector panelsHidden={creating || !!editingCollection}>
     <div className="preview-container favorites-page">
       <div className="collection-heading">
@@ -537,7 +566,7 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
                     {library.collections.map((collection) => <option key={collection.id} value={`custom:${collection.id}`}>{customCollectionLabel(collection.name)}</option>)}
                   </select>
                 </label>
-                <button type="button" className="btn danger" disabled={moving} onClick={() => void batchDelete()}>从本机彻底删除</button>
+                <button type="button" className="btn danger" disabled={moving} onClick={() => setConfirmDeleteCount(selectedItemKeys.length)}>从本机彻底删除</button>
               </div>
             )}
 
@@ -611,5 +640,6 @@ export function FavoritesPage({ activeTab, onTabChange, onNavigateAccounts }: Fa
       {(editingCollection || creating) && <CollectionInfoDialog key={creating ? "create" : editingCollection?.id} collection={creating ? null : editingCollection} fallbackCover={creating ? null : editingFallbackCover} busy={moving} onSave={saveCollectionInfo} onCreate={createNewCollection} onClose={() => { const id = editingCollectionId; setCreating(false); setEditingCollectionId(null); if (id !== null) folderMenuTriggerRefs.current.get(id)?.focus(); }} />}
     </div>
     </SpaceWorkspace>
+    </>
   );
 }

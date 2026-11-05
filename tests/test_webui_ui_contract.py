@@ -138,8 +138,17 @@ def test_race_404_clears_only_matching_job():
 
 # ── accounts page: security-conscious interactions ──────────────────────
 
-def test_accounts_delete_has_double_confirm():
-    assert _ACCOUNTS.count("window.confirm") >= 2
+def test_accounts_delete_uses_the_shared_confirm_dialog():
+    """清除登录态是破坏性操作，必须经过确认。
+
+    以前这里断言"至少两次 window.confirm"（原生弹窗双重确认）。现在统一走
+    `ConfirmDialog`：位置居中、样式跟随主题、默认焦点在「取消」、可标红。
+    断言改为"用了统一确认框且标了危险"，同样能挡住"顺手去掉确认"的改动。
+    """
+    assert "ConfirmDialog" in _ACCOUNTS
+    assert "danger" in _ACCOUNTS
+    # 不允许退回原生弹窗（样式与焦点都不受控）。
+    assert "window.confirm" not in _ACCOUNTS
 
 
 def test_accounts_opens_official_pages_in_current_browser():

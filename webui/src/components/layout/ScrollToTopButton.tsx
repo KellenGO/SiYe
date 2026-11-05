@@ -16,9 +16,23 @@ export function ScrollToTopButton() {
   const [visible, setVisible] = useState(false)
 
   useEffect(() => {
-    const onScroll = () => {
+    // 阈值只取决于"当前页是不是结果/历史页"，而页面的存在性不会随滚动变化。
+    // 以前每个 scroll 事件都 querySelectorAll + 读 offsetHeight —— 那是强制
+    // 同步布局，滚一下就要重新排版一次。现在按需重算：路由/滚动容器变化时
+    // 才重新判断，滚动事件里只比较一个数字。
+    let threshold = REVEAL_AFTER
+    let lastThresholdAt = 0
+    const resolveThreshold = () => {
+      const now = Date.now()
+      // 最多每 500ms 复核一次，避免频繁布局读取，同时能跟上页面切换。
+      if (now - lastThresholdAt < 500) return threshold
+      lastThresholdAt = now
       const inResultsOrHistory = [...document.querySelectorAll<HTMLElement>('.search-shell, .history-page')].some((element) => element.offsetHeight > 0)
-      setVisible(window.scrollY > (inResultsOrHistory ? LONG_LIST_REVEAL_AFTER : REVEAL_AFTER))
+      threshold = inResultsOrHistory ? LONG_LIST_REVEAL_AFTER : REVEAL_AFTER
+      return threshold
+    }
+    const onScroll = () => {
+      setVisible(window.scrollY > resolveThreshold())
     }
     onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })

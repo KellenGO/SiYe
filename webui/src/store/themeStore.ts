@@ -84,15 +84,26 @@ export const useThemeStore = create<ThemeState>((set) => ({
 
   setTheme: (theme) => {
     const resolved = resolveTheme(theme)
-    localStorage.setItem(THEME_KEY, theme)
+    // 存储被禁用（无痕模式 / 站点数据被禁）时 setItem 会抛。以前整条链路
+    // 一起中断：主题没应用、界面毫无反应，用户以为点坏了。
+    // 现在先应用主题，写盘失败只影响"下次启动记不记得"。
     applyTheme(resolved)
     set({ theme, resolvedTheme: resolved })
+    try {
+      localStorage.setItem(THEME_KEY, theme)
+    } catch {
+      /* 只影响持久化，不影响本次切换 */
+    }
   },
 
   setAccent: (accent) => {
-    localStorage.setItem(ACCENT_KEY, accent)
     applyAccent(accent)
     set({ accent })
+    try {
+      localStorage.setItem(ACCENT_KEY, accent)
+    } catch {
+      /* 同上 */
+    }
   },
 }))
 

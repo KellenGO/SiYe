@@ -92,6 +92,10 @@ export function TrendingBoard({ onPick }: TrendingBoardProps) {
       >
         {loading && !snapshot && <p className="secondary text-[13px]">{t("trending.loading")}</p>}
         {!loading && error && !snapshot && <p className="secondary text-[13px]">{t("trending.failed")}</p>}
+        {/* 已有快照时刷新失败：以前完全不提示，用户以为看到的是最新数据。 */}
+        {!loading && error && snapshot && (
+          <p className="secondary text-[13px]" role="status">{t("trending.refreshFailed")}</p>
+        )}
         {snapshot && words.length === 0 && (
           <p className="secondary text-[13px]">
             {info?.message || (info?.status === "failed" ? t("trending.failed") : t("trending.empty"))}

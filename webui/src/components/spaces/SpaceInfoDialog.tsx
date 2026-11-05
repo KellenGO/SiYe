@@ -17,9 +17,10 @@ export function SpaceInfoDialog({ space, initialName = "", onClose }: { space?: 
     input.current?.focus();
     return () => { if (previous?.isConnected) previous.focus(); };
   }, []);
-  return createPortal(<div className="confirm-overlay" onPointerDown={(event) => { if (event.target === event.currentTarget && !spaces.busy) onClose(); }}>
+  return createPortal(<div className="confirm-overlay" onPointerDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <div ref={panel} className="confirm-card space-info-card" role="dialog" aria-modal="true" aria-labelledby={id} onKeyDown={(event) => {
-      if (event.key === "Escape" && !spaces.busy) { event.stopPropagation(); onClose(); }
+      // busy 期间也允许关闭：请求可能在后台继续，但用户不该被卡死在弹窗里。
+      if (event.key === "Escape") { event.stopPropagation(); onClose(); }
       if (event.key === "Tab") {
         const controls = [...panel.current!.querySelectorAll<HTMLElement>('input, textarea, button:not(:disabled)')];
         const target = event.shiftKey ? controls[controls.length - 1] : controls[0];
@@ -34,7 +35,7 @@ export function SpaceInfoDialog({ space, initialName = "", onClose }: { space?: 
       }}>
         <label>{t("spaces.name")}<input ref={input} className="field" value={name} maxLength={60} required onChange={(event) => setName(event.target.value)} placeholder={t("spaces.nameExample")} /></label>
         <label>{t("spaces.description")}<textarea className="field" rows={3} maxLength={200} value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t("spaces.descriptionExample")} /></label>
-        <div className="confirm-actions"><button type="button" className="btn" disabled={spaces.busy} onClick={onClose}>{t("spaces.cancel")}</button><button className="btn primary" disabled={spaces.busy || !name.trim()}>{t(space ? "spaces.save" : "spaces.createAndActivate")}</button></div>
+        <div className="confirm-actions"><button type="button" className="btn" onClick={onClose}>{t("spaces.cancel")}</button><button className="btn primary" disabled={spaces.busy || !name.trim()}>{t(space ? "spaces.save" : "spaces.createAndActivate")}</button></div>
       </form>
     </div>
   </div>, document.body);

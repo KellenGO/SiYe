@@ -47,6 +47,13 @@ export function GuideSpotlight({ selector, hint }: { selector: string; hint: str
         return false;
       }
       const box = target.getBoundingClientRect();
+      // 目标在 `hidden` 容器里时 rect 全为 0：以前照样 return true，高亮框
+      // 塌成一个 6×6 的小点、遮罩把整页压暗，而且不再重试。
+      // 尺寸为 0 视为"还没准备好"，继续等（bootstrap 最多 60 帧）。
+      if (box.width < 2 || box.height < 2) {
+        setAnchor(null);
+        return false;
+      }
       const next: Anchor = {
         top: box.top,
         left: box.left,

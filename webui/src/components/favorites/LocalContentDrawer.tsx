@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState, type RefObject, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ArrowUpRight, Bookmark, Coins, Heart, Maximize2, MessageCircle, Minimize2, Play, Share2, Trash2, X, type LucideIcon } from "lucide-react";
 import type { PlatformSlug, UnifiedSearchResult } from "@/types/search";
 import { PLATFORM_LABELS } from "@/types/search";
@@ -49,9 +50,18 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
   const keys = sources.map(resultKey);
   const hasReader = isQuestion || sources.some(supportsReading);
   const items = keys.map((key) => library?.items.find((item) => item.key === key)).filter((item) => item !== undefined);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const requestClose = () => {
     if (saving) return;
-    if ([...dirtyNotes.current.values()].some(Boolean) && !window.confirm("备注尚未保存，确定放弃修改并关闭详情吗？")) return;
+    if ([...dirtyNotes.current.values()].some(Boolean)) {
+      // 走项目统一的居中确认框（原生 confirm 的位置与样式都不受控）。
+      setConfirmDiscard(true);
+      return;
+    }
+    onClose();
+  };
+  const discardAndClose = () => {
+    setConfirmDiscard(false);
     onClose();
   };
   escapeRequest.current = () => {
@@ -111,7 +121,17 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
   // 取消收藏后记录已不存在；仅移出当前夹时仍允许看完详情、保存备注。
   useEffect(() => { if (savedView && !items.length) onClose(); }, [savedView, items.length, onClose]);
 
-  return createPortal(<div className="local-content-overlay"
+  return createPortal(<>
+    <ConfirmDialog
+      open={confirmDiscard}
+      title="放弃未保存的备注并关闭？"
+      description="这个条目还有没保存的备注改动，关闭后不会保留。"
+      confirmLabel="放弃并关闭"
+      danger
+      onConfirm={discardAndClose}
+      onCancel={() => setConfirmDiscard(false)}
+    />
+  <div className="local-content-overlay"
     onPointerDown={(event) => { pointerStartedOutside.current = event.target === event.currentTarget; }}
     onClick={(event) => {
       if (event.target === event.currentTarget && pointerStartedOutside.current) requestClose();
@@ -226,5 +246,6 @@ export function LocalContentDrawer({ result, library, onClose, fallbackFocus, sa
         {noteError && <p className="local-content-error" role="alert">{noteError}</p>}
       </div>{workspace?.noteSlot}</div>
     </div>
-  </div>, document.body);
+  </div>
+  </>, document.body);
 }

@@ -251,7 +251,8 @@
     "failed": "热搜暂时取不到，稍后再试",
     "updatedAt": "更新于 {{time}}",
     "pickHint": "点一条直接搜",
-    "manualOnly": "只在你点刷新时更新"
+    "manualOnly": "只在你点刷新时更新",
+    "refreshFailed": "刷新失败，显示的是上次取到的热词"
   },
   "footer": {
     "basedOn": "四野 · 基于 MediaCrawler 的本地聚合检索工作台",
