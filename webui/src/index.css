@@ -2232,9 +2232,7 @@ footer > div { width: 100% !important; max-width: none !important; padding: 0 !i
 .trending-tab:hover { background: rgb(var(--cyber-bg-tertiary)); }
 .trending-tab.active { color: rgb(var(--brand-ink)); background: rgb(var(--brand-soft)); font-weight: 600; }
 .trending-tab.muted { color: rgb(var(--cyber-text-muted)); }
-.trending-tab.unavailable { color: rgb(var(--cyber-text-secondary)); border: 1px dashed rgb(var(--cyber-text-muted)); }
 .trending-tab:focus-visible { outline: 2px solid var(--siye-brand); outline-offset: 2px; }
-.trending-unavailable-badge { font-size: 10px; line-height: 1.2; white-space: nowrap; color: rgb(var(--cyber-text-secondary)); }
 .trending-panel-body { min-height: 132px; margin-top: 12px; }
 .trending-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 18px; margin: 0; padding: 0; list-style: none; }
 .trending-list button {

@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 
 from aggregate_search.models import PlatformSlug
 
-TrendingStatus = Literal["ok", "unavailable", "failed"]
+TrendingStatus = Literal["ok", "failed"]
 
 
 class TrendingWord(BaseModel):
@@ -33,16 +33,15 @@ class PlatformTrending(BaseModel):
 
     ``status`` 的语义：
     - ``ok``：拿到了词；
-    - ``unavailable``：这个平台还没接入（或明确不支持）；
-    - ``failed``：接了但这次取不到，``message`` 是给用户看的安全文案。
+    - ``failed``：这次取不到，``message`` 是给用户看的安全文案。
+
+    没有小红书的位置：它没有可用的全站热榜，不返回空占位。
     """
 
     status: TrendingStatus
     words: List[TrendingWord] = Field(default_factory=list)
     active_time: Optional[str] = None
     message: Optional[str] = None
-    source_name: Optional[str] = None
-    source_url: Optional[str] = None
 
 
 class TrendingResponse(BaseModel):

@@ -249,9 +249,6 @@
     "loading": "正在获取各平台热搜…",
     "empty": "暂时没有取到热搜",
     "failed": "热搜暂时取不到，稍后再试",
-    "unavailableBadge": "暂不可用",
-    "xhsUnavailable": "目前暂未接入小红书热搜，其他平台仍可使用。",
-    "source": "来源：{{name}}（第三方）",
     "updatedAt": "更新于 {{time}}",
     "pickHint": "点一条直接搜",
     "manualOnly": "只在你点刷新时更新"

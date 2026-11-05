@@ -8,8 +8,10 @@
 边界（严格）：
 
 - **只取词**。榜单里的内容由既有的聚合搜索去取 —— 这个模块的产物只有"词 + 热度"。
-- **公开接口**：抖音 / B站 / 知乎走各自公开榜单，小红书走 UApiPro 公开聚合榜单并注明来源。
-  不需要登录态、签名或浏览器，不向第三方传递账号信息、搜索词或本机资料。
+- **公开接口**：抖音 / B站 / 知乎走各自公开榜单，不需要登录态、签名或浏览器，
+  不向第三方传递账号信息、搜索词或本机资料。
+- **小红书不在其中**：它的站内热点榜已下线，匿名接口不可用，第三方聚合榜也不可靠；
+  不用个性化推荐词冒充全站热榜，因此这里没有小红书取数器。
 - **不带 cookie**：请求不携带任何登录态，所以既不碰账号验证，也不占"账号/搜索互斥租约"。
 - **缓存不过期**：进软件时取一次，之后只有用户手动刷新（`bypass_cache`）才会重新获取。
   这是刻意的 —— 切平台不应该触发重新获取。
@@ -29,8 +31,6 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 
 import httpx
 
-from aggregate_search.models import PLATFORM_SLUGS
-
 # ── 可调参数 ────────────────────────────────────────────────────────────
 
 #: 单次上游请求超时（秒）。热榜是轻量接口，不需要长等待。
@@ -39,9 +39,12 @@ REQUEST_TIMEOUT_SECONDS = 10.0
 #: 单平台返回词数上限。
 MAX_WORDS = 50
 
-#: 未接入平台的固定文案（前端按"该平台暂不可用"处理，不报错）。
-UNAVAILABLE_MESSAGE = "该平台热搜暂未接入"
+#: 取不到时的统一文案（前端按"该平台不可用"处理，不报错）。
 FAILED_MESSAGE = "热搜暂时取不到，稍后再试"
+
+#: 有热搜可取、并且在界面上有标签的平台。顺序即标签顺序。
+#: 小红书刻意不在其中：它没有可用的全站热榜。
+TRENDING_PLATFORMS: Tuple[str, ...] = ("douyin", "bilibili", "zhihu")
 
 _USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -54,17 +57,8 @@ DOUYIN_TRENDING_URL = "https://www.iesdouyin.com/web/api/v2/hotsearch/billboard/
 BILIBILI_TRENDING_URL = "https://api.bilibili.com/x/web-interface/search/square"
 #: 知乎首页问题热榜；搜索页关键词榜不作为此入口的回退来源。
 ZHIHU_TRENDING_URL = "https://api.zhihu.com/topstory/hot-lists/total"
-#: 小红书匿名第三方榜单；不向聚合服务发送登录态。
-XHS_TRENDING_URL = "https://uapis.cn/api/v1/misc/hotboard"
 
-_SOURCE_METADATA = {
-    "xhs": {
-        "source_name": "UApiPro",
-        "source_url": "https://uapis.cn/docs/api-reference/get-misc-hotboard",
-    },
-}
-
-#: 平台 → 取数协程。没有登记的平台一律 unavailable。
+#: 平台 → 取数协程。
 Fetcher = Callable[[], Awaitable[Tuple[List[Dict[str, Any]], Optional[str]]]]
 
 
@@ -185,35 +179,7 @@ async def _fetch_zhihu() -> Tuple[List[Dict[str, Any]], Optional[str]]:
     return _build_words(pairs), None
 
 
-def _xhs_heat(value: Any) -> Optional[int]:
-    """聚合榜单用 947.5w / 万 / 亿表示热度；未知标签不补数字。"""
-    if isinstance(value, int) and not isinstance(value, bool):
-        return value if value >= 0 else None
-    if not isinstance(value, str) or len(value) > 32:
-        return None
-    match = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)\s*([wW万亿]?)", value.strip())
-    if not match:
-        return None
-    multiplier = {"w": 10000, "万": 10000, "亿": 100000000}.get(match[2].lower(), 1)
-    heat = Decimal(match[1]) * multiplier
-    return int(heat) if heat == heat.to_integral_value() else None
-
-
-async def _fetch_xhs() -> Tuple[List[Dict[str, Any]], Optional[str]]:
-    payload = await _get_json(XHS_TRENDING_URL, params={"type": "xiaohongshu"})
-    if not isinstance(payload, dict) or payload.get("type") != "xiaohongshu":
-        raise ValueError("unexpected xhs payload")
-    items = payload.get("list")
-    if not isinstance(items, list):
-        raise ValueError("unexpected xhs list")
-    pairs = [(_pick(item, "title"), _xhs_heat(item.get("hot_value")))
-             for item in items if isinstance(item, dict)]
-    active_time = payload.get("update_time")
-    return _build_words(pairs), active_time if isinstance(active_time, str) else None
-
-
 _FETCHERS: Dict[str, Fetcher] = {
-    "xhs": _fetch_xhs,
     "douyin": _fetch_douyin,
     "bilibili": _fetch_bilibili,
     "zhihu": _fetch_zhihu,
@@ -224,8 +190,7 @@ async def _load(platform: str) -> Dict[str, Any]:
     """取单个平台的热搜（带缓存与单飞）。"""
     fetcher = _FETCHERS.get(platform)
     if fetcher is None:
-        return {"status": "unavailable", "words": [], "message": UNAVAILABLE_MESSAGE}
-    source = _SOURCE_METADATA.get(platform, {})
+        return {"status": "failed", "words": [], "message": FAILED_MESSAGE}
 
     cached = _cache.get(platform)
     if cached is not None:
@@ -241,15 +206,14 @@ async def _load(platform: str) -> Dict[str, Any]:
             words, active_time = await fetcher()
         except Exception:
             # 失败只给安全文案；绝不上抛，也不回显上游响应。
-            return {"status": "failed", "words": [], "message": FAILED_MESSAGE, **source}
+            return {"status": "failed", "words": [], "message": FAILED_MESSAGE}
         if not words:
-            return {"status": "failed", "words": [], "message": FAILED_MESSAGE, **source}
+            return {"status": "failed", "words": [], "message": FAILED_MESSAGE}
         result: Dict[str, Any] = {
             "status": "ok",
             "words": words,
             "active_time": active_time,
             "cached": False,
-            **source,
         }
         _cache[platform] = {k: v for k, v in result.items() if k != "cached"}
         return result
@@ -262,9 +226,12 @@ async def get_trending(
 ) -> Dict[str, Any]:
     """按平台分组返回热搜。
 
+    只返回 :data:`TRENDING_PLATFORMS` 里的平台；其它 slug（含小红书）直接忽略，
+    不占位、不请求上游。
+
     **默认只读缓存**：``bypass_cache=True``（用户手动刷新）才会重新获取上游。
     """
-    wanted = [p for p in (platforms or PLATFORM_SLUGS) if p in PLATFORM_SLUGS]
+    wanted = [p for p in (platforms or TRENDING_PLATFORMS) if p in TRENDING_PLATFORMS]
     if bypass_cache:
         for platform in wanted:
             _cache.pop(platform, None)

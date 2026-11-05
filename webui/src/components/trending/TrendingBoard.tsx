@@ -1,11 +1,14 @@
 /**
  * 热搜卡片：顶部按平台切换，一次只展示一个平台的热搜词，点一条就去搜它。
  *
- * 为什么用标签切换而不是四个平台并排：四列在那个位置挤不下（每列只放得下一行短词），
+ * 为什么用标签切换而不是平台并排：并排在那个位置挤不下（每列只放得下一行短词），
  * 切换才留得住每个平台展示多少条。平台之间仍然各自独立 ——
  * 数据层就是分平台返回的，标签只是同一份数据的不同视图。
  *
- * 获取时机只有两个（用户要求）：进软件时一次（四个平台一起取），之后只有用户点「刷新」。
+ * 没有小红书：平台本身没有可用的全站热榜（站内热点榜已下线），
+ * 因此这里也不为它保留标签。
+ *
+ * 获取时机只有两个（用户要求）：进软件时一次（三个平台一起取），之后只有用户点「刷新」。
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -71,23 +74,25 @@ export function TrendingBoard({ onPick }: TrendingBoardProps) {
             aria-selected={activeTab?.platform === tab.platform}
             aria-controls="trending-panel-content"
             className={`trending-tab${activeTab?.platform === tab.platform ? " active" : ""}${
-              tab.status === "unavailable" ? " unavailable" : tab.hasWords ? "" : " muted"
+              tab.hasWords ? "" : " muted"
             }`}
             onClick={() => setActive(tab.platform)}
           >
             <i className="pd" style={{ backgroundColor: PLATFORM_COLORS[tab.platform] }} aria-hidden="true" />
             {PLATFORM_LABELS[tab.platform]}
-            {tab.status === "unavailable" && <span className="trending-unavailable-badge">{t("trending.unavailableBadge")}</span>}
           </button>
         ))}
       </div>
 
-      <div id="trending-panel-content" role="tabpanel" aria-labelledby={`trending-tab-${activeTab?.platform ?? "xhs"}`} className="trending-panel-body">
+      <div
+        id="trending-panel-content"
+        role="tabpanel"
+        aria-labelledby={`trending-tab-${activeTab?.platform ?? tabs[0].platform}`}
+        className="trending-panel-body"
+      >
         {loading && !snapshot && <p className="secondary text-[13px]">{t("trending.loading")}</p>}
         {!loading && error && !snapshot && <p className="secondary text-[13px]">{t("trending.failed")}</p>}
-        {activeTab?.platform === "xhs" && info?.status === "unavailable" ? (
-          <p className="secondary text-[13px]">{t("trending.xhsUnavailable")}</p>
-        ) : snapshot && words.length === 0 && (
+        {snapshot && words.length === 0 && (
           <p className="secondary text-[13px]">
             {info?.message || (info?.status === "failed" ? t("trending.failed") : t("trending.empty"))}
           </p>
@@ -108,14 +113,6 @@ export function TrendingBoard({ onPick }: TrendingBoardProps) {
       </div>
 
       <p className="panel-footnote">
-        {info?.sourceName && <>
-          {info.sourceUrl ? (
-            <a className="text-link" href={info.sourceUrl} target="_blank" rel="noreferrer">
-              {t("trending.source", { name: info.sourceName })}
-            </a>
-          ) : t("trending.source", { name: info.sourceName })}
-          {"　·　"}
-        </>}
         {updatedAt ? t("trending.updatedAt", { time: updatedAt }) : t("trending.subtitle")}
         {words.length > 0 && `　·　${t("trending.pickHint")}`}
         {`　·　${t("trending.manualOnly")}`}

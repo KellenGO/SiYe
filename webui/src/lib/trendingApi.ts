@@ -4,7 +4,10 @@
  * 热搜榜只取"词"：点一条 → 交给既有的聚合搜索去搜，内容不用这里管。
  * 按平台分开返回，卡片用标签切换展示（同时铺四列位置不够，切换更省地方）。
  *
- * 获取时机只有两个：**刚进软件时一次**（四个平台一起）、**用户手动刷新**。
+ * **没有小红书**：它的站内热点榜已下线，匿名接口不可用，第三方聚合榜也不可靠。
+ * 卡片不为它留标签，也不向后端请求它的词。
+ *
+ * 获取时机只有两个：**刚进软件时一次**（三个平台一起）、**用户手动刷新**。
  * 所以这里只提供 IO 函数，定时/聚焦刷新交给 hook 关掉。
  *
  * 分两层，便于测试：
@@ -15,9 +18,11 @@
 import axios from "axios";
 
 import type { PlatformSlug } from "@/types/search";
-import { PLATFORM_SLUGS } from "./platformMeta.js";
 
 export const TRENDING_API_BASE = "/api/trending";
+
+/** 有热搜可看的平台。小红书刻意不在其中，见文件头。 */
+export const TRENDING_PLATFORMS: PlatformSlug[] = ["douyin", "bilibili", "zhihu"];
 
 /** 每个平台标签最多展示几条词（后端会返回更多，展示层自己截）。 */
 export const MAX_WORDS_SHOWN = 15;
@@ -28,15 +33,13 @@ export interface TrendingWord {
   hotValue: number | null;
 }
 
-export type PlatformTrendingStatus = "ok" | "unavailable" | "failed";
+export type PlatformTrendingStatus = "ok" | "failed";
 
 export interface PlatformTrending {
   status: PlatformTrendingStatus;
   words: TrendingWord[];
   activeTime: string | null;
   message: string | null;
-  sourceName: string | null;
-  sourceUrl: string | null;
 }
 
 export interface TrendingSnapshot {
@@ -55,7 +58,7 @@ export interface TrendingTab {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 
-const STATUSES: PlatformTrendingStatus[] = ["ok", "unavailable", "failed"];
+const STATUSES: PlatformTrendingStatus[] = ["ok", "failed"];
 
 /** 后端 word -> 前端 TrendingWord；缺 word 的项跳过。 */
 export function toTrendingWords(raw: unknown): TrendingWord[] {
@@ -77,7 +80,7 @@ export function toTrendingWords(raw: unknown): TrendingWord[] {
 
 export function toPlatformTrending(raw: unknown): PlatformTrending {
   if (!isRecord(raw)) {
-    return { status: "failed", words: [], activeTime: null, message: null, sourceName: null, sourceUrl: null };
+    return { status: "failed", words: [], activeTime: null, message: null };
   }
   const status = STATUSES.includes(raw.status as PlatformTrendingStatus)
     ? (raw.status as PlatformTrendingStatus)
@@ -87,15 +90,13 @@ export function toPlatformTrending(raw: unknown): PlatformTrending {
     words: toTrendingWords(raw.words),
     activeTime: typeof raw.active_time === "string" ? raw.active_time : null,
     message: typeof raw.message === "string" ? raw.message : null,
-    sourceName: typeof raw.source_name === "string" ? raw.source_name : null,
-    sourceUrl: typeof raw.source_url === "string" && raw.source_url.startsWith("https://") ? raw.source_url : null,
   };
 }
 
 export function toTrendingSnapshot(raw: unknown): TrendingSnapshot {
   const platformsRaw = isRecord(raw) && isRecord(raw.platforms) ? raw.platforms : {};
   const platforms: Partial<Record<PlatformSlug, PlatformTrending>> = {};
-  for (const slug of PLATFORM_SLUGS) {
+  for (const slug of TRENDING_PLATFORMS) {
     if (slug in platformsRaw) platforms[slug] = toPlatformTrending(platformsRaw[slug]);
   }
   return {
@@ -105,9 +106,9 @@ export function toTrendingSnapshot(raw: unknown): TrendingSnapshot {
   };
 }
 
-/** 四个平台都要有标签（没拉到词的也保留，点进去才知道为什么）。 */
+/** 三个平台都要有标签（没拉到词的也保留，点进去才知道为什么）。 */
 export function trendingTabs(snapshot: TrendingSnapshot | undefined): TrendingTab[] {
-  return PLATFORM_SLUGS.map((platform) => {
+  return TRENDING_PLATFORMS.map((platform) => {
     const info = snapshot?.platforms[platform];
     return {
       platform,

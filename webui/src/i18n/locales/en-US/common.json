@@ -249,9 +249,6 @@
     "loading": "Loading trending topics…",
     "empty": "No trending topics right now",
     "failed": "Trending is unavailable, please retry",
-    "unavailableBadge": "Unavailable",
-    "xhsUnavailable": "Xiaohongshu trending is not available yet. Other platforms still work.",
-    "source": "Source: {{name}} (third party)",
     "updatedAt": "Updated {{time}}",
     "pickHint": "Click one to search",
     "manualOnly": "Refreshes only when you ask"

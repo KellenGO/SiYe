@@ -1,8 +1,8 @@
 /**
  * 热搜卡片纯逻辑测试 —— 直接 import 生产模块（webui/src/lib/trendingApi.ts）。
  *
- * 覆盖三件容易出错的事：热度格式化（万/亿进位）、后端脏数据的兜底、
- * 以及标签页规则（四个平台都在、默认选第一个有词的）。
+ * 覆盖四件容易出错的事：热度格式化（万/亿进位）、后端脏数据的兜底、
+ * 标签页规则（三个平台都在、默认选第一个有词的），以及小红书不会回到标签里。
  */
 
 import { test } from "node:test";
@@ -10,6 +10,7 @@ import assert from "node:assert/strict";
 
 import {
   MAX_WORDS_SHOWN,
+  TRENDING_PLATFORMS,
   formatHeat,
   initialTab,
   toTrendingSnapshot,
@@ -41,86 +42,76 @@ test("规整后端响应：丢掉未知平台、脏项与非法状态", () => {
         ],
       },
       weibo: { status: "ok", words: [{ rank: 1, word: "不该出现" }] },
-      xhs: { status: "什么鬼", words: [] },
+      bilibili: { status: "什么鬼", words: [] },
     },
     fetched_at: "2026-09-19T05:41:06+00:00",
     cached: true,
   });
 
-  assert.deepEqual(Object.keys(snapshot.platforms).sort(), ["douyin", "xhs"]);
+  assert.deepEqual(Object.keys(snapshot.platforms).sort(), ["bilibili", "douyin"]);
   assert.equal(snapshot.platforms.douyin?.activeTime, "2026-09-19 13:41:06");
   assert.deepEqual(snapshot.platforms.douyin?.words.map((item) => item.word), ["热词", "没有 rank"]);
   assert.equal(snapshot.platforms.douyin?.words[0]?.hotValue, 100);
   assert.equal(snapshot.platforms.douyin?.words[1]?.hotValue, null);
   assert.equal(snapshot.platforms.douyin?.words[1]?.rank, 2);
-  assert.equal(snapshot.platforms.xhs?.status, "failed");
+  assert.equal(snapshot.platforms.bilibili?.status, "failed");
   assert.equal(snapshot.cached, true);
 });
 
-test("标签页：四个平台都在，并标出谁有词", () => {
+test("标签页：三个平台都在，并标出谁有词", () => {
   const snapshot = toTrendingSnapshot({
     platforms: {
-      xhs: { status: "unavailable", words: [] },
       douyin: { status: "ok", words: [{ rank: 1, word: "a" }] },
       bilibili: { status: "failed", words: [] },
       zhihu: { status: "ok", words: [{ rank: 1, word: "b" }] },
     },
   });
   const tabs = trendingTabs(snapshot);
-  assert.deepEqual(tabs.map((tab) => tab.platform), ["xhs", "douyin", "bilibili", "zhihu"]);
-  assert.deepEqual(tabs.map((tab) => tab.hasWords), [false, true, false, true]);
-  assert.deepEqual(tabs.map((tab) => tab.status), ["unavailable", "ok", "failed", "ok"]);
+  assert.deepEqual(tabs.map((tab) => tab.platform), ["douyin", "bilibili", "zhihu"]);
+  assert.deepEqual(tabs.map((tab) => tab.hasWords), [true, false, true]);
+  assert.deepEqual(tabs.map((tab) => tab.status), ["ok", "failed", "ok"]);
 });
 
 test("还没拿到数据时所有标签均等待实际状态", () => {
   const tabs = trendingTabs(undefined);
-  assert.equal(tabs.length, 4);
+  assert.deepEqual(tabs.map((tab) => tab.platform), ["douyin", "bilibili", "zhihu"]);
   assert.ok(tabs.every((tab) => tab.status === "missing" && !tab.hasWords));
 });
 
-test("小红书失败显示实际失败状态", () => {
-  const tabs = trendingTabs(toTrendingSnapshot({ platforms: { xhs: { status: "failed", words: [] } } }));
-  assert.equal(tabs[0].status, "failed");
+test("小红书不在热搜平台里：旧响应里的 xhs 会被丢掉", () => {
+  assert.deepEqual(TRENDING_PLATFORMS, ["douyin", "bilibili", "zhihu"]);
+  const snapshot = toTrendingSnapshot({
+    platforms: {
+      xhs: { status: "ok", words: [{ rank: 1, word: "小红书热词", hot_value: 9475000 }] },
+      douyin: { status: "ok", words: [{ rank: 1, word: "抖音热词" }] },
+    },
+  });
+  assert.equal(snapshot.platforms.xhs, undefined);
+  assert.deepEqual(trendingTabs(snapshot).map((tab) => tab.platform), ["douyin", "bilibili", "zhihu"]);
+  assert.equal(initialTab(snapshot), "douyin");
 });
 
-test("小红书成功后展示词条、来源并可成为默认平台", () => {
-  const snapshot = toTrendingSnapshot({ platforms: { xhs: {
-    status: "ok", words: [{ rank: 1, word: "小红书热词", hot_value: 9475000 }],
-    active_time: "2026-10-18T07:02:09.011Z",
-    source_name: "UApiPro", source_url: "https://uapis.cn/docs/api-reference/get-misc-hotboard",
-  } } });
-  const tabs = trendingTabs(snapshot);
-  assert.equal(tabs[0].status, "ok");
-  assert.equal(tabs[0].hasWords, true);
-  assert.equal(initialTab(snapshot), "xhs");
-  assert.equal(snapshot.platforms.xhs?.words[0].word, "小红书热词");
-  assert.equal(snapshot.platforms.xhs?.sourceName, "UApiPro");
-  assert.equal(snapshot.platforms.xhs?.sourceUrl, "https://uapis.cn/docs/api-reference/get-misc-hotboard");
-  assert.equal(snapshot.platforms.xhs?.activeTime, "2026-10-18T07:02:09.011Z");
-});
-
-test("没有来源的旧响应仍兼容，来源链接拒绝脚本协议", () => {
-  const snapshot = toTrendingSnapshot({ platforms: {
-    douyin: { status: "ok", words: [] },
-    xhs: { status: "failed", words: [], source_name: "UApiPro", source_url: "javascript:alert(1)" },
-  } });
-  assert.equal(snapshot.platforms.douyin?.sourceName, null);
-  assert.equal(snapshot.platforms.douyin?.sourceUrl, null);
-  assert.equal(snapshot.platforms.xhs?.sourceName, "UApiPro");
-  assert.equal(snapshot.platforms.xhs?.sourceUrl, null);
+test("失败只保留文案，不产出小红书专属占位", () => {
+  const snapshot = toTrendingSnapshot({
+    platforms: {
+      bilibili: { status: "failed", words: [], message: "热搜暂时取不到，稍后再试" },
+    },
+  });
+  assert.equal(snapshot.platforms.bilibili?.message, "热搜暂时取不到，稍后再试");
+  assert.equal(snapshot.platforms.bilibili?.status, "failed");
 });
 
 test("默认选中第一个有词的平台", () => {
   const snapshot = toTrendingSnapshot({
     platforms: {
-      xhs: { status: "unavailable", words: [] },
+      douyin: { status: "failed", words: [] },
       bilibili: { status: "ok", words: [{ rank: 1, word: "b" }] },
     },
   });
   assert.equal(initialTab(snapshot), "bilibili");
   // 一个词都没有时退回第一个平台，保证标签页始终有选中项
-  assert.equal(initialTab(toTrendingSnapshot({ platforms: {} })), "xhs");
-  assert.equal(initialTab(undefined), "xhs");
+  assert.equal(initialTab(toTrendingSnapshot({ platforms: {} })), "douyin");
+  assert.equal(initialTab(undefined), "douyin");
 });
 
 test("每个标签只取前 N 条", () => {

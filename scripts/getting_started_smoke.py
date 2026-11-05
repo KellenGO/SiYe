@@ -99,14 +99,11 @@ def main():
                     elif path == "/api/trending":
                         trending_requests.append(request.url)
                         data = {"platforms": {
-                            "xhs": {"status": trending_status,
-                                    "words": [{"rank": 1, "word": "小红书测试热词", "hot_value": 9475000}]
-                                             if trending_status == "ok" else [],
-                                    "message": "热搜暂时取不到，稍后再试" if trending_status == "failed" else None,
-                                    "active_time": "2026-10-18T07:02:09.011Z",
-                                    "source_name": "UApiPro",
-                                    "source_url": "https://uapis.cn/docs/api-reference/get-misc-hotboard"},
-                            "douyin": {"status": "ok", "words": [{"rank": 1, "word": "抖音测试热词"}]},
+                            "douyin": {"status": trending_status,
+                                       "words": [{"rank": 1, "word": "抖音测试热词", "hot_value": 9475000}]
+                                                if trending_status == "ok" else [],
+                                       "message": "热搜暂时取不到，稍后再试" if trending_status == "failed" else None,
+                                       "active_time": "2026-10-18T07:02:09.011Z"},
                             "bilibili": {"status": "ok", "words": [{"rank": 1, "word": "B站测试热词"}]},
                             "zhihu": {"status": "ok", "words": [{"rank": 1, "word": "知乎测试热词"}]},
                         }}
@@ -376,53 +373,43 @@ def main():
 
                 page.goto(origin + "/#/")
                 page.get_by_role("button", name="返回首页", exact=True).click()
-                xhs_trending = page.get_by_role("tab", name="小红书", exact=True)
-                expect(xhs_trending).to_be_visible()
-                expect(page.get_by_role("tab", name="抖音")).to_be_visible()
+                douyin_trending = page.get_by_role("tab", name="抖音", exact=True)
+                expect(douyin_trending).to_be_visible()
                 expect(page.get_by_role("tab", name="B站")).to_be_visible()
                 expect(page.get_by_role("tab", name="知乎")).to_be_visible()
-                xhs_trending.focus()
-                xhs_trending.press("Enter")
-                expect(xhs_trending).to_have_attribute("aria-selected", "true")
+                # 小红书没有可用的全站热榜，卡片不为它保留标签。
+                expect(page.get_by_role("tab", name="小红书")).to_have_count(0)
+                douyin_trending.focus()
+                douyin_trending.press("Enter")
+                expect(douyin_trending).to_have_attribute("aria-selected", "true")
                 board = page.get_by_role("region", name="热搜", exact=True)
-                expect(board.get_by_role("button", name=re.compile("小红书测试热词"))).to_be_visible()
+                expect(board.get_by_role("button", name=re.compile("抖音测试热词"))).to_be_visible()
                 expect(board.get_by_text("948万", exact=True)).to_be_visible()
-                source = board.get_by_role("link", name="来源：UApiPro（第三方）", exact=True)
-                expect(source).to_have_attribute("href", "https://uapis.cn/docs/api-reference/get-misc-hotboard")
-                expect(source).to_have_attribute("rel", "noreferrer")
                 assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), "Trending mobile overflow"
-                page.screenshot(path=output / "trending-xhs-mobile.png", full_page=True)
+                page.screenshot(path=output / "trending-douyin-mobile.png", full_page=True)
                 page.set_viewport_size({"width": 1440, "height": 1050})
-                page.screenshot(path=output / "trending-xhs-desktop.png", full_page=True)
+                page.screenshot(path=output / "trending-douyin-desktop.png", full_page=True)
                 page.set_viewport_size({"width": 390, "height": 844})
                 before_switch = len(trending_requests)
-                page.get_by_role("tab", name="抖音").click()
-                expect(board.get_by_text("抖音测试热词", exact=True)).to_be_visible()
-                expect(source).to_have_count(0)
-                xhs_trending.click()
-                expect(source).to_be_visible()
+                page.get_by_role("tab", name="B站").click()
+                expect(board.get_by_text("B站测试热词", exact=True)).to_be_visible()
+                douyin_trending.click()
                 assert len(trending_requests) == before_switch, "Switching tabs must not fetch trending again"
                 with page.expect_request(lambda request: request.method == "POST" and
                                          urlparse(request.url).path == "/api/search/jobs") as picked:
-                    board.get_by_role("button", name=re.compile("小红书测试热词")).click()
-                assert picked.value.post_data_json["keyword"] == "小红书测试热词"
+                    board.get_by_role("button", name=re.compile("抖音测试热词")).click()
+                assert picked.value.post_data_json["keyword"] == "抖音测试热词"
                 page.get_by_role("button", name="返回首页", exact=True).click()
                 trending_status = "failed"
                 board.get_by_role("button", name="刷新", exact=True).click()
                 expect(board.get_by_text("热搜暂时取不到，稍后再试", exact=True)).to_be_visible()
-                expect(source).to_be_visible()
-                expect(xhs_trending).to_be_visible()
-                expect(board.get_by_text("小红书测试热词", exact=True)).to_have_count(0)
+                expect(douyin_trending).to_be_visible()
+                expect(board.get_by_text("抖音测试热词", exact=True)).to_have_count(0)
                 assert len(trending_requests) == before_switch + 1
                 assert "refresh=true" in trending_requests[-1]
-                page.screenshot(path=output / "trending-xhs-failed-mobile.png", full_page=True)
-                trending_status = "unavailable"
-                board.get_by_role("button", name="刷新", exact=True).click()
-                expect(page.get_by_role("tab", name="小红书 暂不可用")).to_be_visible()
-                expect(page.get_by_role("tabpanel").get_by_text("目前暂未接入小红书热搜，其他平台仍可使用。", exact=True)).to_be_visible()
-                page.screenshot(path=output / "trending-unavailable-mobile.png", full_page=True)
-                page.get_by_role("tab", name="抖音").click()
-                expect(page.get_by_text("抖音测试热词", exact=True)).to_be_visible()
+                page.screenshot(path=output / "trending-douyin-failed-mobile.png", full_page=True)
+                page.get_by_role("tab", name="知乎").click()
+                expect(page.get_by_text("知乎测试热词", exact=True)).to_be_visible()
                 assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), "Trending mobile overflow"
                 page.goto(origin + "/#/help")
 
@@ -459,7 +446,7 @@ def main():
                   "keyword picks preserve platforms, seven tutorial steps (accounts/home/search/save/history/"
                   "appearance/help), spotlight tracks the search-scope row while scrolling without "
                   "blocking clicks, floating exit stays put, back-to-results, reload, mobile, "
-                  "optional extension details, XHS trending words/source/pick/refresh/failure and legacy unavailable badge, "
+                  "optional extension details, trending words/pick/refresh/failure and no XHS tab, "
                   "diagnostics copy/download/offline; "
                   "no real platform requests")
     finally:

@@ -8,6 +8,7 @@
 
 | 任务 ID | 负责人 / 会话 | worktree / 分支 / 起始 HEAD | 修改范围 | 状态 / 下一步 |
 |---|---|---|---|---|
+| `XHS-TRENDING-REMOVE-20261105` | DSH / 当前会话 | 主工作区 / `fix-20261021-bugscan` / `ccccfba` | `api/services/trending.py`、`api/schemas/trending.py`、`webui/src/{components/trending,hooks/useTrending.ts,lib/trendingApi.ts}`、`webui/src/i18n`、`tests/test_trending.py`、`webui/tests/trending.test.ts`、`scripts/getting_started_smoke.py`、热搜相关 wiki/决策/CHANGELOG | 小红书热搜标签移除中；不涉及其他平台取数 |
 
 ## 待接手事项
 
