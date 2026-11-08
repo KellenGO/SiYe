@@ -196,7 +196,7 @@ export function SearchBar({
                 dispatchPopover({ type: "focus_within" });
               }
             }}
-            // 不给 input 加圆角：胶囊形状由外层 .search-box 负责。input 自己带圆角时，
+            // 不给 input 加圆角：圆角由外层 .search-box 负责。input 自己带圆角时，
             // 光标停在最左边（圆角收缩区）会被裁成"上下窄中间宽"的一段弧线。
             className="w-full h-[58px] rounded-none border-0 bg-transparent text-[16px] text-cyber-text-primary placeholder:text-cyber-text-muted focus:outline-none disabled:opacity-50"
           />
@@ -227,10 +227,11 @@ export function SearchBar({
           <button
             type="submit"
             disabled={!keyword.trim()}
-            className="search-submit h-[44px] w-[44px] self-center flex items-center justify-center rounded-full bg-brand text-white hover:bg-brand-strong hover:-translate-y-px transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+            className="search-submit"
+            aria-label={t("search.submit")}
           >
-            <ArrowRight className="w-[17px] h-[17px]" />
-            <span className="sr-only">{t("search.submit")}</span>
+            <ArrowRight aria-hidden="true" />
+            <span className="search-submit-label" aria-hidden="true">{t("search.submit")}</span>
           </button>
         )}
       </div>

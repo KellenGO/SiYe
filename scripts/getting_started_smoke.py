@@ -407,14 +407,17 @@ def main():
                 history_panel = page.get_by_role("region", name="最近搜索", exact=True)
                 columns = board.locator(".trending-list")
                 page.set_viewport_size({"width": 320, "height": 740})
-                assert history_panel.bounding_box()["y"] < board.bounding_box()["y"], "Home panels must stack"
+                assert board.bounding_box()["y"] < history_panel.bounding_box()["y"], "Home panels must stack"
                 assert columns.evaluate("el => getComputedStyle(el).gridTemplateColumns.split(' ').length") == 1
                 assert page.locator(".home").evaluate("el => el.scrollWidth <= el.clientWidth"), "Home overflow at 320px"
                 space_trigger = page.get_by_role("button", name="当前空间", exact=True).bounding_box()
                 search_box = page.locator(".home .search-box").bounding_box()
                 assert search_box["x"] >= space_trigger["x"] + space_trigger["width"], "Space trigger overlaps home search"
-                page.set_viewport_size({"width": 1440, "height": 1050})
+                page.set_viewport_size({"width": 1920, "height": 1080})
                 assert history_panel.bounding_box()["y"] == board.bounding_box()["y"], "Home panels must share a row"
+                assert board.bounding_box()["x"] < history_panel.bounding_box()["x"], "Trending must lead on desktop"
+                desktop_search = page.locator(".home .search-box").bounding_box()
+                assert desktop_search["x"] == board.bounding_box()["x"] == page.locator(".header-inner").bounding_box()["x"]
                 assert columns.evaluate("el => getComputedStyle(el).gridTemplateColumns.split(' ').length") == 2
                 page.screenshot(path=output / "trending-douyin-desktop.png", full_page=True, animations="disabled")
                 theme.click()
@@ -433,6 +436,17 @@ def main():
                                          urlparse(request.url).path == "/api/search/jobs") as picked:
                     board.get_by_role("button", name=re.compile("抖音测试热词")).click()
                 assert picked.value.post_data_json["keyword"] == "抖音测试热词"
+                page.set_viewport_size({"width": 1920, "height": 1080})
+                results = page.locator(".search-shell")
+                expect(results.get_by_role("heading", name="PRIVATE_QUERY", exact=True)).to_be_visible()
+                expect(results.locator(".search-result-meta")).to_contain_text("1 条内容")
+                expect(results.get_by_role("group", name="结果排序")).to_be_visible()
+                expect(results.locator(".local-content-card").first).to_be_visible()
+                result_search = results.locator(".search-box").bounding_box()
+                back_home = results.get_by_role("button", name="返回首页", exact=True).bounding_box()
+                assert back_home["y"] + back_home["height"] <= result_search["y"]
+                assert result_search["x"] == desktop_search["x"]
+                page.set_viewport_size({"width": 390, "height": 844})
                 page.get_by_role("button", name="返回首页", exact=True).click()
                 trending_status = "failed"
                 board.get_by_role("button", name="刷新", exact=True).click()

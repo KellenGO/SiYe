@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { RefreshCw, TrendingUp } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { useTrending } from "@/hooks/useTrending";
@@ -55,33 +55,33 @@ export function TrendingBoard({ onPick }: TrendingBoardProps) {
   const updatedAt = formatUpdatedAt(info?.activeTime ?? null, snapshot?.fetchedAt ?? null);
 
   return (
-    <section className="panel trending-panel" aria-label={t("trending.title")}>
+    <section className="trending-panel" aria-labelledby="trending-heading">
       <div className="panel-heading">
-        <h2><TrendingUp aria-hidden="true" />{t("trending.title")}</h2>
-        <button type="button" className="text-link" onClick={() => void refresh()} disabled={loading}>
-          <RefreshCw className={loading ? "spinner" : undefined} />
+        <h2 id="trending-heading">{t("trending.title")}</h2>
+        <div className="trending-tabs" role="tablist" aria-labelledby="trending-heading">
+          {tabs.map((tab) => (
+            <button
+              key={tab.platform}
+              id={`trending-tab-${tab.platform}`}
+              type="button"
+              role="tab"
+              aria-selected={activeTab?.platform === tab.platform}
+              aria-controls="trending-panel-content"
+              className={`trending-tab${activeTab?.platform === tab.platform ? " active" : ""}${
+                tab.hasWords ? "" : " muted"
+              }`}
+              onClick={() => setActive(tab.platform)}
+            >
+              <i className="pd" style={{ backgroundColor: PLATFORM_COLORS[tab.platform] }} aria-hidden="true" />
+              {PLATFORM_LABELS[tab.platform]}
+            </button>
+          ))}
+        </div>
+        <button type="button" className="text-link trending-refresh" onClick={() => void refresh()}
+          disabled={loading} title={t("trending.manualOnly")}>
+          <RefreshCw className={loading ? "spinner" : undefined} aria-hidden="true" />
           {t("trending.refresh")}
         </button>
-      </div>
-
-      <div className="trending-tabs" role="tablist" aria-label={t("trending.title")}>
-        {tabs.map((tab) => (
-          <button
-            key={tab.platform}
-            id={`trending-tab-${tab.platform}`}
-            type="button"
-            role="tab"
-            aria-selected={activeTab?.platform === tab.platform}
-            aria-controls="trending-panel-content"
-            className={`trending-tab${activeTab?.platform === tab.platform ? " active" : ""}${
-              tab.hasWords ? "" : " muted"
-            }`}
-            onClick={() => setActive(tab.platform)}
-          >
-            <i className="pd" style={{ backgroundColor: PLATFORM_COLORS[tab.platform] }} aria-hidden="true" />
-            {PLATFORM_LABELS[tab.platform]}
-          </button>
-        ))}
       </div>
 
       <div
@@ -116,11 +116,7 @@ export function TrendingBoard({ onPick }: TrendingBoardProps) {
         )}
       </div>
 
-      <p className="panel-footnote">
-        {updatedAt ? t("trending.updatedAt", { time: updatedAt }) : t("trending.subtitle")}
-        {words.length > 0 && `　·　${t("trending.pickHint")}`}
-        {`　·　${t("trending.manualOnly")}`}
-      </p>
+      {updatedAt && <p className="panel-footnote">{t("trending.updatedAt", { time: updatedAt })}</p>}
     </section>
   );
 }

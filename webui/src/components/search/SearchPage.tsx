@@ -267,22 +267,10 @@ export function SearchPage({ active = true, homeRequested = false, onViewChange,
   return (
     <SpaceWorkspace spaceId={spaces.activeId} selector active={active}>
     <div className={isHome ? `home ${homePreferences.mode === "min" ? "minimal" : ""}` : "preview-container search-shell"}>
-      {isHome && (
-        <div className="home-masthead">
-          <svg className="home-horizon" viewBox="0 0 600 116" fill="none" aria-hidden="true">
-            <path d="M0 90C46 90 63 42 112 42c41 0 56 48 102 48h172c46 0 61-48 102-48 49 0 66 48 112 48" />
-            <path d="M0 104C48 104 75 58 119 58c38 0 56 46 105 46h152c49 0 67-46 105-46 44 0 71 46 119 46" />
-            <path d="M0 115C51 115 84 74 126 74c37 0 59 41 108 41h132c49 0 71-41 108-41 42 0 75 41 126 41" />
-          </svg>
-          <h1 className="home-title">{t("brand.name")}</h1>
-          {homePreferences.mode === "full" && <p>{t("search.homeNote")}</p>}
-        </div>
-      )}
-      {/* 搜索区：结果页在搜索框**左侧**放一个主题色圆角「返回首页」按钮；首页只有搜索框。 */}
       <div className="search-zone">
-        {!isHome && (
-          <button type="button" className="btn primary home-back" onClick={goHome}>
-            <ArrowLeft className="w-3.5 h-3.5" />
+        {isHome ? <h1 className="home-title">{t("header.brandCaption")}</h1> : (
+          <button type="button" className="text-link home-back" onClick={goHome}>
+            <ArrowLeft aria-hidden="true" />
             {t("search.backToHome")}
           </button>
         )}
@@ -323,10 +311,11 @@ export function SearchPage({ active = true, homeRequested = false, onViewChange,
 
       {isHome && homePreferences.mode === "full" && (homePreferences.history || homePreferences.trending) && (
         <div className="home-panels">
+          {homePreferences.trending && <TrendingBoard onPick={handleTrendingPick} />}
           {homePreferences.history && (
-            <section className="panel home-history" aria-labelledby="home-history-heading">
+            <section className="home-history" aria-labelledby="home-history-heading">
               <div className="panel-heading">
-                <h2 id="home-history-heading"><Clock3 aria-hidden="true" />{t("search.recent")}</h2>
+                <h2 id="home-history-heading">{t("search.recent")}</h2>
                 {history.length > 0 && <button type="button" className="text-link" onClick={clearHistory}>{t("search.clear")}</button>}
               </div>
               {history.length > 0 ? (
@@ -344,13 +333,43 @@ export function SearchPage({ active = true, homeRequested = false, onViewChange,
               )}
             </section>
           )}
-          {homePreferences.trending && <TrendingBoard onPick={handleTrendingPick} />}
         </div>
       )}
 
       {!isHome && <div className="search-headline">
-        <h1>{displayJobResponse?.keyword || keyword || "搜索结果"}</h1>
-        <span>{busy ? "正在跨平台搜索" : "相关内容"}</span>
+        <div className="search-headline-main">
+          <h1>{displayJobResponse?.keyword || keyword || t("search.resultsTitle")}</h1>
+          <div className="search-result-meta">
+            {displayJobResponse && <span>{t("search.resultCount", { count: displayJobResponse.results.length })}</span>}
+            {isTerminal && displayJobResponse?.completed_at && (
+              <span>{t("search.completedAt")} {new Date(displayJobResponse.completed_at).toLocaleTimeString()}</span>
+            )}
+            {busy && <span>{t("search.searchingLive")}</span>}
+          </div>
+        </div>
+        {isTerminal && displayJobResponse && (displayJobResponse.overall !== "failed" || exploration) && <div className="button-row">
+          {exploration && <button type="button" onClick={handleNextBatch}
+            disabled={busy || !hasMore} className={TOOL_BUTTON}>
+            <RefreshCw className="w-3.5 h-3.5" />换一批
+          </button>}
+          <details key={latestJobResponse?.job_id} className="relative text-xs">
+            <summary className={`${TOOL_BUTTON} cursor-pointer`}>更多</summary>
+            <div className="absolute right-0 top-full z-20 mt-2 w-52 rounded-xl border border-cyber-border-subtle bg-cyber-bg-secondary p-3 shadow-lg space-y-3">
+              <button type="button" onClick={handleRefresh} disabled={busy} className={TOOL_BUTTON}
+                aria-label="刷新结果">刷新结果</button>
+              <p className="text-cyber-text-muted">从头搜索，开始新的轮次记录。</p>
+              {exploration && <p className="text-cyber-text-muted">本轮列表请求 {exploration.page_requests} 次，过滤重复来源 {exploration.duplicates} 条。每个主题最多 20 轮。</p>}
+              {exploration && <label className="block text-cyber-text-secondary">查看轮次
+                <select aria-label="查看轮次" disabled={busy} value={selectedRound ?? exploration.round}
+                  onChange={(event) => setSelectedRound(Number(event.target.value) === exploration.round ? null : Number(event.target.value))}
+                  className="mt-1 w-full rounded-lg border border-cyber-border-subtle bg-cyber-bg-primary p-2">
+                  {exploration.previous_batches.map((batch) => <option key={batch.number} value={batch.number}>第 {batch.number} 批（{batch.results.length} 条）</option>)}
+                  <option value={exploration.round}>第 {exploration.round} 批（当前）</option>
+                </select>
+              </label>}
+            </div>
+          </details>
+        </div>}
       </div>}
       {!isHome && <div>
       {/* 平台搜索状态（统一浅色状态卡） */}
@@ -480,38 +499,6 @@ export function SearchPage({ active = true, homeRequested = false, onViewChange,
             </div>
           )}
 
-          <div className="result-summary-line">
-            <p>
-              <span>{displayJobResponse.results.length} 条内容</span>
-              {isTerminal && displayJobResponse.completed_at && (
-                <span className="ml-3">{t("search.completedAt")} {new Date(displayJobResponse.completed_at).toLocaleTimeString("zh-CN")}</span>
-              )}
-              {!isTerminal && <span className="ml-3 text-brand-strong animate-pulse">{t("search.searchingLive")}</span>}
-            </p>
-            {isTerminal && <div className="button-row">
-              {exploration && <button type="button" onClick={handleNextBatch}
-                disabled={busy || !hasMore} className={TOOL_BUTTON}>
-                <RefreshCw className="w-3.5 h-3.5" />换一批
-              </button>}
-              <details key={latestJobResponse?.job_id} className="relative text-xs">
-                <summary className={`${TOOL_BUTTON} cursor-pointer`}>更多</summary>
-                <div className="absolute right-0 top-full z-20 mt-2 w-52 rounded-xl border border-cyber-border-subtle bg-cyber-bg-secondary p-3 shadow-lg space-y-3">
-                  <button type="button" onClick={handleRefresh} disabled={busy} className={TOOL_BUTTON}
-                    aria-label="刷新结果">刷新结果</button>
-                  <p className="text-cyber-text-muted">从头搜索，开始新的轮次记录。</p>
-                  {exploration && <p className="text-cyber-text-muted">本轮列表请求 {exploration.page_requests} 次，过滤重复来源 {exploration.duplicates} 条。每个主题最多 20 轮。</p>}
-                  {exploration && <label className="block text-cyber-text-secondary">查看轮次
-                    <select aria-label="查看轮次" disabled={busy} value={selectedRound ?? exploration.round}
-                      onChange={(event) => setSelectedRound(Number(event.target.value) === exploration.round ? null : Number(event.target.value))}
-                      className="mt-1 w-full rounded-lg border border-cyber-border-subtle bg-cyber-bg-primary p-2">
-                      {exploration.previous_batches.map((batch) => <option key={batch.number} value={batch.number}>第 {batch.number} 批（{batch.results.length} 条）</option>)}
-                      <option value={exploration.round}>第 {exploration.round} 批（当前）</option>
-                    </select>
-                  </label>}
-                </div>
-              </details>
-            </div>}
-          </div>
           {exploration && <div className="mb-3 text-xs text-cyber-text-muted space-y-1" aria-live="polite">
             <p>第 {previousBatch?.number ?? exploration.round} 批 · {previousBatch ? `${previousBatch.results.length} 条内容` : `新增 ${exploration.new_contents} 条内容`}
               {Object.entries(exploration.platforms).map(([p, info]) => <span className="ml-3" key={p}>{PLATFORM_LABELS[p as PlatformSlug]}累计 {info.collected}/{exploration.max_per_platform}</span>)}

@@ -198,19 +198,11 @@ def test_platform_status_exposes_full_status_text():
 
 # ── 结果页「返回首页」+ 0 结果算失败（2026-09-19）────────────────────────
 
-def test_back_home_button_sits_left_of_search_box_with_brand_fill():
-    """返回首页按钮在搜索框左侧（.search-zone 内、SearchBar 之前）且用主题色底。
-
-    而且**不能占搜索框宽度**：按钮用绝对定位挂在搜索框左边外面，
-    所以 `.search-zone` 不能用 flex（flex 会把搜索框挤窄，用户明确否掉了）。
-    """
-    assert '"btn primary home-back"' in _SEARCH_PAGE
+def test_back_home_button_precedes_the_search_form():
+    """返回入口使用文本按钮，独占一行，不挤压搜索框。"""
     zone = _SEARCH_PAGE.index('className="search-zone"')
-    assert zone < _SEARCH_PAGE.index("<SearchBar", zone), "按钮必须在搜索框之前（左侧）"
-    css = (_ROOT / "index.css").read_text(encoding="utf-8")
-    assert ".search-zone .home-back" in css
-    assert ".search-zone > .search-area" in css
-    assert "right: calc(100% + 12px)" in css, "按钮要挂在搜索框左边外面，不挤压搜索框"
+    back = _SEARCH_PAGE.index('className="text-link home-back"', zone)
+    assert zone < back < _SEARCH_PAGE.index("<SearchBar", zone)
 
 
 def test_back_home_does_not_clear_results():
