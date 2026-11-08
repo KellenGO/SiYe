@@ -246,7 +246,17 @@ export function SearchPage({ active = true, homeRequested = false, onViewChange,
   return (
     <SpaceWorkspace spaceId={spaces.activeId} selector active={active}>
     <div className={isHome ? `home ${homePreferences.mode === "min" ? "minimal" : ""}` : "preview-container search-shell"}>
-      {isHome && <div className="hero"><div className="wordmark" aria-label="四野"><b>四野</b><svg className="swoosh" viewBox="0 0 120 12" aria-hidden="true"><defs><linearGradient id="wordmark-gradient"><stop stopColor="#6677fb"/><stop offset="1" stopColor="#29ddcc"/></linearGradient></defs><path d="M3 9Q60 0 117 9" stroke="url(#wordmark-gradient)" strokeWidth="3.5" fill="none" strokeLinecap="round"/></svg></div></div>}
+      {isHome && (
+        <div className="home-masthead">
+          <svg className="home-horizon" viewBox="0 0 600 116" fill="none" aria-hidden="true">
+            <path d="M0 90C46 90 63 42 112 42c41 0 56 48 102 48h172c46 0 61-48 102-48 49 0 66 48 112 48" />
+            <path d="M0 104C48 104 75 58 119 58c38 0 56 46 105 46h152c49 0 67-46 105-46 44 0 71 46 119 46" />
+            <path d="M0 115C51 115 84 74 126 74c37 0 59 41 108 41h132c49 0 71-41 108-41 42 0 75 41 126 41" />
+          </svg>
+          <h1 className="home-title">四野</h1>
+          {homePreferences.mode === "full" && <p>{t("search.homeTagline")}</p>}
+        </div>
+      )}
       {/* 搜索区：结果页在搜索框**左侧**放一个主题色圆角「返回首页」按钮；首页只有搜索框。 */}
       <div className="search-zone">
         {!isHome && (
@@ -255,7 +265,6 @@ export function SearchPage({ active = true, homeRequested = false, onViewChange,
             {t("search.backToHome")}
           </button>
         )}
-        {/* 搜索面板（含聚焦浮层：最近搜索 / 推荐搜索） */}
         <SearchBar
           home={isHome}
           keyword={keyword}
@@ -292,28 +301,31 @@ export function SearchPage({ active = true, homeRequested = false, onViewChange,
       )}
 
       {isHome && homePreferences.mode === "full" && (homePreferences.history || homePreferences.trending) && (
-        <div className="home-panels" style={!homePreferences.history || !homePreferences.trending ? { gridTemplateColumns: "1fr" } : undefined} aria-label="首页快捷内容">
-          {homePreferences.history && <section className="panel">
-            <div className="panel-heading"><h2>最近搜索</h2>{history.length ? <button type="button" className="text-link" onClick={clearHistory}>清空</button> : <Clock3 />}</div>
-            {history.length > 0 ? (
-              <div className="words">
-                {history.slice(0, 10).map((item) => (
-                  <button key={`${item.keyword}-${item.searchedAt}`} type="button" onClick={() => handleKeywordPick(item.keyword)}>
-                    {item.keyword}
-                  </button>
-                ))}
+        <div className="home-panels">
+          {homePreferences.history && (
+            <section className="panel home-history" aria-labelledby="home-history-heading">
+              <div className="panel-heading">
+                <h2 id="home-history-heading"><Clock3 aria-hidden="true" />{t("search.recent")}</h2>
+                {history.length > 0 && <button type="button" className="text-link" onClick={clearHistory}>{t("search.clear")}</button>}
               </div>
-            ) : (
-              <p className="secondary text-[13px]">你的探索，从第一次搜索开始。</p>
-            )}
-            <p className="panel-footnote">{history.length ? "从上次的好奇，继续探索。" : "搜索过的关键词会出现在这里。"}</p>
-          </section>}
-          {/* 热搜卡片取代了原来的「最近搜到」：那一块的内容在历史与搜索结果里都能看到，
-              而"各平台在热什么"是这里唯一能提供的新信息。 */}
+              {history.length > 0 ? (
+                <ul className="home-history-words">
+                  {history.slice(0, 10).map((item) => (
+                    <li key={`${item.keyword}-${item.searchedAt}`}>
+                      <button type="button" title={item.keyword} onClick={() => handleKeywordPick(item.keyword)}>
+                        {item.keyword}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="home-history-empty">{t("search.homeHistoryEmpty")}</p>
+              )}
+            </section>
+          )}
           {homePreferences.trending && <TrendingBoard onPick={handleTrendingPick} />}
         </div>
       )}
-      {isHome && homePreferences.mode === "full" && <p className="home-note">小红书、抖音、B站、知乎 · 一次搜索，几种视角。</p>}
 
       {!isHome && <div className="search-headline">
         <h1>{displayJobResponse?.keyword || keyword || "搜索结果"}</h1>

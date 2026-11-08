@@ -9,7 +9,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, TrendingUp } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { useTrending } from "@/hooks/useTrending";
@@ -54,7 +54,7 @@ export function TrendingBoard({ onPick }: TrendingBoardProps) {
   return (
     <section className="panel trending-panel" aria-label={t("trending.title")}>
       <div className="panel-heading">
-        <h2>{t("trending.title")}</h2>
+        <h2><TrendingUp aria-hidden="true" />{t("trending.title")}</h2>
         <button type="button" className="text-link" onClick={() => void refresh()} disabled={loading}>
           <RefreshCw className={loading ? "spinner" : undefined} />
           {t("trending.refresh")}

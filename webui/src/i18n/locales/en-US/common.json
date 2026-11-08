@@ -219,6 +219,8 @@
     "noResults": "No results on this platform",
     "retrying": "Retrying",
     "placeholderHome": "Search something?",
+    "homeTagline": "One search, many perspectives.",
+    "homeHistoryEmpty": "Your recent search terms will appear here.",
     "clearKeyword": "Clear keyword",
     "backToHome": "Back to home",
     "viewLastSearch": "View last search ({{count}})",

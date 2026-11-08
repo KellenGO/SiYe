@@ -219,6 +219,8 @@
     "noResults": "该平台暂无结果",
     "retrying": "正在重试",
     "placeholderHome": "搜点什么？",
+    "homeTagline": "一次搜索，几种视角。",
+    "homeHistoryEmpty": "搜索过的关键词会出现在这里。",
     "clearKeyword": "清空关键词",
     "backToHome": "返回首页",
     "viewLastSearch": "查看上次搜索（{{count}} 条）",
