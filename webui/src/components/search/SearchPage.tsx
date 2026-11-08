@@ -268,7 +268,7 @@ export function SearchPage({ active = true, homeRequested = false, onViewChange,
     <SpaceWorkspace spaceId={spaces.activeId} selector active={active}>
     <div className={isHome ? `home ${homePreferences.mode === "min" ? "minimal" : ""}` : "preview-container search-shell"}>
       <div className="search-zone">
-        {isHome ? <h1 className="home-title">{t("header.brandCaption")}</h1> : (
+        {isHome ? <h1 className="home-title">{t("brand.name")}</h1> : (
           <button type="button" className="text-link home-back" onClick={goHome}>
             <ArrowLeft aria-hidden="true" />
             {t("search.backToHome")}
@@ -311,11 +311,10 @@ export function SearchPage({ active = true, homeRequested = false, onViewChange,
 
       {isHome && homePreferences.mode === "full" && (homePreferences.history || homePreferences.trending) && (
         <div className="home-panels">
-          {homePreferences.trending && <TrendingBoard onPick={handleTrendingPick} />}
           {homePreferences.history && (
-            <section className="home-history" aria-labelledby="home-history-heading">
+            <section className="panel home-history" aria-labelledby="home-history-heading">
               <div className="panel-heading">
-                <h2 id="home-history-heading">{t("search.recent")}</h2>
+                <h2 id="home-history-heading"><Clock3 aria-hidden="true" />{t("search.recent")}</h2>
                 {history.length > 0 && <button type="button" className="text-link" onClick={clearHistory}>{t("search.clear")}</button>}
               </div>
               {history.length > 0 ? (
@@ -333,19 +332,18 @@ export function SearchPage({ active = true, homeRequested = false, onViewChange,
               )}
             </section>
           )}
+          {homePreferences.trending && <TrendingBoard onPick={handleTrendingPick} />}
         </div>
       )}
 
       {!isHome && <div className="search-headline">
         <div className="search-headline-main">
           <h1>{displayJobResponse?.keyword || keyword || t("search.resultsTitle")}</h1>
-          <div className="search-result-meta">
+          {(displayJobResponse || busy) && <div className="search-result-meta">
             {displayJobResponse && <span>{t("search.resultCount", { count: displayJobResponse.results.length })}</span>}
-            {isTerminal && displayJobResponse?.completed_at && (
-              <span>{t("search.completedAt")} {new Date(displayJobResponse.completed_at).toLocaleTimeString()}</span>
-            )}
+            {exploration && <span>{t("search.batchNumber", { number: previousBatch?.number ?? exploration.round })}</span>}
             {busy && <span>{t("search.searchingLive")}</span>}
-          </div>
+          </div>}
         </div>
         {isTerminal && displayJobResponse && (displayJobResponse.overall !== "failed" || exploration) && <div className="button-row">
           {exploration && <button type="button" onClick={handleNextBatch}
@@ -358,6 +356,9 @@ export function SearchPage({ active = true, homeRequested = false, onViewChange,
               <button type="button" onClick={handleRefresh} disabled={busy} className={TOOL_BUTTON}
                 aria-label="刷新结果">刷新结果</button>
               <p className="text-cyber-text-muted">从头搜索，开始新的轮次记录。</p>
+              {displayJobResponse.completed_at && <p className="text-cyber-text-muted">
+                {t("search.completedAt")} {new Date(displayJobResponse.completed_at).toLocaleTimeString()}
+              </p>}
               {exploration && <p className="text-cyber-text-muted">本轮列表请求 {exploration.page_requests} 次，过滤重复来源 {exploration.duplicates} 条。每个主题最多 20 轮。</p>}
               {exploration && <label className="block text-cyber-text-secondary">查看轮次
                 <select aria-label="查看轮次" disabled={busy} value={selectedRound ?? exploration.round}
@@ -499,13 +500,10 @@ export function SearchPage({ active = true, homeRequested = false, onViewChange,
             </div>
           )}
 
-          {exploration && <div className="mb-3 text-xs text-cyber-text-muted space-y-1" aria-live="polite">
-            <p>第 {previousBatch?.number ?? exploration.round} 批 · {previousBatch ? `${previousBatch.results.length} 条内容` : `新增 ${exploration.new_contents} 条内容`}
-              {Object.entries(exploration.platforms).map(([p, info]) => <span className="ml-3" key={p}>{PLATFORM_LABELS[p as PlatformSlug]}累计 {info.collected}/{exploration.max_per_platform}</span>)}
-            </p>
-            {!hasMore && <p>已到本次探索上限（最多 20 轮）或平台暂无更多结果，可在“更多”中刷新结果。</p>}
-            {!previousBatch && exploration.new_contents === 0 && hasMore && <p>本轮没有新的独立内容；重复内容已过滤，新平台版本已补充到之前的卡片。可回看或稍后再换一批。</p>}
-          </div>}
+          {exploration && !hasMore && <p className="mb-3 text-sm text-cyber-text-secondary" role="status">已到探索上限或平台暂无更多结果。</p>}
+          {exploration && hasMore && !previousBatch && exploration.new_contents === 0 && (
+            <p className="mb-3 text-sm text-cyber-text-secondary" role="status">这一批没有新的独立内容，可以继续换一批。</p>
+          )}
 
           {/* 单平台重试失败提示（保留旧结果，仅显示安全摘要） */}
           {Object.entries(retryErrors).map(([platform, message]) => (

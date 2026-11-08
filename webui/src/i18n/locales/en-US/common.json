@@ -220,6 +220,7 @@
     "completedAt": "finished at",
     "resultsTitle": "Search results",
     "resultCount": "{{count}} results",
+    "batchNumber": "Batch {{number}}",
     "searchingLive": "Searching…",
     "retryFailed": "Update failed",
     "goAccounts": "Account settings",

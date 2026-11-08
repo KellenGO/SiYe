@@ -222,6 +222,7 @@ export function Header({ viewMode, settingsSection, onNavigate }: HeaderProps) {
         <div className="brand-link" aria-label={t('header.brandLabel')}>
           <img className="brand-mark" src="/siye-icon.png" alt="" width={30} height={30} />
           <strong className="brand-name">{t('brand.name')}</strong>
+          <span className="brand-caption">{t('header.brandCaption')}</span>
         </div>
 
         {/* 导航 */}

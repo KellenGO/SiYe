@@ -220,6 +220,7 @@
     "completedAt": "完成于",
     "resultsTitle": "搜索结果",
     "resultCount": "{{count}} 条内容",
+    "batchNumber": "第 {{number}} 批",
     "searchingLive": "搜索中...",
     "retryFailed": "更新失败",
     "goAccounts": "前往账号设置",

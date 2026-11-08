@@ -119,12 +119,16 @@ def main():
             client = TestClient(app, base_url=origin)
             browser = p.chromium.launch(channel="msedge")
             context = browser.new_context(viewport={"width": 1280, "height": 900})
-            context.add_init_script("localStorage.setItem('mediacrawler_license_accepted', 'true')")
+            context.add_init_script(
+                "localStorage.setItem('mediacrawler_license_accepted', 'true');"
+                "localStorage.setItem('siye_onboarding_preference_v1', 'completed');"
+            )
             context.route("**/*", route_request)
             page = context.new_page()
             page.on("pageerror", lambda error: errors.append(str(error)))
             page.goto(origin)
             expect(page.get_by_role("button", name="换一批", exact=True)).to_be_enabled()
+            expect(page.locator(".search-result-meta")).to_contain_text("第 1 批")
             expect(page.get_by_role("button", name="刷新结果", exact=True)).to_have_count(0)
             page.get_by_role("button", name="收藏 第一批收藏素材", exact=True).click()
             membership = page.get_by_role("dialog", name="编辑收藏夹归属 第一批收藏素材", exact=True)
@@ -139,6 +143,7 @@ def main():
             assert "pagination" not in posts[0]
             page.locator("summary").filter(has_text="更多").click()
             page.get_by_label("查看轮次", exact=True).select_option("1")
+            expect(page.locator(".search-result-meta")).to_contain_text("第 1 批")
             expect(page.get_by_role("button", name="选择收藏平台 第一批收藏素材", exact=True)).to_be_visible()
             expect(page.get_by_role("button", name="收藏 第二批新素材", exact=True)).to_have_count(0)
             # 收藏落库（SQLite），不再是 localStorage：直接查 store
@@ -168,7 +173,7 @@ def main():
             for width in (390, 320):
                 page.set_viewport_size({"width": width, "height": 844})
                 assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
-            page.set_viewport_size({"width": 1280, "height": 900})
+            page.set_viewport_size({"width": 1920, "height": 1080})
             page.screenshot(path=str(ROOT / "build/search-exploration-desktop.png"), full_page=True)
             assert errors == [], errors
             context.close()
