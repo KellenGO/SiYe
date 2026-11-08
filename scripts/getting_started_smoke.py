@@ -53,6 +53,19 @@ def main():
     offline = False
     trending_status = "ok"
     trending_requests = []
+    trending_words = [
+        {"rank": rank, "word": word, "hot_value": heat}
+        for rank, (word, heat) in enumerate([
+            ("抖音测试热词", 9475000),
+            ("入秋后的第一场周末徒步", 8223000),
+            ("秋冬通勤衣橱整理", 7730000),
+            ("如何用手机拍出傍晚的城市街景和蓝调时刻", 6521000),
+            ("一人份热汤食谱", 5289000),
+            ("小户型书桌布置", 4820000),
+            ("从零开始学做咖啡", 3644000),
+            ("值得重读的短篇小说", 2393000),
+        ], start=1)
+    ]
     mutations = []
     errors = []
     date = "2026-09-15T12:00:00Z"
@@ -72,7 +85,7 @@ def main():
             app = FastAPI()
             app.include_router(library_router)
             app.dependency_overrides[get_library_store] = lambda: store
-            with TestClient(app) as client:
+            with TestClient(app, base_url=origin) as client:
                 def route_request(route):
                     nonlocal current
                     request = route.request
@@ -100,8 +113,7 @@ def main():
                         trending_requests.append(request.url)
                         data = {"platforms": {
                             "douyin": {"status": trending_status,
-                                       "words": [{"rank": 1, "word": "抖音测试热词", "hot_value": 9475000}]
-                                                if trending_status == "ok" else [],
+                                       "words": trending_words if trending_status == "ok" else [],
                                        "message": "热搜暂时取不到，稍后再试" if trending_status == "failed" else None,
                                        "active_time": "2026-10-18T07:02:09.011Z"},
                             "bilibili": {"status": "ok", "words": [{"rank": 1, "word": "B站测试热词"}]},
@@ -379,16 +391,38 @@ def main():
                 expect(page.get_by_role("tab", name="知乎")).to_be_visible()
                 # 小红书没有可用的全站热榜，卡片不为它保留标签。
                 expect(page.get_by_role("tab", name="小红书")).to_have_count(0)
+                expect(page.locator(".home .scope").get_by_role("button", name="小红书", exact=True)).to_be_visible()
                 douyin_trending.focus()
                 douyin_trending.press("Enter")
                 expect(douyin_trending).to_have_attribute("aria-selected", "true")
                 board = page.get_by_role("region", name="热搜", exact=True)
                 expect(board.get_by_role("button", name=re.compile("抖音测试热词"))).to_be_visible()
                 expect(board.get_by_text("948万", exact=True)).to_be_visible()
+                theme = page.get_by_role("combobox", name="切换主题")
+                theme.click()
+                page.get_by_role("option", name="Light", exact=True).click()
+                expect(page.locator("html")).not_to_have_class(re.compile(r"\bdark\b"))
                 assert page.evaluate("document.documentElement.scrollWidth <= innerWidth"), "Trending mobile overflow"
-                page.screenshot(path=output / "trending-douyin-mobile.png", full_page=True)
+                page.screenshot(path=output / "trending-douyin-mobile.png", full_page=True, animations="disabled")
+                history_panel = page.get_by_role("region", name="最近搜索", exact=True)
+                columns = board.locator(".trending-list")
+                page.set_viewport_size({"width": 320, "height": 740})
+                assert history_panel.bounding_box()["y"] < board.bounding_box()["y"], "Home panels must stack"
+                assert columns.evaluate("el => getComputedStyle(el).gridTemplateColumns.split(' ').length") == 1
+                assert page.locator(".home").evaluate("el => el.scrollWidth <= el.clientWidth"), "Home overflow at 320px"
+                space_trigger = page.get_by_role("button", name="当前空间", exact=True).bounding_box()
+                search_box = page.locator(".home .search-box").bounding_box()
+                assert search_box["x"] >= space_trigger["x"] + space_trigger["width"], "Space trigger overlaps home search"
                 page.set_viewport_size({"width": 1440, "height": 1050})
-                page.screenshot(path=output / "trending-douyin-desktop.png", full_page=True)
+                assert history_panel.bounding_box()["y"] == board.bounding_box()["y"], "Home panels must share a row"
+                assert columns.evaluate("el => getComputedStyle(el).gridTemplateColumns.split(' ').length") == 2
+                page.screenshot(path=output / "trending-douyin-desktop.png", full_page=True, animations="disabled")
+                theme.click()
+                page.get_by_role("option", name="Dark", exact=True).click()
+                expect(page.locator("html")).to_have_class(re.compile(r"\bdark\b"))
+                page.screenshot(path=output / "trending-douyin-dark.png", full_page=True, animations="disabled")
+                theme.click()
+                page.get_by_role("option", name="Light", exact=True).click()
                 page.set_viewport_size({"width": 390, "height": 844})
                 before_switch = len(trending_requests)
                 page.get_by_role("tab", name="B站").click()
