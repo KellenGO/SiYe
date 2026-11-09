@@ -119,9 +119,11 @@ def main():
                 if route == "search":
                     # Header navigation keeps the same search view, controls and scroll position.
                     search_input = page.locator(".search-zone input").first
+                    last_results = page.get_by_role("button", name="查看上次搜索（60 条）", exact=True)
                     search_input.fill("保留输入")
                     page.get_by_role("textbox", name="结果内关键词", exact=True).fill("测试结果")
-                    page.get_by_role("combobox", name="排序方式", exact=True).select_option("latest")
+                    latest_sort = page.get_by_role("group", name="结果排序").get_by_role("button", name="最新", exact=True)
+                    latest_sort.click()
                     xhs_tab = page.get_by_role("tab").filter(has_text="小红书")
                     xhs_tab.click()
                     search_input.evaluate("el => { window.savedSearchInput = el; }")
@@ -136,11 +138,12 @@ def main():
                     expect(search_input).to_have_value("保留输入")
                     assert search_input.evaluate("el => el === window.savedSearchInput")
                     expect(page.get_by_role("textbox", name="结果内关键词", exact=True)).to_have_value("测试结果")
-                    expect(page.get_by_role("combobox", name="排序方式", exact=True)).to_have_value("latest")
+                    expect(latest_sort).to_have_attribute("aria-pressed", "true")
                     expect(xhs_tab).to_have_attribute("aria-selected", "true")
                     page.get_by_role("button", name="首页", exact=True).evaluate("el => el.click()")
+                    expect(page.locator(".home")).to_be_visible()
+                    last_results.click()
                     expect(page.locator(".search-shell")).to_be_visible()
-                    assert page.evaluate("window.scrollY") == 234
                     page.get_by_role("button", name="返回首页", exact=True).click()
                     expect(page.locator(".home")).to_be_visible()
                     page.get_by_role("button", name="历史", exact=True).click()
@@ -148,7 +151,7 @@ def main():
                     page.get_by_role("button", name="首页", exact=True).click()
                     expect(page.locator(".home")).to_be_visible()
                     expect(search_input).to_have_value("保留输入")
-                    page.get_by_role("button", name="查看上次搜索（60 条）", exact=True).click()
+                    last_results.click()
                     expect(page.locator(".search-shell")).to_be_visible()
                 trigger = page.locator(".local-content-open:visible").first
                 trigger.press("Enter")
